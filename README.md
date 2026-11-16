@@ -85,3 +85,8 @@ secret first**. Removing the commit is not enough once it has been public.
 
 [MIT](LICENSE). Use, change and share freely, including commercially; keep the copyright and
 license notice. Provided "as is", without warranty.
+
+## Deployment
+
+The live site updates automatically from the `main` branch of this repository, usually within
+five minutes of a push.
