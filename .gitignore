@@ -1,0 +1,29 @@
+# Secrets: never commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+secrets/
+credentials*
+*token*
+*.kdbx
+
+# Licensed reference material (AASHTO, ASTM and similar): keep out of the public repo
+references/
+*.pdf
+
+# Local working files
+*.log
+*.tmp
+*.bak
+*.zip
+*.tar.gz
+node_modules/
+__pycache__/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

@@ -1,0 +1,1456 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Just Live Load | Bridge SE | Open DOT</title>
+<meta name="description" content="Just Live Load by Bridge SE, part of Open DOT. Continuous beam live load analyzer: AASHTO LRFD HL-93, AASHTO Standard HS-20 (LFD) and custom permit moment, shear and reaction envelopes for multi-span, variable E·I beams.">
+<link rel="canonical" href="https://bridge-se.open-dot.org/just-live-load/">
+<script
+  defer
+  src="https://collect.open-dot.org/script.js"
+  data-website-id="d095389c-d46e-4589-88fa-12d03c0df856"
+  data-host-url="https://collect.open-dot.org"
+  data-domains="open-dot.org,bridge-se.open-dot.org"
+  data-exclude-search="true">
+</script>
+<script>try{const t=localStorage.getItem("opendot-bridge-se-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#f4f5f7; --panel:#ffffff; --panel-2:#f8f9fb; --ink:#14181f; --ink-2:#4a5260; --ink-3:#7a8291;
+  --line:#dde1e7; --line-2:#c9ced6; --accent:#1d4ed8; --accent-ink:#ffffff; --accent-soft:#e6edfd;
+  --good:#15803d; --bad:#b91c1c; --warn-bg:#fff7e6; --warn-ink:#8a5300; --err-bg:#fdecec;
+  --grid:#e8ebef; --zero:#9aa2ae; --pos-fill:rgba(29,78,216,.13); --neg-fill:rgba(185,28,28,.13);
+  --c-hl93:#1d4ed8; --c-hs:#d9480f; --c-hsl:#92400e; --c-hsg:#111827; --c-fat:#6b7280; --c-lg:#0f766e; --c-p0:#15803d; --c-p1:#7c3aed; --c-p2:#be185d; --c-p3:#0e7490; --c-p4:#a16207;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace; --sans:'IBM Plex Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+  --r:8px;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0f1216; --panel:#171b21; --panel-2:#1c2128; --ink:#e7eaee; --ink-2:#b2b9c4; --ink-3:#848c99;
+    --line:#2a3039; --line-2:#363d48; --accent:#6d9bff; --accent-ink:#0b1020; --accent-soft:#1d2a47;
+    --good:#4ade80; --bad:#f87171; --warn-bg:#2d2412; --warn-ink:#f2c46d; --err-bg:#3a1d1d;
+    --grid:#232931; --zero:#5a6370; --pos-fill:rgba(109,155,255,.16); --neg-fill:rgba(248,113,113,.16);
+    --c-hl93:#6d9bff; --c-hs:#ff8a4c; --c-hsl:#e7b67a; --c-hsg:#f3f4f6; --c-fat:#9ca3af; --c-lg:#2dd4bf; --c-p0:#4ade80; --c-p1:#b794ff; --c-p2:#f472b6; --c-p3:#22d3ee; --c-p4:#facc15;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1216; --panel:#171b21; --panel-2:#1c2128; --ink:#e7eaee; --ink-2:#b2b9c4; --ink-3:#848c99;
+  --line:#2a3039; --line-2:#363d48; --accent:#6d9bff; --accent-ink:#0b1020; --accent-soft:#1d2a47;
+  --good:#4ade80; --bad:#f87171; --warn-bg:#2d2412; --warn-ink:#f2c46d; --err-bg:#3a1d1d;
+  --grid:#232931; --zero:#5a6370; --pos-fill:rgba(109,155,255,.16); --neg-fill:rgba(248,113,113,.16);
+  --c-hl93:#6d9bff; --c-hs:#ff8a4c; --c-hsl:#e7b67a; --c-hsg:#f3f4f6; --c-fat:#9ca3af; --c-lg:#2dd4bf; --c-p0:#4ade80; --c-p1:#b794ff; --c-p2:#f472b6; --c-p3:#22d3ee; --c-p4:#facc15;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--sans);-webkit-font-smoothing:antialiased}
+.num,td.n,input.n{font-family:var(--mono);font-variant-numeric:tabular-nums}
+header.top{display:flex;align-items:center;gap:14px;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:20}
+.brand{display:flex;align-items:baseline;gap:10px;min-width:0}
+.brand b{font-weight:700;letter-spacing:.02em}
+.brand span{color:var(--ink-3);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.top .sp{flex:1}
+.btn{appearance:none;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);border-radius:6px;padding:7px 12px;font:500 13px var(--sans);cursor:pointer;white-space:nowrap}
+.btn:hover{background:var(--panel-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.primary:hover{filter:brightness(1.07)}
+.btn.sm{padding:4px 8px;font-size:12px}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--ink-2)}
+.btn.ghost:hover{background:var(--panel-2);color:var(--ink)}
+.layout{display:grid;grid-template-columns:450px minmax(0,1fr);gap:16px;padding:16px 20px;align-items:start}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--r)}
+.inputs{position:sticky;top:70px;max-height:calc(100vh - 86px);overflow:auto}
+fieldset{border:0;border-bottom:1px solid var(--line);margin:0;padding:14px 16px}
+fieldset:last-child{border-bottom:0}
+legend{float:left;width:100%;padding:0;margin:0 0 10px;font-weight:600;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-2);display:flex;align-items:center;gap:8px}
+legend .sp{flex:1}
+legend label.sw{text-transform:none;letter-spacing:0;font-weight:500;color:var(--ink)}
+.row{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 10px;clear:both}
+.row.three{grid-template-columns:repeat(3,minmax(0,1fr))}
+.fld{display:flex;flex-direction:column;gap:3px;min-width:0}
+.fld>span{font-size:12px;color:var(--ink-2)}
+.fld.full{grid-column:1/-1}
+input[type=text],input[type=number],select{width:100%;min-width:0;border:1px solid var(--line-2);background:var(--panel);color:var(--ink);border-radius:5px;padding:6px 7px;font:13px var(--sans)}
+input.n{font-size:12.5px}
+input:focus,select:focus{outline:2px solid var(--accent);outline-offset:-1px;border-color:var(--accent)}
+label.chk{display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer}
+label.chk input{accent-color:var(--accent);margin:0}
+table.edit{width:100%;border-collapse:collapse;clear:both}
+table.edit th{font-weight:500;font-size:11.5px;color:var(--ink-3);text-align:left;padding:0 4px 4px}
+table.edit td{padding:2px 2px}
+table.edit input{padding:5px 5px}
+table.edit td.idx{color:var(--ink-3);font:12px var(--mono);width:22px;text-align:right;padding-right:6px}
+table.edit td.x{width:26px}
+.xbtn{border:0;background:none;color:var(--ink-3);cursor:pointer;font-size:16px;line-height:1;padding:3px 6px;border-radius:4px}
+.xbtn:hover{color:var(--bad);background:var(--panel-2)}
+.tools{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;align-items:center}
+.check{font-size:12px;margin-top:6px;color:var(--ink-3)}
+.check.ok{color:var(--good)} .check.bad{color:var(--bad)}
+.permit{border:1px solid var(--line);border-radius:6px;padding:10px;margin-bottom:8px;background:var(--panel-2);clear:both}
+.permit .ph{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.permit .ph input[type=text]{font-weight:600}
+.swatch{width:10px;height:10px;border-radius:2px;flex:none}
+.sublbl{display:flex;align-items:center;gap:7px;font-weight:600;font-size:12.5px;margin:14px 0 8px;padding-top:10px;border-top:1px dashed var(--line);clear:both}
+.sublbl .sp{flex:1}
+.sublbl label.chk{font-weight:400}
+.hint{font-size:12px;color:var(--ink-3);margin-top:6px;clear:both}
+main.results{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{padding:16px}
+.card h2{font-size:15px;margin:0 0 4px;font-weight:600}
+.card .sub{color:var(--ink-3);font-size:12.5px;margin:0 0 12px}
+.cardhead{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.cardhead .sp{flex:1}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.stat{background:var(--panel);padding:12px 14px}
+.stat .k{font-size:11.5px;color:var(--ink-3);text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font:500 18px var(--mono);margin-top:2px}
+.stat .d{font-size:12px;color:var(--ink-2)}
+.legend{display:flex;flex-wrap:wrap;gap:6px}
+.legend button{display:flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:999px;padding:3px 10px;font:12.5px var(--sans);cursor:pointer}
+.legend button.off{opacity:.45}
+.legend button.off .swatch{background:transparent!important;border:1px solid var(--ink-3)}
+.chart{position:relative}
+.chart svg{display:block;width:100%;height:auto}
+.chart .ax{font:11px var(--mono);fill:var(--ink-3)}
+.chart .axl{font:11.5px var(--sans);fill:var(--ink-2)}
+.tip{position:absolute;pointer-events:none;background:var(--panel);border:1px solid var(--line-2);border-radius:6px;padding:8px 10px;font-size:12px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:180px;z-index:5;display:none}
+.tip .h{font-weight:600;margin-bottom:4px}
+.tip table{border-collapse:collapse}
+.tip td{padding:1px 6px 1px 0}
+.tip td.n{text-align:right}
+.tabs{display:flex;gap:2px;border-bottom:1px solid var(--line);margin:-4px 0 12px;overflow-x:auto}
+.tabs button{border:0;background:none;padding:8px 12px;font:500 13px var(--sans);color:var(--ink-3);border-bottom:2px solid transparent;cursor:pointer;white-space:nowrap}
+.tabs button.on{color:var(--ink);border-bottom-color:var(--accent)}
+.tablewrap{overflow:auto;max-height:560px;border:1px solid var(--line);border-radius:6px}
+table.res{border-collapse:separate;border-spacing:0;width:100%;font-size:12.5px}
+table.res th{position:sticky;top:0;background:var(--panel-2);font-weight:600;font-size:11.5px;color:var(--ink-2);padding:6px 8px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap;z-index:1}
+table.res thead tr:nth-child(2) th{top:27px}
+table.res th.l,table.res td.l{text-align:left}
+table.res th.grp{text-align:center;border-left:1px solid var(--line)}
+table.res td{padding:4px 8px;border-bottom:1px solid var(--grid);text-align:right;white-space:nowrap}
+table.res td.gs{border-left:1px solid var(--line)}
+table.res tbody tr{cursor:pointer}
+table.res tbody tr:hover td{background:var(--panel-2)}
+table.res tbody tr.sel td{background:var(--accent-soft)}
+table.res tbody tr.sup td{font-weight:600}
+td.neg{color:var(--bad)}
+.ctl{color:var(--ink-3);font:11px var(--sans);display:block}
+.detail{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.dcard{border:1px solid var(--line);border-radius:6px;padding:10px 12px;background:var(--panel-2)}
+.dcard h3{font-size:13px;margin:0 0 6px;display:flex;align-items:center;gap:6px}
+.dcard dl{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-size:12.5px}
+.dcard dt{color:var(--ink-3)}
+.dcard dd{white-space:nowrap;margin:0;font-family:var(--mono);text-align:right}
+.dcard .pos{font-size:11.5px;color:var(--ink-2);margin-top:6px;line-height:1.35}
+.msg{border-radius:6px;padding:10px 12px;font-size:13px}
+.msg.err{background:var(--err-bg);color:var(--bad)}
+.msg.warn{background:var(--warn-bg);color:var(--warn-ink)}
+.hint.df{border-left:2px solid var(--line-2);padding-left:8px}
+.printonly{display:none}
+table.kv{border-collapse:collapse;font-size:12px;margin:4px 0 10px}
+table.kv th,table.kv td{padding:2px 10px 2px 0;text-align:left;vertical-align:top;border-bottom:1px solid var(--grid)}
+table.kv th{font-weight:600;color:var(--ink-2);white-space:nowrap}
+table.kv td.n{text-align:right;font-family:var(--mono)}
+.insum h3{font-size:12.5px;margin:10px 0 2px}
+.muted{color:var(--ink-3)}
+details.notes summary{cursor:pointer;font-weight:600}
+details.notes ul{margin:8px 0 0;padding-left:20px;color:var(--ink-2)}
+details.notes li{margin:3px 0}
+.busy{font-size:12px;color:var(--ink-3)}
+.ilctl{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.ilctl select{width:auto;max-width:100%}
+.printhead{display:none}
+header.top{flex-wrap:wrap}
+.app-identity{min-width:0;flex:1 1 390px;display:flex;align-items:center;gap:12px}
+.app-identity-text{min-width:0}
+.app-logo{display:block;flex:none;width:64px;height:64px;background:#f3f7fb;border:1px solid #d6e3ef;border-radius:10px;overflow:hidden}
+.app-logo img{display:block;width:100%;height:100%;object-fit:contain}
+.app-logo:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.breadcrumbs{display:flex;gap:7px;align-items:center;margin:0 0 3px;font-size:11px;color:var(--ink-3)}
+.breadcrumbs a{color:var(--ink-2);text-decoration:none;text-underline-offset:3px}
+.breadcrumbs a:hover{text-decoration:underline;color:var(--accent)}
+.breadcrumbs a:focus-visible{outline:2px solid var(--accent);outline-offset:3px}
+.brand h1{font-size:17px;line-height:1.3;font-weight:700;margin:0;white-space:nowrap;letter-spacing:-.02em}
+.inputs{top:calc(var(--top-height,76px) + 16px);max-height:calc(100vh - var(--top-height,76px) - 32px)}
+@media(max-width:980px){.app-identity{flex:1 0 100%}.inputs{top:auto;max-height:none}}
+
+@media (max-width: 980px){
+  .layout{grid-template-columns:minmax(0,1fr);padding:12px 16px}
+  .inputs{position:static;max-height:none}
+  header.top{padding:10px 16px;flex-wrap:wrap;position:static;gap:8px}
+  header.top .btn{padding:6px 9px;font-size:12px}
+  table.edit input{font-size:12px;padding:5px 3px}
+  .brand span{display:none}
+}
+@media print{
+  @page{size:landscape;margin:.4in}
+  body{background:#fff;color:#000;font-size:10.5px}
+  header.top,.inputs,.btn,.legend,.tabs,.noprint,.ilcard{display:none!important}
+  .layout{display:block;padding:0}
+  .panel{border:0}
+  .card{padding:6px 0;break-inside:avoid}
+  .tablewrap{max-height:none;overflow:visible;border:0}
+  .tabpane{display:block!important;margin-bottom:12px}
+  table.res th{position:static}
+  .printhead{display:block;margin-bottom:8px}
+  .printonly{display:block!important}
+  .card.insum{break-inside:auto}
+  table.kv tr{break-inside:avoid}
+  details.notes{display:none!important}
+}
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="app-identity">
+    <a class="app-logo" href="/" aria-label="Bridge SE home"><img src="/assets/bridge-se-logo.png" width="64" height="64" alt=""></a>
+    <div class="app-identity-text">
+    <nav class="breadcrumbs" aria-label="Breadcrumb"><a href="https://open-dot.org/">Open DOT</a><span aria-hidden="true">/</span><a href="/">Bridge SE</a></nav>
+    <div class="brand"><h1>Just Live Load</h1><span>Continuous-beam envelopes · HL-93 · HS-20 · Permits</span></div>
+    </div>
+  </div>
+  <div class="sp"></div>
+  <span class="busy" id="busy"></span>
+  <button class="btn" data-act="save" title="Download this model as JSON">Save model</button>
+  <button class="btn" data-act="load" title="Open a saved JSON model">Open…</button>
+  <input type="file" id="fileIn" accept=".json,application/json" hidden>
+  <button class="btn" data-act="csv">Export CSV</button>
+  <button class="btn" data-act="print">Print report</button>
+  <button class="btn" id="themeSwitch" type="button" aria-label="Switch color theme">Dark mode</button>
+  <button class="btn primary" data-act="run">Analyze</button>
+</header>
+
+<div class="layout">
+  <aside class="panel inputs" id="inputs" aria-label="Model input"></aside>
+  <main class="results" id="results"></main>
+</div>
+
+<script>
+/* ==========================================================================
+   Open DOT · Continuous Beam Live Load Engine
+   Stiffness-method continuous beam (variable E·I segments), exact influence
+   lines from Hermite equivalent nodal loads, moving-load envelopes for
+   AASHTO LRFD HL-93, AASHTO Standard (LFD) HS-series, and custom permits.
+   Units: ft, kip, kip-ft.  E in ksi, I in in^4.
+   ========================================================================== */
+const ConsysEngine = (() => {
+  'use strict';
+  const EPS = 1e-6;
+
+  const num = (v, d) => { const n = parseFloat(v); return Number.isFinite(n) ? n : d; };
+  const fmt = v => (Math.round(v * 1000) / 1000).toString();
+
+  /* ---------------- Model / mesh / stiffness ---------------- */
+  function buildModel(inp) {
+    const errors = [];
+    const spans = (inp.spans || []).map(v => num(v, NaN));
+    if (!spans.length) errors.push('Define at least one span.');
+    spans.forEach((L, i) => { if (!(L > 0)) errors.push(`Span ${i + 1}: length must be greater than 0.`); });
+    const sup = [0]; let acc = 0;
+    for (const L of spans) { acc += L; sup.push(acc); }
+    const Ltot = acc;
+
+    const segs = []; let s0 = 0;
+    (inp.segments || []).forEach((g, i) => {
+      const len = num(g.len, NaN), E = num(g.E, NaN), I1 = num(g.I1, NaN);
+      let I2 = num(g.I2, NaN); if (!Number.isFinite(I2)) I2 = I1;
+      if (!(len > 0)) errors.push(`Segment ${i + 1}: length must be greater than 0.`);
+      if (!(E > 0)) errors.push(`Segment ${i + 1}: E must be greater than 0.`);
+      if (!(I1 > 0) || !(I2 > 0)) errors.push(`Segment ${i + 1}: I must be greater than 0.`);
+      segs.push({ x0: s0, x1: s0 + len, E, I1, I2 }); s0 += len;
+    });
+    if (!segs.length) errors.push('Define at least one segment.');
+    else if (errors.length === 0 && Math.abs(s0 - Ltot) > 0.01)
+      errors.push(`Segment lengths total ${fmt(s0)} ft but spans total ${fmt(Ltot)} ft. They must match.`);
+    if (errors.length) return { errors };
+    segs[segs.length - 1].x1 = Ltot;
+
+    const spanOf = x => { for (let i = 0; i < spans.length; i++) if (x < sup[i + 1] - EPS) return i; return spans.length - 1; };
+
+    /* analysis sections */
+    const div = Math.max(1, Math.min(100, Math.round(num(inp.divisions, 10))));
+    const sections = [];
+    spans.forEach((L, i) => {
+      for (let k = 0; k <= div; k++) {
+        const fr = k / div;
+        sections.push({ span: i, frac: fr, x: sup[i] + fr * L, side: k === 0 ? 'R' : (k === div ? 'L' : 'B'), kind: 'pt' });
+      }
+    });
+    const addPoint = (x, kind) => {
+      if (!(x > EPS && x < Ltot - EPS)) return;
+      if (sup.some(s => Math.abs(s - x) < 1e-3)) return;
+      if (sections.some(s => Math.abs(s.x - x) < 1e-3)) return;
+      const i = spanOf(x);
+      sections.push({ span: i, frac: (x - sup[i]) / spans[i], x, side: 'B', kind });
+    };
+    if (inp.segPts) segs.slice(0, -1).forEach(g => addPoint(g.x1, 'seg'));
+    String(inp.extraPts || '').split(/[,;\s]+/).map(Number).filter(Number.isFinite).forEach(x => addPoint(x, 'user'));
+    const sideOrd = { L: 0, B: 1, R: 2 };
+    sections.sort((a, b) => (a.x - b.x) || (sideOrd[a.side] - sideOrd[b.side]));
+
+    /* mesh */
+    let keys = [...sup, ...segs.map(g => g.x0), ...sections.map(s => s.x)].sort((a, b) => a - b);
+    const uk = [];
+    for (const k of keys) if (!uk.length || k - uk[uk.length - 1] > 1e-6) uk.push(k);
+    if (Math.abs(uk[uk.length - 1] - Ltot) > 1e-6) uk.push(Ltot);
+    const meshN = Math.max(20, num(inp.meshPerSpan, 60));
+    const hmax = Math.max(0.1, Math.min(...spans) / meshN);
+    const nodes = [];
+    for (let i = 0; i < uk.length - 1; i++) {
+      const a = uk[i], b = uk[i + 1], n = Math.max(1, Math.ceil((b - a) / hmax - 1e-9));
+      for (let k = 0; k < n; k++) nodes.push(a + (b - a) * k / n);
+    }
+    nodes.push(Ltot);
+    const N = nodes.length;
+    const EI = new Float64Array(N - 1);
+    for (let e = 0; e < N - 1; e++) {
+      const xm = 0.5 * (nodes[e] + nodes[e + 1]);
+      let g = segs.find(s => xm >= s.x0 - EPS && xm <= s.x1 + EPS) || segs[segs.length - 1];
+      const t = (g.x1 - g.x0) > 0 ? (xm - g.x0) / (g.x1 - g.x0) : 0;
+      const I = g.I1 + (g.I2 - g.I1) * t;
+      EI[e] = g.E * I / 144; // ksi*in^4 -> kip*ft^2
+    }
+    const nearest = x => { let lo = 0, hi = N - 1; while (hi - lo > 1) { const m = (lo + hi) >> 1; if (nodes[m] <= x) lo = m; else hi = m; } return Math.abs(nodes[lo] - x) < Math.abs(nodes[hi] - x) ? lo : hi; };
+    const supNode = sup.map(nearest);
+
+    /* DOFs: v = 2n, theta = 2n+1. Vertical restraint at supports. */
+    const ndof = 2 * N, nsup = sup.length;
+    const restrSup = new Int32Array(ndof).fill(-1);
+    supNode.forEach((n, j) => { restrSup[2 * n] = j; });
+    const freeIdx = new Int32Array(ndof).fill(-1);
+    let nf = 0; for (let d = 0; d < ndof; d++) if (restrSup[d] < 0) freeIdx[d] = nf++;
+    const bw = 3, W = 2 * bw + 1;
+    const Kb = new Float64Array(nf * W);
+    const Kfr = Array.from({ length: nsup }, () => new Float64Array(nf));
+    for (let e = 0; e < N - 1; e++) {
+      const h = nodes[e + 1] - nodes[e], c = EI[e] / (h * h * h);
+      const k = [
+        [12, 6 * h, -12, 6 * h],
+        [6 * h, 4 * h * h, -6 * h, 2 * h * h],
+        [-12, -6 * h, 12, -6 * h],
+        [6 * h, 2 * h * h, -6 * h, 4 * h * h]];
+      const dofs = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) {
+        const fa = freeIdx[dofs[a]], fb = freeIdx[dofs[b]];
+        const v = c * k[a][b];
+        if (fa >= 0 && fb >= 0) Kb[fa * W + (fb - fa + bw)] += v;
+        else if (fa >= 0 && fb < 0) Kfr[restrSup[dofs[b]]][fa] += v;
+      }
+    }
+    /* banded LU (SPD, no pivoting) */
+    for (let k = 0; k < nf; k++) {
+      const piv = Kb[k * W + bw];
+      if (!(Math.abs(piv) > 1e-12)) return { errors: ['Structure is unstable (singular stiffness). Check spans and supports.'] };
+      const iEnd = Math.min(nf - 1, k + bw);
+      for (let i = k + 1; i <= iEnd; i++) {
+        const f = Kb[i * W + (k - i + bw)] / piv;
+        if (f === 0) continue;
+        Kb[i * W + (k - i + bw)] = f;
+        for (let j = k + 1; j <= iEnd; j++) Kb[i * W + (j - i + bw)] -= f * Kb[k * W + (j - k + bw)];
+      }
+    }
+    const solve = rhs => {
+      const x = Float64Array.from(rhs);
+      for (let i = 0; i < nf; i++) { let s = x[i]; for (let k = Math.max(0, i - bw); k < i; k++) s -= Kb[i * W + (k - i + bw)] * x[k]; x[i] = s; }
+      for (let i = nf - 1; i >= 0; i--) { let s = x[i]; for (let j = i + 1; j <= Math.min(nf - 1, i + bw); j++) s -= Kb[i * W + (j - i + bw)] * x[j]; x[i] = s / Kb[i * W + bw]; }
+      return x;
+    };
+    const G = Kfr.map(col => solve(col)); // G[j][f] = (K_rf K_ff^-1)[j][f]
+
+    const model = { spans, sup, Ltot, segs, sections, nodes, EI, supNode, nsup, freeIdx, restrSup, G, spanOf, div };
+
+    /* responses: M and V at each section, reactions at each support */
+    const resp = [];
+    sections.forEach((s, si) => {
+      const cM = new Float64Array(nsup), cV = new Float64Array(nsup);
+      for (let j = 0; j < nsup; j++) {
+        if (sup[j] < s.x - EPS) { cM[j] = s.x - sup[j]; cV[j] = 1; }
+        else if (s.side === 'R' && Math.abs(sup[j] - s.x) <= EPS) cV[j] = 1;
+      }
+      s.iM = resp.length; resp.push({ type: 'M', sec: si, x: s.x, c: cM });
+      s.iV = resp.length; resp.push({ type: 'V', sec: si, x: s.x, c: cV });
+    });
+    model.reactRows = [];
+    for (let j = 0; j < nsup; j++) {
+      const c = new Float64Array(nsup); c[j] = 1;
+      model.reactRows.push(resp.length);
+      resp.push({ type: 'R', j, x: sup[j], c });
+    }
+    model.resp = resp;
+    return model;
+  }
+
+  /* reactions (upward +) for a unit downward load at a. Returns false if off the beam */
+  function reactions(m, a, out) {
+    out.fill(0);
+    if (a < -EPS || a > m.Ltot + EPS) return false;
+    a = Math.min(Math.max(a, 0), m.Ltot);
+    const nd = m.nodes, N = nd.length;
+    let lo = 0, hi = N - 1;
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (nd[mid] <= a) lo = mid; else hi = mid; }
+    const e = Math.min(lo, N - 2), h = nd[e + 1] - nd[e], xi = (a - nd[e]) / h;
+    const xi2 = xi * xi, xi3 = xi2 * xi;
+    const F = [-(1 - 3 * xi2 + 2 * xi3), -h * xi * (1 - xi) * (1 - xi), -(3 * xi2 - 2 * xi3), -h * xi2 * (xi - 1)];
+    const dofs = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+    for (let k = 0; k < 4; k++) {
+      const f = m.freeIdx[dofs[k]];
+      if (f >= 0) { if (F[k] !== 0) for (let j = 0; j < m.nsup; j++) out[j] += m.G[j][f] * F[k]; }
+      else out[m.restrSup[dofs[k]]] -= F[k];
+    }
+    return true;
+  }
+
+  /* unit-load response values at every response (max-limit and min-limit for shear discontinuity) */
+  function unitValues(m, a, R, mx, mn) {
+    if (!reactions(m, a, R)) return false;
+    const resp = m.resp, ns = m.nsup;
+    for (let r = 0; r < resp.length; r++) {
+      const q = resp[r], c = q.c;
+      let b = 0; for (let j = 0; j < ns; j++) b += c[j] * R[j];
+      if (q.type === 'M') { const v = b - (a < q.x ? q.x - a : 0); mx[r] = v; mn[r] = v; }
+      else if (q.type === 'V') {
+        if (Math.abs(a - q.x) <= EPS) { mx[r] = b; mn[r] = b - 1; }
+        else { const v = b - (a < q.x ? 1 : 0); mx[r] = v; mn[r] = v; }
+      } else { mx[r] = b; mn[r] = b; }
+    }
+    return true;
+  }
+
+  /* ---------------- Influence line sampling & lane integrals ---------------- */
+  function influenceData(m, sub = 4) {
+    const xs = [];
+    for (let i = 0; i < m.nodes.length - 1; i++) for (let k = 0; k < sub; k++) xs.push(m.nodes[i] + (m.nodes[i + 1] - m.nodes[i]) * k / sub);
+    xs.push(m.Ltot);
+    const ns = m.nsup, nsx = xs.length, Rs = new Float64Array(nsx * ns), R = new Float64Array(ns);
+    xs.forEach((a, i) => { reactions(m, a, R); Rs.set(R, i * ns); });
+    const nsp = m.spans.length;
+    const il = m.resp.map(q => {
+      const X = [], Y = [];
+      for (let i = 0; i < nsx; i++) {
+        const a = xs[i]; let b = 0;
+        for (let j = 0; j < ns; j++) b += q.c[j] * Rs[i * ns + j];
+        if (q.type === 'M') { X.push(a); Y.push(b - (a < q.x ? q.x - a : 0)); }
+        else if (q.type === 'V') {
+          if (Math.abs(a - q.x) <= EPS) { X.push(a, a); Y.push(b - 1, b); }
+          else { X.push(a); Y.push(b - (a < q.x ? 1 : 0)); }
+        } else { X.push(a); Y.push(b); }
+      }
+      let pos = 0, neg = 0, mxO = 0, mxX = 0, mnO = 0, mnX = 0;
+      const spanMin = new Array(nsp).fill(0), spanMinX = new Array(nsp).fill(0);
+      for (let i = 0; i < X.length; i++) {
+        const y = Y[i];
+        if (y > mxO) { mxO = y; mxX = X[i]; }
+        if (y < mnO) { mnO = y; mnX = X[i]; }
+        const s = m.spanOf(X[i]);
+        if (y < spanMin[s]) { spanMin[s] = y; spanMinX[s] = X[i]; }
+        if (i === 0) continue;
+        const dx = X[i] - X[i - 1]; if (dx <= 0) continue;
+        const y0 = Y[i - 1], y1 = y;
+        if (y0 >= 0 && y1 >= 0) pos += 0.5 * (y0 + y1) * dx;
+        else if (y0 <= 0 && y1 <= 0) neg += 0.5 * (y0 + y1) * dx;
+        else { const t = y0 / (y0 - y1), d0 = t * dx, d1 = dx - d0;
+          if (y0 > 0) { pos += 0.5 * y0 * d0; neg += 0.5 * y1 * d1; } else { neg += 0.5 * y0 * d0; pos += 0.5 * y1 * d1; } }
+      }
+      return { X, Y, pos, neg, maxOrd: mxO, maxX: mxX, minOrd: mnO, minX: mnX, spanMin, spanMinX };
+    });
+    return il;
+  }
+
+  /* ---------------- Moving vehicle ---------------- */
+  // veh: {weights:[..], spacings:[..], varIndex:-1|k, varMin, varMax, varInc}
+  function runVehicle(m, veh, opt) {
+    const nr = m.resp.length, step = Math.max(0.05, opt.step || 0.5);
+    const neglect = !!opt.neglect;
+    const maxV = new Float64Array(nr), minV = new Float64Array(nr);
+    const maxInfo = Array(nr).fill(null), minInfo = Array(nr).fill(null);
+    const variants = [];
+    if (veh.varIndex >= 0) {
+      const inc = Math.max(0.1, veh.varInc || 1);
+      for (let s = veh.varMin; s <= veh.varMax + 1e-9; s += inc) variants.push(s);
+      if (Math.abs(variants[variants.length - 1] - veh.varMax) > 1e-9) variants.push(veh.varMax);
+    } else variants.push(null);
+    const cache = new Map();
+    const R = new Float64Array(m.nsup);
+    const getU = a => {
+      const key = Math.round(a * 1e4);
+      let u = cache.get(key);
+      if (!u) {
+        if (cache.size > 30000) cache.clear();
+        const mx = new Float64Array(nr), mn = new Float64Array(nr);
+        const on = unitValues(m, a, R, mx, mn);
+        u = on ? { mx, mn } : null; cache.set(key, u);
+      }
+      return u;
+    };
+    const critX = [...m.sections.map(s => s.x), ...m.sup];
+    const rec = opt.record ? { recordVar: opt.recordVar, idx: opt.record, f: {} } : null;
+    const smax = new Float64Array(nr), smin = new Float64Array(nr);
+
+    for (const vs of variants) {
+      const sp = veh.spacings.slice(); if (vs !== null) sp[veh.varIndex] = vs;
+      const off = [0]; sp.forEach(s => off.push(off[off.length - 1] + s));
+      const W = veh.weights, len = off[off.length - 1];
+      const p0 = -len - step, p1 = m.Ltot + len + step;
+      const nGrid = Math.ceil((p1 - p0) / step) + 1;
+      const doRec = rec && (vs === null ? rec.recordVar == null : Math.abs(vs - rec.recordVar) < 1e-9);
+      for (const dir of [1, -1]) {
+        let fr = null;
+        if (doRec) { fr = rec.idx.map(() => ({ mx: new Float64Array(nGrid), mn: new Float64Array(nGrid) })); rec.f[dir] = { arr: fr, p0, step, n: nGrid, len }; }
+        const crit = [];
+        for (const x of critX) for (const o of off) crit.push(x + dir * o);
+        const total = nGrid + crit.length;
+        for (let k = 0; k < total; k++) {
+          const p = k < nGrid ? p0 + k * step : crit[k - nGrid];
+          smax.fill(0); smin.fill(0);
+          let any = false;
+          for (let i = 0; i < W.length; i++) {
+            const u = getU(p - dir * off[i]); if (!u) continue; any = true;
+            const P = W[i], ux = u.mx, un = u.mn;
+            if (neglect) for (let r = 0; r < nr; r++) { if (ux[r] > 0) smax[r] += P * ux[r]; if (un[r] < 0) smin[r] += P * un[r]; }
+            else for (let r = 0; r < nr; r++) { smax[r] += P * ux[r]; smin[r] += P * un[r]; }
+          }
+          if (fr && k < nGrid) rec.idx.forEach((r, q) => { fr[q].mx[k] = smax[r]; fr[q].mn[k] = smin[r]; });
+          if (!any) continue;
+          for (let r = 0; r < nr; r++) {
+            if (smax[r] > maxV[r] + 1e-9) { maxV[r] = smax[r]; maxInfo[r] = { p, dir, vs }; }
+            if (smin[r] < minV[r] - 1e-9) { minV[r] = smin[r]; minInfo[r] = { p, dir, vs }; }
+          }
+        }
+      }
+    }
+    return { max: maxV, min: minV, maxInfo, minInfo, rec };
+  }
+
+  /* two identical trucks, same direction, clear gap >= gap between rear of lead and front of trailing */
+  function dualCombine(rf, q, truckLen, gap, sense) {
+    let best = 0, info = null;
+    for (const dir of [1, -1]) {
+      const d = rf.f[dir]; if (!d) continue;
+      const f = sense === 'min' ? d.arr[q].mn : d.arr[q].mx;
+      const g = Math.ceil((truckLen + gap) / d.step - 1e-9);
+      let run = sense === 'min' ? Infinity : -Infinity, runK = -1;
+      for (let k = g; k < d.n; k++) {
+        const v0 = f[k - g];
+        if (sense === 'min' ? v0 < run : v0 > run) { run = v0; runK = k - g; }
+        const cand = f[k] + run;
+        if (sense === 'min' ? cand < best - 1e-9 : cand > best + 1e-9) { best = cand; info = { pA: d.p0 + k * d.step, pB: d.p0 + runK * d.step, dir }; }
+      }
+    }
+    return { val: best, info };
+  }
+
+  /* LFD impact 50/(L+125) <= 0.30 */
+  const lfdI = L => Math.min(0.3, 50 / (Math.max(L, 0) + 125));
+  function lfdImpactLengths(m, q, sense) {
+    const sp = m.spans, n = sp.length;
+    if (q.type === 'R') {
+      const j = q.j;
+      if (j === 0) return sp[0]; if (j === n) return sp[n - 1];
+      return 0.5 * (sp[j - 1] + sp[j]);
+    }
+    const s = m.sections[q.sec], i = s.span, L = sp[i];
+    if (q.type === 'M') {
+      if (sense === 'max' || n === 1) return L;
+      const nb = s.frac >= 0.5 ? i + 1 : i - 1;
+      return (nb >= 0 && nb < n) ? 0.5 * (L + sp[nb]) : L;
+    }
+    const x0 = m.sup[i], x1 = m.sup[i + 1];
+    return sense === 'max' ? (x1 - s.x) : (s.x - x0);
+  }
+
+  /* ---------------- Full analysis ---------------- */
+  function analyze(inp) {
+    const t0 = Date.now();
+    const m = buildModel(inp);
+    if (m.errors) return m;
+    const il = influenceData(m);
+    const nr = m.resp.length, nsp = m.spans.length;
+    const o = inp.options || {};
+    const step = num(o.step, 0.5), varInc = num(o.varInc, 1), neglectDesign = o.neglectDesign !== false, neglectPermit = !!o.neglectPermit;
+    const out = { model: m, il, families: [], warnings: [] };
+
+    // design truck run (unit HS20/HL-93 truck), records 14-ft variant for dual-truck
+    const interiorR = m.reactRows.filter((r, k) => k > 0 && k < m.nsup - 1);
+    const dualIdx = [];
+    m.resp.forEach((q, r) => { if (q.type === 'M') dualIdx.push(r); });
+    interiorR.forEach(r => dualIdx.push(r));
+    const needTruck = (o.hl93 && o.hl93.on) || (o.hs && o.hs.on);
+    let T = null;
+    if (needTruck) T = runVehicle(m, { weights: [8, 32, 32], spacings: [14, 14], varIndex: 1, varMin: 14, varMax: 30, varInc }, { step, neglect: neglectDesign, record: dualIdx, recordVar: 14 });
+
+    const comp = (q, r) => ({ type: q.type, r });
+
+    /* ---- HL-93 ---- */
+    if (o.hl93 && o.hl93.on) {
+      const h = o.hl93, IM = num(h.im, 33) / 100, w = num(h.lane, 0.64);
+      const dfM = num(h.dfM, 1), dfV = num(h.dfV, 1);
+      const TD = runVehicle(m, { weights: [25, 25], spacings: [4], varIndex: -1 }, { step, neglect: neglectDesign });
+      const dualOn = nsp > 1 && h.dual !== 'off';
+      const fam = { id: 'hl93', name: 'HL-93', code: 'AASHTO LRFD', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] };
+      const dqIndex = new Map(dualIdx.map((r, q) => [r, q]));
+      for (let r = 0; r < nr; r++) {
+        const q = m.resp[r], L = il[r], df = q.type === 'M' ? dfM : dfV;
+        const laneP = w * L.pos, laneN = w * L.neg;
+        const tr = { max: T.max[r] * (1 + IM) + laneP, min: T.min[r] * (1 + IM) + laneN };
+        const td = { max: TD.max[r] * (1 + IM) + laneP, min: TD.min[r] * (1 + IM) + laneN };
+        let mx = tr.max, mxC = 'Truck + Lane', mn = tr.min, mnC = 'Truck + Lane';
+        let mxInfo = T.maxInfo[r], mnInfo = T.minInfo[r];
+        if (td.max > mx) { mx = td.max; mxC = 'Tandem + Lane'; mxInfo = TD.maxInfo[r]; }
+        if (td.min < mn) { mn = td.min; mnC = 'Tandem + Lane'; mnInfo = TD.minInfo[r]; }
+        const d = { truckMax: T.max[r], truckMin: T.min[r], tandemMax: TD.max[r], tandemMin: TD.min[r], laneP, laneN, IM, mxInfo, mnInfo, dualMin: null, dualMax: null };
+        if (dualOn && dqIndex.has(r)) {
+          const qi = dqIndex.get(r);
+          if (q.type === 'M') {
+            const unif = L.pos + L.neg;
+            if (h.dual === 'all' || unif < 0) {
+              const dc = dualCombine(T.rec, qi, 28, 50, 'min');
+              const v = 0.9 * (dc.val * (1 + IM) + laneN);
+              d.dualMin = dc.val; d.dualInfo = dc.info;
+              if (v < mn) { mn = v; mnC = '90% (Dual Truck + Lane)'; d.mnInfo = null; }
+            }
+          } else if (q.type === 'R') {
+            const dc = dualCombine(T.rec, qi, 28, 50, 'max');
+            const v = 0.9 * (dc.val * (1 + IM) + laneP);
+            d.dualMax = dc.val; d.dualInfo = dc.info;
+            if (v > mx) { mx = v; mxC = '90% (Dual Truck + Lane)'; d.mxInfo = null; }
+          }
+        }
+        fam.max[r] = mx * df; fam.min[r] = mn * df; d.ctrlMax = mxC; d.ctrlMin = mnC; d.df = df;
+        fam.detail.push(d);
+      }
+      out.families.push(fam);
+
+      if (h.fatigue) {
+        const IMf = num(h.imFat, 15) / 100;
+        const F = runVehicle(m, { weights: [8, 32, 32], spacings: [14, 30], varIndex: -1 }, { step, neglect: neglectDesign });
+        const ff = { id: 'fat', name: 'LRFD Fatigue', code: 'AASHTO LRFD', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] };
+        for (let r = 0; r < nr; r++) {
+          const q = m.resp[r], df = q.type === 'M' ? dfM : dfV;
+          ff.max[r] = F.max[r] * (1 + IMf) * df; ff.min[r] = F.min[r] * (1 + IMf) * df;
+          ff.detail.push({ truckMax: F.max[r], truckMin: F.min[r], IM: IMf, df, ctrlMax: 'Fatigue Truck', ctrlMin: 'Fatigue Truck', mxInfo: F.maxInfo[r], mnInfo: F.minInfo[r] });
+        }
+        out.families.push(ff);
+      }
+    }
+
+    /* ---- LFD HS: truck and lane reported as separate envelopes ---- */
+    if (o.hs && o.hs.on) {
+      const s = o.hs, sc = num(s.scale, 1);
+      const laneOn = s.laneOn !== false, truckOn = s.truckOn !== false;
+      const w = num(s.laneW, 0.64) * sc, PM = num(s.lanePM, 18) * sc, PV = num(s.lanePV, 26) * sc, use2 = s.lane2nd !== false;
+      const dfM = num(s.dfM, 1), dfV = num(s.dfV, 1);
+      const Iovr = (s.impact === '' || s.impact == null || !Number.isFinite(parseFloat(s.impact))) ? null : parseFloat(s.impact) / 100;
+      const MIL = s.military ? runVehicle(m, { weights: [24, 24], spacings: [4], varIndex: -1 }, { step, neglect: neglectDesign }) : null;
+      const label = 'HS' + fmt(20 * sc);
+      const mk = (id, name) => ({ id, name, code: 'AASHTO Std (LFD)', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] });
+      const ft = mk('hs', label + ' Truck' + (MIL ? ' / Military' : ''));
+      const fl = mk('hsl', label + ' Lane');
+      const fg = mk('hsg', label + ' Governing');
+      for (let r = 0; r < nr; r++) {
+        const q = m.resp[r], L = il[r], df = q.type === 'M' ? dfM : dfV;
+        const Pc = q.type === 'M' ? PM : PV;
+        const Ip = Iovr != null ? Iovr : lfdI(lfdImpactLengths(m, q, 'max'));
+        const In = Iovr != null ? Iovr : lfdI(lfdImpactLengths(m, q, 'min'));
+        // truck (+ military)
+        const truckMax = T.max[r] * sc, truckMin = T.min[r] * sc;
+        const milMax = MIL ? MIL.max[r] : 0, milMin = MIL ? MIL.min[r] : 0;
+        let tMx = truckMax, tMxC = 'Truck', tMn = truckMin, tMnC = 'Truck', tMxI = T.maxInfo[r], tMnI = T.minInfo[r];
+        if (milMax > tMx) { tMx = milMax; tMxC = 'Military'; tMxI = MIL.maxInfo[r]; }
+        if (milMin < tMn) { tMn = milMin; tMnC = 'Military'; tMnI = MIL.minInfo[r]; }
+        ft.max[r] = tMx * (1 + Ip) * df; ft.min[r] = tMn * (1 + In) * df;
+        ft.detail.push({ kind: 'truck', truckMax, truckMin, milMax, milMin, Ip, In, df, ctrlMax: tMxC, ctrlMin: tMnC, mxInfo: tMxI, mnInfo: tMnI });
+        // lane breakout
+        const uP = w * L.pos, uN = w * L.neg;
+        const cP = L.maxOrd > 0 ? Pc * L.maxOrd : 0, cPx = L.maxOrd > 0 ? L.maxX : null;
+        const cN = L.minOrd < 0 ? Pc * L.minOrd : 0, cNx = L.minOrd < 0 ? L.minX : null;
+        let c2 = 0, c2x = null;
+        if (use2 && q.type === 'M' && nsp > 1 && L.minOrd < 0) {
+          const minSpan = m.spanOf(L.minX);
+          const sm = L.spanMin.map((v, k) => ({ v, k, x: L.spanMinX[k] })).filter(z => z.v < 0 && z.k !== minSpan).sort((a, b) => a.v - b.v);
+          if (sm.length) { c2 = PM * sm[0].v; c2x = sm[0].x; }
+        }
+        const laneMax = uP + cP, laneMin = uN + cN + c2;
+        fl.max[r] = laneMax * (1 + Ip) * df; fl.min[r] = laneMin * (1 + In) * df;
+        fl.detail.push({ kind: 'lane', w, Pc, uP, uN, cP, cPx, cN, cNx, c2, c2x, laneMax, laneMin, areaP: L.pos, areaN: L.neg, ordP: L.maxOrd, ordN: L.minOrd, Ip, In, df,
+          ctrlMax: 'Lane', ctrlMin: c2 ? 'Lane (2 conc. loads)' : 'Lane', mxInfo: null, mnInfo: null });
+        // governing
+        const gMx = Math.max(ft.max[r], fl.max[r]), gMn = Math.min(ft.min[r], fl.min[r]);
+        fg.max[r] = gMx; fg.min[r] = gMn;
+        fg.detail.push({ kind: 'gov', Ip, In, df, ctrlMax: fl.max[r] > ft.max[r] ? 'Lane' : tMxC, ctrlMin: fl.min[r] < ft.min[r] ? fl.detail[r].ctrlMin : tMnC,
+          mxInfo: fl.max[r] > ft.max[r] ? null : tMxI, mnInfo: fl.min[r] < ft.min[r] ? null : tMnI });
+      }
+      if (truckOn) out.families.push(ft);
+      if (laneOn) out.families.push(fl);
+      if (s.governing && truckOn && laneOn) out.families.push(fg);
+    }
+
+    /* ---- AASHTO legal loads (MBE 6A.4.4.2.1a, Appendix D6A) ----
+       Envelope of Type 3, 3S2, 3-3 (IM on vehicles) and the lane-type model:
+       negative moment and interior reactions on continuous spans: 0.75 x two Type 3-3, same direction,
+       30 ft clear, + 0.2 klf on adverse portions (no IM on lane); spans > 200 ft: 0.75 x Type 3-3 + 0.2 klf, all effects.
+       ADTT < 500 option: lane omitted and 1.0 in place of 0.75. */
+    if (o.legal && o.legal.on) {
+      const g = o.legal, IM = num(g.im, 33) / 100, dfM = num(g.dfM, 1), dfV = num(g.dfV, 1);
+      const low = !!g.lowADTT, fac = low ? 1 : 0.75, wl = low ? 0 : num(g.lane, 0.2), gap = 30, neg = g.neglect !== false;
+      const VEH = [
+        { id: 'lg3', name: 'Type 3', w: [16, 17, 17], s: [15, 4] },
+        { id: 'lg3s2', name: 'Type 3S2', w: [10, 15.5, 15.5, 15.5, 15.5], s: [11, 4, 22, 4] },
+        { id: 'lg33', name: 'Type 3-3', w: [12, 12, 12, 16, 14, 14], s: [15, 4, 15, 16, 4] }];
+      const RV = VEH.map((v, k) => runVehicle(m, { weights: v.w, spacings: v.s, varIndex: -1 }, k === 2 ? { step, neglect: neg, record: dualIdx } : { step, neglect: neg }));
+      const T33 = RV[2], len33 = 54, lq = new Map(dualIdx.map((r, q) => [r, q]));
+      const longSpan = q => q.type === 'R' ? [m.spans[q.j - 1], m.spans[q.j]].some(L => L > 200) : m.spans[m.sections[q.sec].span] > 200;
+      const mk = (id, name) => ({ id, name, code: 'MBE 6A.4.4.2.1a', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] });
+      const env = mk('legal', 'AASHTO Routine Commercial');
+      const sep = g.separate ? VEH.map(v => mk(v.id, v.name)) : null;
+      const lt = g.separate ? mk('lglane', 'Legal Lane-Type') : null;
+      const pre = low ? '' : '0.75 × ', post = low ? ' (ADTT < 500)' : ' + lane';
+      for (let r = 0; r < nr; r++) {
+        const q = m.resp[r], L = il[r], df = q.type === 'M' ? dfM : dfV;
+        const laneP = wl * L.pos, laneN = wl * L.neg;
+        const d = { legal: true, IM, df, fac, wl, low, laneP, laneN, long: longSpan(q), veh: VEH.map((v, k) => ({ name: v.name, max: RV[k].max[r], min: RV[k].min[r] })),
+          longMax: null, longMin: null, dualMax: null, dualMin: null, dualInfo: null };
+        let mx = 0, mxC = 'None', mxI = null, mn = 0, mnC = 'None', mnI = null;
+        VEH.forEach((v, k) => {
+          const a = RV[k].max[r] * (1 + IM), b = RV[k].min[r] * (1 + IM);
+          if (sep) { sep[k].max[r] = a * df; sep[k].min[r] = b * df;
+            sep[k].detail.push({ truckMax: RV[k].max[r], truckMin: RV[k].min[r], Ip: IM, In: IM, laneP: 0, laneN: 0, df, ctrlMax: v.name, ctrlMin: v.name, mxInfo: RV[k].maxInfo[r], mnInfo: RV[k].minInfo[r] }); }
+          if (a > mx + 1e-9) { mx = a; mxC = v.name; mxI = RV[k].maxInfo[r]; }
+          if (b < mn - 1e-9) { mn = b; mnC = v.name; mnI = RV[k].minInfo[r]; }
+        });
+        // lane-type model
+        let lx = 0, lxC = 'Not applicable', lxI = null, lxD = false, ln = 0, lnC = 'Not applicable', lnI = null, lnD = false;
+        if (d.long) {
+          d.longMax = T33.max[r]; d.longMin = T33.min[r];
+          lx = fac * T33.max[r] * (1 + IM) + laneP; ln = fac * T33.min[r] * (1 + IM) + laneN;
+          lxC = lnC = `Lane-type: ${pre}Type 3-3${post}`; lxI = T33.maxInfo[r]; lnI = T33.minInfo[r];
+        }
+        if (nsp > 1 && lq.has(r)) {
+          const qi = lq.get(r);
+          if (q.type === 'M') {
+            const dc = dualCombine(T33.rec, qi, len33, gap, 'min'), v = fac * dc.val * (1 + IM) + laneN;
+            d.dualMin = dc.val; d.dualInfo = dc.info;
+            if (v < ln - 1e-9) { ln = v; lnC = `Lane-type: ${pre}two Type 3-3${post}`; lnI = null; lnD = true; }
+          } else {
+            const dc = dualCombine(T33.rec, qi, len33, gap, 'max'), v = fac * dc.val * (1 + IM) + laneP;
+            d.dualMax = dc.val; d.dualInfo = dc.info;
+            if (v > lx + 1e-9) { lx = v; lxC = `Lane-type: ${pre}two Type 3-3${post}`; lxI = null; lxD = true; }
+          }
+        }
+        if (lt) { lt.max[r] = lx * df; lt.min[r] = ln * df;
+          lt.detail.push(Object.assign({}, d, { lane: true, ctrlMax: lxC, ctrlMin: lnC, mxInfo: lxI, mnInfo: lnI, mxDual: lxD, mnDual: lnD })); }
+        if (lx > mx + 1e-9) { mx = lx; mxC = lxC; mxI = lxI; d.mxDual = lxD; }
+        if (ln < mn - 1e-9) { mn = ln; mnC = lnC; mnI = lnI; d.mnDual = lnD; }
+        env.max[r] = mx * df; env.min[r] = mn * df;
+        d.ctrlMax = mxC; d.ctrlMin = mnC; d.mxInfo = mxI; d.mnInfo = mnI;
+        env.detail.push(d);
+      }
+      out.families.push(env);
+      if (sep) out.families.push(...sep, lt);
+    }
+
+    /* ---- Permits ---- */
+    (o.permits || []).filter(p => p.on).forEach((p, pi) => {
+      const wts = String(p.weights).split(/[,;\s]+/).map(Number).filter(Number.isFinite);
+      const sps = String(p.spacings).split(/[,;\s]+/).map(Number).filter(Number.isFinite);
+      if (!wts.length || sps.length !== wts.length - 1 || wts.some(v => v < 0) || sps.some(v => v < 0)) {
+        out.warnings.push(`Permit "${p.name || pi + 1}" skipped: needs N axle weights and N-1 spacings.`); return;
+      }
+      const sc = num(p.scale, 1), lw = num(p.lane, 0), dfM = num(p.dfM, 1), dfV = num(p.dfV, 1);
+      const P = runVehicle(m, { weights: wts.map(v => v * sc), spacings: sps, varIndex: -1 }, { step, neglect: neglectPermit });
+      const fam = { id: 'permit' + pi, name: p.name || ('Permit ' + (pi + 1)), code: 'Permit', max: new Float64Array(nr), min: new Float64Array(nr), detail: [],
+        gross: wts.reduce((a, b) => a + b, 0) * sc, length: sps.reduce((a, b) => a + b, 0) };
+      for (let r = 0; r < nr; r++) {
+        const q = m.resp[r], L = il[r], df = q.type === 'M' ? dfM : dfV;
+        let Ip, In;
+        if (p.impactMode === 'lfd') { Ip = lfdI(lfdImpactLengths(m, q, 'max')); In = lfdI(lfdImpactLengths(m, q, 'min')); }
+        else { Ip = In = num(p.im, 0) / 100; }
+        // lane: all effects (default) or negative moment only (MBE 6A.4.5.4.1, continuous spans)
+        const negOnly = p.laneApply === 'neg', onP = lw && !negOnly, onN = lw && (!negOnly || q.type === 'M');
+        const laneP = onP ? lw * L.pos : 0, laneN = onN ? lw * L.neg : 0;
+        fam.max[r] = (P.max[r] * (1 + Ip) + laneP) * df; fam.min[r] = (P.min[r] * (1 + In) + laneN) * df;
+        fam.detail.push({ truckMax: P.max[r], truckMin: P.min[r], Ip, In, laneP, laneN, df, ctrlMax: onP ? 'Permit + Lane' : 'Permit', ctrlMin: onN ? 'Permit + Lane' : 'Permit', mxInfo: P.maxInfo[r], mnInfo: P.minInfo[r] });
+      }
+      out.families.push(fam);
+    });
+
+    out.ms = Date.now() - t0;
+    return out;
+  }
+
+  return { buildModel, reactions, influenceData, runVehicle, analyze, lfdI };
+})();
+if (typeof module !== 'undefined') module.exports = ConsysEngine;
+
+</script>
+<script>
+(() => {
+'use strict';
+const E = ConsysEngine;
+const STORE = 'opendot-beam-ll-v1';
+const PRESETS = {
+  type3:  { name:'AASHTO Type 3',   weights:'16 17 17',               spacings:'15 4' },
+  type3s2:{ name:'AASHTO Type 3S2', weights:'10 15.5 15.5 15.5 15.5', spacings:'11 4 22 4' },
+  type33: { name:'AASHTO Type 3-3', weights:'12 12 12 16 14 14',       spacings:'15 4 15 16 4' },
+  custom: { name:'Custom permit',   weights:'12 20 20 20 20',          spacings:'14 4.5 20 4.5' }
+};
+const newPermit = k => Object.assign({ on:true, scale:1, impactMode:'fixed', im:33, lane:0, laneApply:'all', dfM:1, dfV:1 }, PRESETS[k]);
+const LEGAL_DEF = () => ({ on:true, im:33, lane:0.2, lowADTT:false, separate:false, neglect:true, dfM:1, dfV:1 });
+const DF_NOTE = 'Distribution factors are simple scaling factors applied to the per-lane results (1.0 = per lane, the default). No other distribution calculation is applied: no multiple presence, number of lanes, or girder-spacing formula.';
+const DEFAULT = () => ({
+  project:{ name:'Example: 3-span steel girder, 80-100-80 ft', notes:'' },
+  spans:[80,100,80],
+  segments:[
+    {len:64,E:29000,I1:50000,I2:''},{len:32,E:29000,I1:90000,I2:''},
+    {len:68,E:29000,I1:50000,I2:''},{len:32,E:29000,I1:90000,I2:''},{len:64,E:29000,I1:50000,I2:''}],
+  divisions:10, segPts:true, extraPts:'',
+  options:{ step:0.5, varInc:1, neglectDesign:true, neglectPermit:false,
+    hl93:{ on:true, im:33, lane:0.64, dual:'spec', fatigue:false, imFat:15, dfM:1, dfV:1 },
+    hs:{ on:true, scale:1, impact:'', military:false, dfM:1, dfV:1, truckOn:true, laneOn:true, laneW:0.64, lanePM:18, lanePV:26, lane2nd:true, governing:false },
+    legal:LEGAL_DEF(),
+    permits:[ newPermit('type3s2') ] }
+});
+
+let S; try { S = JSON.parse(localStorage.getItem(STORE)) } catch(e) { S = null }
+if (!S || !Array.isArray(S.spans)) S = DEFAULT();
+else { const d = DEFAULT(), had = S.options && S.options.legal; S.options = Object.assign(d.options, S.options || {}); S.options.hl93 = Object.assign(d.options.hl93, S.options.hl93); S.options.hs = Object.assign(DEFAULT().options.hs, S.options.hs); S.options.legal = Object.assign(LEGAL_DEF(), had || { on:false }); }
+let RES = null, selSec = null, ilResp = null, hidden = new Set(), tab = 'M', timer = null;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const f1 = v => { v = Number(v); return (Math.abs(v) < 0.05 ? 0 : v).toFixed(1); };
+const f2 = v => Number(v).toFixed(2);
+const getP = (o, p) => p.split('.').reduce((a, k) => a == null ? a : a[k], o);
+const setP = (o, p, v) => { const k = p.split('.'); const last = k.pop(); const t = k.reduce((a, q) => a[q], o); t[last] = v; };
+const save = () => { try { localStorage.setItem(STORE, JSON.stringify(S)) } catch(e) {} };
+
+/* ======================= INPUT PANEL ======================= */
+const inp = (path, cls = 'n', type = 'text', extra = '') => `<input type="${type}" class="${cls}" data-path="${path}" value="${esc(getP(S, path))}" ${extra}>`;
+const chk = (path, label) => `<label class="chk"><input type="checkbox" data-path="${path}" ${getP(S, path) ? 'checked' : ''}> ${label}</label>`;
+const fld = (label, html, cls = '') => `<label class="fld ${cls}"><span>${label}</span>${html}</label>`;
+
+function renderInputs() {
+  const o = S.options;
+  const spanTot = S.spans.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+  const segTot = S.segments.reduce((a, b) => a + (parseFloat(b.len) || 0), 0);
+  const ok = Math.abs(spanTot - segTot) <= 0.01;
+  const permitColors = ['--c-p0','--c-p1','--c-p2','--c-p3','--c-p4'];
+  $('#inputs').innerHTML = `
+  <fieldset><legend>Project</legend>
+    <div class="row">${fld('Name', inp('project.name', '', 'text'), 'full')}${fld('Notes / structure no.', inp('project.notes', '', 'text'), 'full')}</div>
+  </fieldset>
+  <fieldset><legend>Spans <span class="sp"></span><span class="muted num" id="spanTot">${f2(spanTot)} ft</span></legend>
+    <table class="edit"><thead><tr><th></th><th>Length (ft)</th><th></th></tr></thead><tbody>
+    ${S.spans.map((L, i) => `<tr><td class="idx">${i + 1}</td><td>${inp('spans.' + i, 'n', 'number', 'step="any" min="0"')}</td><td class="x">${S.spans.length > 1 ? `<button class="xbtn" data-act="del-span" data-i="${i}" aria-label="Remove span ${i + 1}">×</button>` : ''}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="tools"><button class="btn sm" data-act="add-span">+ Span</button></div>
+  </fieldset>
+  <fieldset><legend>Segments (E, I) <span class="sp"></span><span class="muted num" id="segTot">${f2(segTot)} ft</span></legend>
+    <table class="edit"><thead><tr><th></th><th>Length ft</th><th>E ksi</th><th>I start in⁴</th><th>I end in⁴</th><th></th></tr></thead><tbody>
+    ${S.segments.map((g, i) => `<tr><td class="idx">${i + 1}</td>
+      <td>${inp(`segments.${i}.len`, 'n', 'number', 'step="any" min="0"')}</td>
+      <td>${inp(`segments.${i}.E`, 'n', 'number', 'step="any" min="0"')}</td>
+      <td>${inp(`segments.${i}.I1`, 'n', 'number', 'step="any" min="0"')}</td>
+      <td>${inp(`segments.${i}.I2`, 'n', 'number', 'step="any" min="0" placeholder="= start"')}</td>
+      <td class="x">${S.segments.length > 1 ? `<button class="xbtn" data-act="del-seg" data-i="${i}" aria-label="Remove segment ${i + 1}">×</button>` : ''}</td></tr>`).join('')}
+    </tbody></table>
+    <div class="tools"><button class="btn sm" data-act="add-seg">+ Segment</button><button class="btn sm ghost" data-act="seg-auto" title="Replace segments with one per span using segment 1's E and I">One per span</button><button class="btn sm ghost" data-act="seg-fill" title="Stretch the last segment so segments match the span total">Fit last to total</button></div>
+    <div id="segChk">${segCheck()}</div>
+    <div class="hint">Segments run left to right from the first support. Leave “I end” blank for constant I; enter it to vary I linearly (haunches).</div>
+  </fieldset>
+  <fieldset><legend>Analysis points &amp; stepping</legend>
+    <div class="row">
+      ${fld('Divisions per span', inp('divisions', 'n', 'number', 'min="1" max="100" step="1"'))}
+      ${fld('Load step (ft)', inp('options.step', 'n', 'number', 'min="0.1" step="0.1"'))}
+      ${fld('Var. axle spacing increment (ft)', inp('options.varInc', 'n', 'number', 'min="0.1" step="0.5"'))}
+      ${fld('Extra points (ft from left end)', inp('extraPts', 'n', 'text', 'placeholder="e.g. 37.5, 142"'))}
+      <div class="fld full">${chk('segPts', 'Add points at segment boundaries')}</div>
+      <div class="fld full">${chk('options.neglectDesign', 'Neglect non-contributing axles (design trucks)')}</div>
+      <div class="fld full">${chk('options.neglectPermit', 'Neglect non-contributing axles (permits)')}</div>
+    </div>
+  </fieldset>
+  <fieldset><legend><span class="swatch" style="background:var(--c-hl93)"></span>AASHTO LRFD HL-93 <span class="sp"></span><label class="sw chk"><input type="checkbox" data-path="options.hl93.on" ${o.hl93.on ? 'checked' : ''}> On</label></legend>
+    <div class="row">
+      ${fld('Dynamic load allowance IM (%)', inp('options.hl93.im', 'n', 'number', 'step="any"'))}
+      ${fld('Design lane (klf)', inp('options.hl93.lane', 'n', 'number', 'step="any"'))}
+      ${fld('Dual truck (90%)', `<select data-path="options.hl93.dual">
+        <option value="spec" ${o.hl93.dual === 'spec' ? 'selected' : ''}>Neg. M between contraflexure pts + int. reactions</option>
+        <option value="all" ${o.hl93.dual === 'all' ? 'selected' : ''}>Neg. M at all points + int. reactions</option>
+        <option value="off" ${o.hl93.dual === 'off' ? 'selected' : ''}>Off</option></select>`, 'full')}
+      ${fld('Distribution factor, moment', inp('options.hl93.dfM', 'n', 'number', 'step="any"'))}
+      ${fld('Distribution factor, shear/reaction', inp('options.hl93.dfV', 'n', 'number', 'step="any"'))}
+      <div class="fld">${chk('options.hl93.fatigue', 'Fatigue truck')}</div>
+      ${fld('Fatigue IM (%)', inp('options.hl93.imFat', 'n', 'number', 'step="any"'))}
+    </div>
+    <div class="hint df">${DF_NOTE} The fatigue truck uses the same factors.</div>
+  </fieldset>
+  <fieldset><legend><span class="swatch" style="background:var(--c-hs)"></span>AASHTO Standard (LFD) HS <span class="sp"></span><label class="sw chk"><input type="checkbox" data-path="options.hs.on" ${o.hs.on ? 'checked' : ''}> On</label></legend>
+    <div class="row">
+      ${fld('Scale (1.0 = HS20, 1.25 = HS25)', inp('options.hs.scale', 'n', 'number', 'step="any"'))}
+      ${fld('Impact override (%)', inp('options.hs.impact', 'n', 'number', 'step="any" placeholder="50/(L+125)"'))}
+      ${fld('Distribution factor, moment', inp('options.hs.dfM', 'n', 'number', 'step="any"'))}
+      ${fld('Distribution factor, shear/reaction', inp('options.hs.dfV', 'n', 'number', 'step="any"'))}
+    </div>
+    <div class="hint df">${DF_NOTE} These are per-lane multipliers, not per wheel line: divide a Standard Specifications wheel-line factor (e.g. S/5.5) by 2 before entering it.</div>
+    <div class="sublbl"><span class="swatch" style="background:var(--c-hs)"></span>HS truck loading <span class="sp"></span>${chk('options.hs.truckOn', 'Show')}</div>
+    <div class="row">
+      <div class="fld full">${chk('options.hs.military', 'Include Alternate Military Loading (2 × 24 k @ 4 ft) in the truck envelope')}</div>
+    </div>
+    <div class="sublbl"><span class="swatch" style="background:var(--c-hsl)"></span>HS lane loading <span class="sp"></span>${chk('options.hs.laneOn', 'Show')}</div>
+    <div class="row three">
+      ${fld('Uniform (klf)', inp('options.hs.laneW', 'n', 'number', 'step="any"'))}
+      ${fld('Conc. for moment (k)', inp('options.hs.lanePM', 'n', 'number', 'step="any"'))}
+      ${fld('Conc. for shear (k)', inp('options.hs.lanePV', 'n', 'number', 'step="any"'))}
+      <div class="fld full">${chk('options.hs.lane2nd', 'Second concentrated load in another span for negative moment (continuous spans)')}</div>
+    </div>
+    <div class="hint">Lane values are for HS20 and are multiplied by the scale. Concentrated shear load is also used for reactions.</div>
+    <div class="sublbl"><span class="swatch" style="background:var(--c-hsg)"></span>Governing (max of truck and lane) <span class="sp"></span>${chk('options.hs.governing', 'Show')}</div>
+  </fieldset>
+  <fieldset><legend><span class="swatch" style="background:var(--c-lg)"></span>AASHTO routine commercial load effects (MBE) <span class="sp"></span><label class="sw chk"><input type="checkbox" data-path="options.legal.on" ${o.legal.on ? 'checked' : ''}> On</label></legend>
+    <div class="row">
+      ${fld('Dynamic load allowance IM (%)', inp('options.legal.im', 'n', 'number', 'step="any"'))}
+      ${fld('Lane-type lane load (klf)', inp('options.legal.lane', 'n', 'number', `step="any" ${o.legal.lowADTT ? 'disabled' : ''}`))}
+      ${fld('Distribution factor, moment', inp('options.legal.dfM', 'n', 'number', 'step="any"'))}
+      ${fld('Distribution factor, shear/reaction', inp('options.legal.dfV', 'n', 'number', 'step="any"'))}
+      <div class="fld full">${chk('options.legal.neglect', 'Neglect non-contributing axles')}</div>
+      <div class="fld full">${chk('options.legal.lowADTT', 'ADTT &lt; 500: omit the lane load and use 1.0 in place of 0.75 (Engineer’s judgment)')}</div>
+      <div class="fld full">${chk('options.legal.separate', 'Also show each truck and the lane-type model separately')}</div>
+    </div>
+    <div class="hint">Envelope of the Type 3, Type 3S2 and Type 3-3 trucks (IM applied) and the lane-type model (MBE 6A.4.4.2.1a, Figs. D6A-4 and D6A-5). Lane-type: 0.75 × two Type 3-3 trucks in the same direction, 30 ft clear, plus the lane load on adverse portions (no IM on the lane), for negative moment and interior reactions on continuous spans; 0.75 × one Type 3-3 plus the lane load for all effects in spans over 200 ft.</div>
+    <div class="hint">Load effects only, not a complete legal-load rating: no rating factors are computed, and specialized hauling vehicles (SU4–SU7), emergency vehicles and state legal loads, which may also be required for rating, are not included.</div>
+    <div class="hint df">${DF_NOTE}</div>
+  </fieldset>
+  <fieldset><legend>Permit vehicles <span class="sp"></span>
+      <select id="presetSel" style="width:auto;font-size:12px;padding:3px 6px" aria-label="Permit preset">
+        <option value="custom">Custom</option><option value="type3">Type 3</option><option value="type3s2">Type 3S2</option><option value="type33">Type 3-3</option></select>
+      <button class="btn sm" data-act="add-permit">+ Add</button></legend>
+    ${o.permits.length ? '' : '<div class="hint">No permit vehicles. Add one from a preset or start a custom vehicle.</div>'}
+    ${o.permits.map((p, i) => `<div class="permit">
+      <div class="ph"><input type="checkbox" data-path="options.permits.${i}.on" ${p.on ? 'checked' : ''} aria-label="Include permit"><span class="swatch" style="background:var(${permitColors[i % 5]})"></span>
+        ${inp(`options.permits.${i}.name`, '', 'text', 'aria-label="Permit name"')}<button class="xbtn" data-act="del-permit" data-i="${i}" aria-label="Remove permit">×</button></div>
+      <div class="row">
+        ${fld('Axle weights (k), front → rear', inp(`options.permits.${i}.weights`, 'n'), 'full')}
+        ${fld('Axle spacings (ft)', inp(`options.permits.${i}.spacings`, 'n'), 'full')}
+      </div>
+      <div class="row three" style="margin-top:8px">
+        ${fld('Scale', inp(`options.permits.${i}.scale`, 'n', 'number', 'step="any"'))}
+        ${fld('Impact', `<select data-path="options.permits.${i}.impactMode"><option value="fixed" ${p.impactMode !== 'lfd' ? 'selected' : ''}>Fixed %</option><option value="lfd" ${p.impactMode === 'lfd' ? 'selected' : ''}>LFD formula</option></select>`)}
+        ${fld('Impact %', inp(`options.permits.${i}.im`, 'n', 'number', `step="any" ${p.impactMode === 'lfd' ? 'disabled' : ''}`))}
+        ${fld('Lane w/ permit (klf)', inp(`options.permits.${i}.lane`, 'n', 'number', 'step="any"'))}
+        ${fld('Lane applies to', `<select data-path="options.permits.${i}.laneApply"><option value="all" ${p.laneApply !== 'neg' ? 'selected' : ''}>All effects</option><option value="neg" ${p.laneApply === 'neg' ? 'selected' : ''}>Negative moment only</option></select>`)}
+        ${fld('DF moment', inp(`options.permits.${i}.dfM`, 'n', 'number', 'step="any"'))}
+        ${fld('DF shear', inp(`options.permits.${i}.dfV`, 'n', 'number', 'step="any"'))}
+      </div>
+      <div class="hint" id="psum${i}">${permitSummary(p)}</div>
+    </div>`).join('')}
+    <div class="hint">Presets are the AASHTO MBE legal trucks run as single vehicles. For legal-load effects, use AASHTO routine commercial load effects above, which adds the MBE lane-type model required for negative moment and interior reactions on continuous spans. Verify against your agency’s permit or rating vehicle before use.</div>
+    <div class="hint">Permit lane load is applied to adverse portions without impact. MBE 6A.4.5.4.1 calls for it on spans of 200 to 300 ft (all effects) and for negative moment on continuous spans.</div>
+    <div class="hint df">${DF_NOTE}</div>
+  </fieldset>
+  <fieldset class="noprint"><div class="tools" style="margin:0"><button class="btn sm ghost" data-act="reset">Reset to example</button><button class="btn sm ghost" data-act="clear">New blank model</button></div></fieldset>`;
+}
+function permitSummary(p) {
+  const w = String(p.weights).split(/[,;\s]+/).map(Number).filter(Number.isFinite);
+  const s = String(p.spacings).split(/[,;\s]+/).map(Number).filter(Number.isFinite);
+  if (!w.length) return 'Enter axle weights.';
+  if (s.length !== w.length - 1) return `<span style="color:var(--bad)">${w.length} axles need ${w.length - 1} spacings (have ${s.length}).</span>`;
+  const sc = parseFloat(p.scale) || 1;
+  return `${w.length} axles · ${f1(w.reduce((a, b) => a + b, 0) * sc)} k gross · ${f1(s.reduce((a, b) => a + b, 0))} ft long`;
+}
+
+/* ======================= EVENTS ======================= */
+document.addEventListener('input', e => {
+  const t = e.target; if (!t.dataset || !t.dataset.path) return;
+  setP(S, t.dataset.path, t.type === 'checkbox' ? t.checked : t.value);
+  save();
+  if (t.type === 'checkbox' || t.tagName === 'SELECT') renderInputs();
+  else refreshChecks();
+  schedule();
+});
+function segCheck() {
+  const spanTot = S.spans.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+  const segTot = S.segments.reduce((a, b) => a + (parseFloat(b.len) || 0), 0);
+  const ok = Math.abs(spanTot - segTot) <= 0.01;
+  return `<div class="check ${ok ? 'ok' : 'bad'}">${ok ? '✓ Segments match the span total' : `Segments total ${f2(segTot)} ft vs spans ${f2(spanTot)} ft`}</div>`;
+}
+function refreshChecks() {
+  // update derived text only; never redraw the inputs while typing
+  const spanTot = S.spans.reduce((a, b) => a + (parseFloat(b) || 0), 0);
+  const segTot = S.segments.reduce((a, b) => a + (parseFloat(b.len) || 0), 0);
+  const set = (id, h) => { const el = document.getElementById(id); if (el) el.innerHTML = h; };
+  set('spanTot', f2(spanTot) + ' ft'); set('segTot', f2(segTot) + ' ft'); set('segChk', segCheck());
+  S.options.permits.forEach((p, i) => set('psum' + i, permitSummary(p)));
+}
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const i = +b.dataset.i, a = b.dataset.act;
+  if (a === 'add-span') { S.spans.push(S.spans[S.spans.length - 1] || 100); }
+  else if (a === 'del-span') S.spans.splice(i, 1);
+  else if (a === 'add-seg') { const g = S.segments[S.segments.length - 1] || { E:29000, I1:50000 }; S.segments.push({ len:20, E:g.E, I1:g.I1, I2:'' }); }
+  else if (a === 'del-seg') S.segments.splice(i, 1);
+  else if (a === 'seg-auto') { const g = S.segments[0] || { E:29000, I1:50000 }; S.segments = S.spans.map(L => ({ len:L, E:g.E, I1:g.I1, I2:'' })); }
+  else if (a === 'seg-fill') { const tot = S.spans.reduce((x, y) => x + (+y || 0), 0); const rest = S.segments.slice(0, -1).reduce((x, y) => x + (+y.len || 0), 0); const L = +(tot - rest).toFixed(4); if (L > 0) S.segments[S.segments.length - 1].len = L; }
+  else if (a === 'add-permit') S.options.permits.push(newPermit($('#presetSel').value));
+  else if (a === 'del-permit') S.options.permits.splice(i, 1);
+  else if (a === 'reset') { if (!confirm('Replace the current model with the example?')) return; S = DEFAULT(); hidden.clear(); }
+  else if (a === 'clear') { if (!confirm('Start a blank single-span model?')) return; S = DEFAULT(); S.project = { name:'New beam', notes:'' }; S.spans = [100]; S.segments = [{ len:100, E:29000, I1:50000, I2:'' }]; S.options.permits = []; }
+  else if (a === 'run') { run(); return; }
+  else if (a === 'save') { download((S.project.name || 'beam').replace(/[^\w\-]+/g, '_') + '.json', JSON.stringify(S, null, 2), 'application/json'); return; }
+  else if (a === 'load') { $('#fileIn').click(); return; }
+  else if (a === 'csv') { exportCSV(); return; }
+  else if (a === 'print') { window.print(); return; }
+  else if (a === 'fam') { const id = b.dataset.id; hidden.has(id) ? hidden.delete(id) : hidden.add(id); renderResults(); return; }
+  else if (a === 'tab') { tab = b.dataset.tab; renderResults(); return; }
+  else return;
+  save(); renderInputs(); schedule(0);
+});
+$('#fileIn').addEventListener('change', e => {
+  const f = e.target.files[0]; if (!f) return;
+  const rd = new FileReader();
+  rd.onload = () => { try { const o = JSON.parse(rd.result); if (!Array.isArray(o.spans) || !Array.isArray(o.segments)) throw 0;
+      const d = DEFAULT(), had = o.options && o.options.legal; S = Object.assign(d, o, { options: Object.assign(d.options, o.options || {}) });
+      S.options.hl93 = Object.assign(DEFAULT().options.hl93, S.options.hl93); S.options.hs = Object.assign(DEFAULT().options.hs, S.options.hs);
+      S.options.legal = Object.assign(LEGAL_DEF(), had || { on:false });
+      save(); renderInputs(); run(); } catch(err) { alert('That file is not a saved beam model.'); } };
+  rd.readAsText(f); e.target.value = '';
+});
+function download(name, text, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+}
+function schedule(ms = 450) { clearTimeout(timer); $('#busy').textContent = 'Updating…'; timer = setTimeout(run, ms); }
+
+/* ======================= RUN ======================= */
+function run() {
+  clearTimeout(timer);
+  $('#busy').textContent = 'Analyzing…';
+  setTimeout(() => {
+    try { RES = E.analyze(S); }
+    catch(err) { RES = { errors:['Analysis failed: ' + err.message] }; console.error(err); }
+    if (RES && !RES.errors) {
+      if (selSec == null || selSec >= RES.model.sections.length) { const k = RES.model.sections.findIndex(q => q.side === 'L' && q.span < RES.model.spans.length - 1); selSec = k >= 0 ? k : Math.floor(RES.model.sections.length / 2); }
+      if (ilResp == null || ilResp >= RES.model.resp.length) ilResp = RES.model.sections[selSec].iM;
+      $('#busy').textContent = `Solved in ${RES.ms} ms`;
+    } else $('#busy').textContent = '';
+    renderResults();
+  }, 10);
+}
+
+/* ======================= RESULTS ======================= */
+const famColor = f => f.id === 'hl93' ? 'var(--c-hl93)' : f.id === 'hs' ? 'var(--c-hs)' : f.id === 'hsl' ? 'var(--c-hsl)' : f.id === 'hsg' ? 'var(--c-hsg)' : f.id === 'fat' ? 'var(--c-fat)' : (f.id === 'legal' || f.id.startsWith('lg')) ? 'var(--c-lg)' : `var(--c-p${(+f.id.replace('permit', '') || 0) % 5})`;
+const famDash = f => ({ fat:'5 4', lg3:'8 3', lg3s2:'3 3', lg33:'10 3 2 3', lglane:'1 3' })[f.id] || '';
+const permitIdx = f => +f.id.replace('permit', '');
+const secLabel = s => `Span ${s.span + 1} · ${s.frac.toFixed(3).replace(/0+$/, '').replace(/\.$/, '.0')}`;
+
+function renderResults() {
+  const R = $('#results');
+  if (!RES) { R.innerHTML = '<div class="panel card muted">Running analysis…</div>'; return; }
+  if (RES.errors) { R.innerHTML = `<div class="panel card"><h2>Model needs attention</h2><div class="msg err" style="margin-top:10px">${RES.errors.map(esc).join('<br>')}</div></div>`; return; }
+  const m = RES.model, fams = RES.families;
+  const vis = fams.filter(f => !hidden.has(f.id));
+  // headline stats
+  const stat = fams.map(f => {
+    let mx = 0, mn = 0, vx = 0;
+    m.sections.forEach(s => { mx = Math.max(mx, f.max[s.iM]); mn = Math.min(mn, f.min[s.iM]); vx = Math.max(vx, f.max[s.iV], -f.min[s.iV]); });
+    return `<div class="stat"><div class="k"><span class="swatch" style="display:inline-block;background:${famColor(f)};margin-right:5px"></span>${esc(f.name)}</div>
+      <div class="v">${f1(mx)} / ${f1(mn)}</div><div class="d">+M / −M k-ft · |V|max ${f1(vx)} k</div></div>`;
+  }).join('');
+  const legend = `<div class="legend">${fams.map(f => `<button data-act="fam" data-id="${f.id}" class="${hidden.has(f.id) ? 'off' : ''}"><span class="swatch" style="background:${famColor(f)}"></span>${esc(f.name)}</button>`).join('')}</div>`;
+  const warns = [...RES.warnings, ...legalWarn()];
+  const warn = warns.length ? `<div class="msg warn">${warns.map(esc).join('<br>')}</div>` : '';
+  const perLane = isPerLane();
+
+  R.innerHTML = `
+  <div class="printhead"><div style="font-weight:600;margin-bottom:4px">Just Live Load · Bridge SE · Open DOT</div><h2 style="margin:0">${esc(S.project.name)}</h2><div>${esc(S.project.notes)} · Spans ${S.spans.map(v => f1(v)).join(' – ')} ft · ${new Date().toLocaleDateString()}</div></div>
+  ${warn}
+  ${inputSummary()}
+  <section class="panel card">
+    <div class="cardhead"><div><h2>${esc(S.project.name || 'Beam')}</h2>
+      <p class="sub">${m.spans.length} span${m.spans.length > 1 ? 's' : ''} · ${f2(m.Ltot)} ft · ${m.segs.length} segment${m.segs.length > 1 ? 's' : ''} · ${m.nodes.length - 1} elements · ${m.sections.length} analysis points · results ${perLane ? 'per lane' : 'with distribution factors applied'}</p></div></div>
+    <div id="beam"></div>
+  </section>
+  ${fams.length ? `<div class="stats">${stat}</div>` : '<div class="panel card muted">Turn on at least one load family to see envelopes.</div>'}
+  ${fams.length ? `
+  <section class="panel card">
+    <div class="cardhead"><div><h2>Moment envelope</h2><p class="sub">kip-ft, sagging positive. Hover for values; click to select a point.</p></div><div class="sp"></div>${legend}</div>
+    <div class="chart" id="chM"></div>
+  </section>
+  <section class="panel card">
+    <div class="cardhead"><div><h2>Shear envelope</h2><p class="sub">kips. Values left and right of each interior support are shown separately.</p></div><div class="sp"></div>${legend}</div>
+    <div class="chart" id="chV"></div>
+  </section>
+  <section class="panel card">
+    <div class="tabs" role="tablist">
+      ${[['M','Moments'],['V','Shears'],['R','Reactions'],['D','Point detail']].map(([k, l]) => `<button role="tab" data-act="tab" data-tab="${k}" class="${tab === k ? 'on' : ''}">${l}</button>`).join('')}
+    </div>
+    <div class="tabpane" ${tab === 'M' ? '' : 'hidden'}>${resTable('M')}</div>
+    <div class="tabpane" ${tab === 'V' ? '' : 'hidden'}>${resTable('V')}</div>
+    <div class="tabpane" ${tab === 'R' ? '' : 'hidden'}>${reactTable()}</div>
+    <div class="tabpane" ${tab === 'D' ? '' : 'hidden'}>${detailHTML()}</div>
+  </section>
+  <section class="panel card ilcard">
+    <div class="cardhead"><div><h2>Influence line</h2><p class="sub">Unit downward load. Shaded areas are what the lane load fills for the positive and negative envelopes.</p></div></div>
+    <div class="ilctl"><select id="ilSel" aria-label="Influence line response">${ilOptions()}</select><span class="muted" id="ilStats"></span></div>
+    <div class="chart" id="chIL"></div>
+  </section>` : ''}
+  <section class="panel card">
+    <details class="notes"><summary>Method and assumptions</summary>
+    <ul>${notesItems()}</ul></details>
+    <div class="printonly"><h2>Method and assumptions</h2><ul class="notesprint">${notesItems()}</ul></div>
+  </section>`;
+  drawResults(fams, vis);
+}
+function notesItems() {
+  const perLane = isPerLane();
+  return `
+      <li>Continuous beam solved by the direct stiffness method with Euler–Bernoulli elements. Each segment carries its own E and I (linearly varying I is discretized per element). Supports are vertical restraints with free rotation.</li>
+      <li>Influence lines are exact for the discretized beam: a point load anywhere in an element is applied through Hermite equivalent nodal loads; moments and shears follow from statics on the support reactions.</li>
+      <li>Vehicles run both directions in ${f2(+S.options.step || 0.5)} ft steps, plus every position that puts an axle on an analysis point or support. Variable axle spacing is searched from 14 to 30 ft in ${f2(+S.options.varInc || 1)} ft increments.</li>
+      <li><b>HL-93</b> (LRFD 3.6.1.2–3.6.1.3): max of truck + lane and tandem + lane; IM applies to truck and tandem only. 90% of two design trucks (14 ft rear spacing, ≥ 50 ft between them) plus 90% lane for negative moment ${S.options.hl93.dual === 'all' ? 'at all points' : 'between points of contraflexure under uniform load'} and for interior-support reactions. Lane load is placed on the adverse portions of the influence line.</li>
+      <li><b>HS loading</b> (Standard Spec 3.7, 3.11): reported as separate envelopes. <b>Truck</b> is the HS truck with 14–30 ft variable rear spacing (and Alternate Military Loading if checked). <b>Lane</b> is the uniform load on the matching-sign portions of the influence line plus the concentrated load (moment value for moments, shear value for shears and reactions) at the peak ordinate; for negative moment on continuous spans a second concentrated load is placed in another span. <b>Governing</b> is the larger of the two at each point. Impact I = 50/(L + 125) ≤ 30% applies to both. L = span for +M, average of the span and its nearer neighbor for −M, distance to the far end of the span for shear, and average of adjacent spans for interior reactions.</li>
+      <li><b>AASHTO routine commercial load effects</b> (MBE 6A.4.4.2.1a, Appendix D6A): envelope of the Type 3, Type 3S2 and Type 3-3 trucks with IM, and the lane-type model. For negative moment and interior reactions on continuous spans the lane-type model is 0.75 × two Type 3-3 trucks in the same direction with 30 ft clear between them, plus 0.2 klf on adverse portions; for spans over 200 ft it is 0.75 × one Type 3-3 plus 0.2 klf for all effects. IM applies to the trucks, not the lane. The ADTT &lt; 500 option omits the lane and uses 1.0 in place of 0.75. Negative moment is checked at every analysis point. Load effects only, not a complete legal-load rating: no rating factors are computed, and specialized hauling vehicles (SU4–SU7), emergency vehicles and state legal loads, which may also be required for rating, are not included.</li>
+      <li><b>Permits</b> run as entered (all axles included unless you turn on the neglect option), with a fixed impact or the LFD formula, plus an optional lane load on adverse portions without impact, applied to all effects or to negative moment only.</li>
+      <li><b>Distribution factors</b> are simple scaling factors on the per-lane results; the default of 1.0 gives per-lane values. No multiple presence, number of lanes, girder-spacing formula or other distribution calculation is applied. The HS factors are per-lane multipliers, not per wheel line. The fatigue truck uses the HL-93 factors. ${perLane ? 'All values here are per lane.' : 'Moment factors are applied to moments, shear factors to shears and reactions.'}</li>
+      <li>Reactions are upward-positive (bearing load).</li>
+      <li>Check results against an independent method before using them for design or rating.</li>`;
+}
+function drawResults(fams, vis) {
+  const R = $('#results');
+  drawBeam();
+  if (!fams.length) return;
+  drawEnvelope('#chM', 'M', vis);
+  drawEnvelope('#chV', 'V', vis);
+  drawIL();
+  $('#ilSel').addEventListener('change', e => { ilResp = +e.target.value; drawIL(); });
+  R.querySelectorAll('tr[data-sec]').forEach(tr => tr.addEventListener('click', () => selectSec(+tr.dataset.sec)));
+}
+function isPerLane() {
+  // same parsing as the engine: blank = 1.0; only families that are on
+  const o = S.options, one = v => { const n = parseFloat(v); return (Number.isFinite(n) ? n : 1) === 1; };
+  const pair = g => one(g.dfM) && one(g.dfV);
+  return (!o.hl93.on || pair(o.hl93)) && (!o.hs.on || pair(o.hs)) && (!(o.legal && o.legal.on) || pair(o.legal)) && o.permits.every(p => !p.on || pair(p));
+}
+/* AASHTO legal trucks run as permits on a continuous beam without the lane-type model */
+function legalWarn() {
+  if ((S.options.legal && S.options.legal.on) || !RES || RES.errors || RES.model.spans.length < 2) return [];
+  const norm = v => String(v).split(/[,;\s]+/).map(Number).filter(Number.isFinite).join(',');
+  const sig = ['type3', 'type3s2', 'type33'].map(k => norm(PRESETS[k].weights) + '|' + norm(PRESETS[k].spacings));
+  const hit = S.options.permits.filter(p => p.on && sig.includes(norm(p.weights) + '|' + norm(p.spacings)));
+  if (!hit.length) return [];
+  return [`${hit.map(p => p.name || 'Permit').join(', ')}: AASHTO legal truck${hit.length > 1 ? 's' : ''} on a continuous beam. MBE 6A.4.4.2.1a also requires the lane-type model (0.75 × two Type 3-3 trucks + 0.2 klf) for negative moment and interior reactions. Turn on AASHTO routine commercial load effects to include it.`];
+}
+/* print-only record of every input, so a printed report can be checked and reproduced */
+function inputSummary() {
+  const o = S.options, m = RES.model, nv = (v, d) => { const x = parseFloat(v); return Number.isFinite(x) ? x : d; };
+  const yn = b => b ? 'Yes' : 'No', kv = rows => `<table class="kv"><tbody>${rows.map(([k, v]) => `<tr><th>${k}</th><td>${v}</td></tr>`).join('')}</tbody></table>`;
+  const dfs = g => `${nv(g.dfM, 1)} (moment), ${nv(g.dfV, 1)} (shear and reactions)`;
+  const dualTxt = { spec: 'Negative moment between points of contraflexure + interior reactions', all: 'Negative moment at all points + interior reactions', off: 'Off' }[o.hl93.dual] || o.hl93.dual;
+  const sc = nv(o.hs.scale, 1);
+  let h = `<section class="panel card printonly insum"><h2>Model input</h2>
+    <h3>Spans and segments</h3>
+    <table class="kv"><thead><tr><th>Span</th><th>Length (ft)</th></tr></thead><tbody>${m.spans.map((L, i) => `<tr><td>${i + 1}</td><td class="n">${f2(L)}</td></tr>`).join('')}</tbody></table>
+    <table class="kv"><thead><tr><th>Segment</th><th>From (ft)</th><th>To (ft)</th><th>E (ksi)</th><th>I start (in⁴)</th><th>I end (in⁴)</th></tr></thead><tbody>${m.segs.map((g, i) => `<tr><td>${i + 1}</td><td class="n">${f2(g.x0)}</td><td class="n">${f2(g.x1)}</td><td class="n">${g.E}</td><td class="n">${g.I1}</td><td class="n">${g.I2}</td></tr>`).join('')}</tbody></table>
+    <h3>Analysis</h3>${kv([
+      ['Divisions per span', m.div], ['Extra points (ft)', esc(S.extraPts || 'None')], ['Points at segment boundaries', yn(S.segPts)],
+      ['Load step (ft)', f2(Math.max(0.05, nv(o.step, 0.5)))], ['Variable axle spacing increment (ft)', f2(nv(o.varInc, 1))],
+      ['Neglect non-contributing axles', `Design trucks: ${yn(o.neglectDesign !== false)} · Permits: ${yn(!!o.neglectPermit)}${o.legal && o.legal.on ? ` · Legal: ${yn(o.legal.neglect !== false)}` : ''}`],
+      ['Elements', m.nodes.length - 1]])}`;
+  if (o.hl93.on) h += `<h3>AASHTO LRFD HL-93</h3>${kv([['IM', nv(o.hl93.im, 33) + '%'], ['Design lane', f2(nv(o.hl93.lane, 0.64)) + ' klf'], ['Dual truck (90%)', m.spans.length > 1 ? dualTxt : 'Not applicable (single span)'],
+      ['Fatigue truck', o.hl93.fatigue ? `Yes, IM ${nv(o.hl93.imFat, 15)}%` : 'No'], ['Distribution factors', dfs(o.hl93)]])}`;
+  if (o.hs.on) h += `<h3>AASHTO Standard (LFD) HS${+(20 * sc).toFixed(3)}</h3>${kv([['Scale', sc], ['Impact', o.hs.impact === '' || o.hs.impact == null || !Number.isFinite(parseFloat(o.hs.impact)) ? '50/(L + 125) ≤ 30%' : parseFloat(o.hs.impact) + '% (override)'],
+      ['Alternate Military Loading', yn(o.hs.military)], ['Lane', `${f2(nv(o.hs.laneW, 0.64) * sc)} klf; ${f2(nv(o.hs.lanePM, 18) * sc)} k (moment), ${f2(nv(o.hs.lanePV, 26) * sc)} k (shear, reactions)`],
+      ['Second concentrated load for −M', yn(o.hs.lane2nd !== false)], ['Envelopes shown', [o.hs.truckOn !== false && 'Truck', o.hs.laneOn !== false && 'Lane', o.hs.governing && o.hs.truckOn !== false && o.hs.laneOn !== false && 'Governing'].filter(Boolean).join(', ') || 'None'],
+      ['Distribution factors', dfs(o.hs) + ', per lane']])}`;
+  if (o.legal && o.legal.on) h += `<h3>AASHTO routine commercial load effects (MBE)</h3>${kv([['Trucks', 'Type 3, Type 3S2, Type 3-3'], ['IM', nv(o.legal.im, 33) + '%'],
+      ['Lane-type model', o.legal.lowADTT ? 'ADTT < 500: 1.0 × Type 3-3 trucks, no lane load' : `0.75 × Type 3-3 trucks + ${f2(nv(o.legal.lane, 0.2))} klf`], ['Distribution factors', dfs(o.legal)]])}`;
+  const ps = o.permits.filter(p => p.on);
+  if (ps.length) h += `<h3>Permit vehicles</h3><table class="kv"><thead><tr><th>Name</th><th>Axle weights (k)</th><th>Spacings (ft)</th><th>Scale</th><th>Impact</th><th>Lane</th><th>DF M / V</th></tr></thead><tbody>${ps.map(p => `<tr><td>${esc(p.name)}</td><td>${esc(p.weights)}</td><td>${esc(p.spacings)}</td><td class="n">${nv(p.scale, 1)}</td><td>${p.impactMode === 'lfd' ? '50/(L + 125) ≤ 30%' : nv(p.im, 0) + '%'}</td><td>${nv(p.lane, 0) ? `${f2(nv(p.lane, 0))} klf, ${p.laneApply === 'neg' ? '−M only' : 'all effects'}` : 'None'}</td><td>${nv(p.dfM, 1)} / ${nv(p.dfV, 1)}</td></tr>`).join('')}</tbody></table>`;
+  return h + '</section>';
+}
+function selectSec(si, keepTab) {
+  selSec = si; ilResp = RES.model.sections[si][tab === 'V' ? 'iV' : 'iM'];
+  if (!keepTab || keepTab === 'R') tab = 'D';
+  renderResults();
+}
+
+/* ---------- tables ---------- */
+function resTable(type) {
+  const m = RES.model, fams = RES.families;
+  const head1 = `<tr><th class="l">Span</th><th class="l">x/L</th><th>x (ft)</th>${fams.map(f => `<th class="grp" colspan="2"><span class="swatch" style="display:inline-block;background:${famColor(f)};margin-right:5px"></span>${esc(f.name)}</th>`).join('')}</tr>`;
+  const u = type === 'M' ? 'k-ft' : 'k';
+  const head2 = `<tr><th class="l"></th><th class="l"></th><th></th>${fams.map(() => `<th class="grp">+${type} (${u})</th><th>−${type} (${u})</th>`).join('')}</tr>`;
+  const rows = m.sections.map((s, si) => {
+    const r = type === 'M' ? s.iM : s.iV;
+    const side = s.side === 'L' && s.span < m.spans.length - 1 ? ' <span class="muted">(left of pier)</span>' : s.side === 'R' && s.span > 0 ? ' <span class="muted">(right of pier)</span>' : '';
+    if (type === 'M' && s.side === 'R' && s.span > 0) return ''; // duplicate moment at pier
+    const kind = s.kind === 'seg' ? ' <span class="muted">seg</span>' : s.kind === 'user' ? ' <span class="muted">user</span>' : '';
+    return `<tr data-sec="${si}" class="${si === selSec ? 'sel' : ''} ${(s.side !== 'B') ? 'sup' : ''}"><td class="l">${s.span + 1}</td><td class="l num">${s.frac.toFixed(3)}${type === 'V' ? side : ''}${kind}</td><td class="n">${f2(s.x)}</td>
+      ${fams.map(f => `<td class="n gs" title="${esc(f.detail[r].ctrlMax)}">${f1(f.max[r])}</td><td class="n ${f.min[r] < -0.05 ? 'neg' : ''}" title="${esc(f.detail[r].ctrlMin)}">${f1(f.min[r])}</td>`).join('')}</tr>`;
+  }).join('');
+  return `<div class="tablewrap"><table class="res"><thead>${head1}${head2}</thead><tbody>${rows}</tbody></table></div>
+    <p class="hint">Hover a value to see its controlling case. Click a row for the full breakdown and critical vehicle position.</p>`;
+}
+function reactTable() {
+  const m = RES.model, fams = RES.families;
+  return `<div class="tablewrap"><table class="res"><thead>
+    <tr><th class="l">Support</th><th>x (ft)</th>${fams.map(f => `<th class="grp" colspan="2"><span class="swatch" style="display:inline-block;background:${famColor(f)};margin-right:5px"></span>${esc(f.name)}</th>`).join('')}</tr>
+    <tr><th class="l"></th><th></th>${fams.map(() => `<th class="grp">Max (k)</th><th>Min (k)</th>`).join('')}</tr></thead><tbody>
+    ${m.reactRows.map((r, j) => `<tr><td class="l">${j + 1}${j === 0 || j === m.nsup - 1 ? ' <span class="muted">abut.</span>' : ' <span class="muted">pier</span>'}</td><td class="n">${f2(m.sup[j])}</td>
+      ${fams.map(f => `<td class="n gs" title="${esc(f.detail[r].ctrlMax)}">${f1(f.max[r])}</td><td class="n ${f.min[r] < -0.05 ? 'neg' : ''}" title="${esc(f.detail[r].ctrlMin)}">${f1(f.min[r])}</td>`).join('')}</tr>`).join('')}
+    </tbody></table></div><p class="hint">Negative minimum = uplift. Reactions use the shear distribution factor.</p>`;
+}
+const posTxt = (inf, f) => {
+  if (!inf) return '';
+  const veh = f.id === 'hl93' || f.id === 'hs' || f.id === 'fat' ? '' : '';
+  const dir = inf.dir > 0 ? 'traveling → (front axle leading to the right)' : 'traveling ← (front axle leading to the left)';
+  return `Front axle at x = ${f2(inf.p)} ft, ${dir}${inf.vs != null ? `, variable spacing ${f2(inf.vs)} ft` : ''}.${veh}`;
+};
+function detailHTML() {
+  const m = RES.model, s = m.sections[selSec];
+  const opts = m.sections.map((q, i) => (q.side === 'R' && q.span > 0) ? '' : `<option value="${i}" ${i === selSec ? 'selected' : ''}>${secLabel(q)} (${f2(q.x)} ft)</option>`).join('');
+  const blocks = ['M', 'V'].map(type => {
+    const secs = type === 'V' && s.side !== 'B' ? m.sections.filter(q => Math.abs(q.x - s.x) < 1e-6) : [s];
+    return secs.map(q => {
+      const r = type === 'M' ? q.iM : q.iV, u = type === 'M' ? 'k-ft' : 'k';
+      const where = type === 'V' && q.side === 'L' && q.span < m.spans.length - 1 ? ' (left of pier)' : type === 'V' && q.side === 'R' && q.span > 0 ? ' (right of pier)' : '';
+      return `<h3 style="margin:14px 0 8px;font-size:13px">${type === 'M' ? 'Moment' : 'Shear'}${where}</h3><div class="detail">${RES.families.map(f => famCard(f, r, type, u)).join('')}</div>`;
+    }).join(type === 'M' ? '' : '');
+  }).join('');
+  return `<div class="ilctl"><label class="muted" for="secSel">Point</label><select id="secSel" onchange="window.__selSec(+this.value)">${opts}</select>
+    <span class="muted">x = ${f2(s.x)} ft · span ${s.span + 1} (${f2(m.spans[s.span])} ft)</span></div>${blocks}`;
+}
+window.__selSec = i => selectSec(i, 'D');
+function famCard(f, r, type, u) {
+  const d = f.detail[r]; d.__r = r;
+  const rows = [];
+  const pct = v => (v * 100).toFixed(1) + '%';
+  if (f.id === 'hl93') {
+    rows.push(['Truck (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`], ['Tandem (+ / −)', `${f1(d.tandemMax)} / ${f1(d.tandemMin)}`],
+      ['Lane (+ / −)', `${f1(d.laneP)} / ${f1(d.laneN)}`], ['IM', pct(d.IM)]);
+    if (d.dualMin != null) rows.push(['Dual trucks (−)', f1(d.dualMin)]);
+    if (d.dualMax != null) rows.push(['Dual trucks (+)', f1(d.dualMax)]);
+  } else if (f.id === 'hs') {
+    rows.push(['Truck (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`]);
+    if (S.options.hs.military) rows.push(['Military (+ / −)', `${f1(d.milMax)} / ${f1(d.milMin)}`]);
+    rows.push(['Impact (+ / −)', `${pct(d.Ip)} / ${pct(d.In)}`]);
+  } else if (f.id === 'hsl') {
+    return laneCard(f, d, type, u, pct);
+  } else if (f.id === 'hsg') {
+    rows.push(['Impact (+ / −)', `${pct(d.Ip)} / ${pct(d.In)}`]);
+  } else if (f.id === 'legal' || f.id === 'lglane') {
+    if (f.id === 'legal') d.veh.forEach(v => rows.push([`${v.name} (+ / −)`, `${f1(v.max)} / ${f1(v.min)}`]));
+    if (d.longMax != null) rows.push(['Type 3-3, span > 200 ft (+ / −)', `${f1(d.longMax)} / ${f1(d.longMin)}`]);
+    if (d.dualMin != null) rows.push(['Two Type 3-3 (−)', f1(d.dualMin)]);
+    if (d.dualMax != null) rows.push(['Two Type 3-3 (+)', f1(d.dualMax)]);
+    rows.push(['Lane-type factor', d.low ? '1.0 (ADTT < 500)' : '0.75']);
+    if (d.wl) rows.push(['Lane (+ / −)', `${f1(d.laneP)} / ${f1(d.laneN)}`]);
+    rows.push(['IM', pct(d.IM)]);
+  } else if (f.id === 'fat') {
+    rows.push(['Fatigue truck (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`], ['IM', pct(d.IM)]);
+  } else {
+    rows.push(['Vehicle (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`], ['Impact (+ / −)', `${pct(d.Ip)} / ${pct(d.In)}`]);
+    if (d.laneP || d.laneN) rows.push(['Lane (+ / −)', `${f1(d.laneP)} / ${f1(d.laneN)}`]);
+  }
+  if (d.df !== 1) rows.push(['Distribution factor', String(d.df)]);
+  const dual = d.dualInfo ? `${d.legal ? 'Two Type 3-3' : 'Dual'} trucks: fronts at x = ${f2(d.dualInfo.pA)} and ${f2(d.dualInfo.pB)} ft, traveling ${d.dualInfo.dir > 0 ? '→' : '←'}.` : '';
+  const pmx = (d.ctrlMax.includes('Dual') || d.mxDual) ? dual : d.mxInfo ? posTxt(d.mxInfo, f) : (d.ctrlMax.startsWith('Lane') ? 'Lane load on positive influence areas.' : '');
+  const pmn = (d.ctrlMin.includes('Dual') || d.mnDual) ? dual : d.mnInfo ? posTxt(d.mnInfo, f) : (d.ctrlMin.startsWith('Lane') ? 'Lane load on negative influence areas.' : '');
+  return `<div class="dcard"><h3><span class="swatch" style="background:${famColor(f)}"></span>${esc(f.name)} <span class="muted" style="font-weight:400">${esc(f.code)}</span></h3>
+    <dl><dt>Max +${type}</dt><dd><b>${f1(f.max[r])}</b> ${u}</dd><dt>Controls</dt><dd style="font-family:var(--sans)">${esc(d.ctrlMax)}</dd>
+    <dt>Max −${type}</dt><dd><b>${f1(f.min[r])}</b> ${u}</dd><dt>Controls</dt><dd style="font-family:var(--sans)">${esc(d.ctrlMin)}</dd>
+    ${rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    <div class="pos">${pmx ? `<b>+:</b> ${pmx}<br>` : ''}${pmn ? `<b>−:</b> ${pmn}` : ''}</div>
+    <div class="pos muted">Components shown before impact and distribution factor.</div></div>`;
+}
+function laneCard(f, d, type, u, pct) {
+  const ux = type === 'M' ? 'k-ft' : 'k', au = type === 'M' ? 'ft²' : 'ft', ou = type === 'M' ? 'ft' : '';
+  const at = x => x == null ? '' : `, at x = ${f2(x)} ft`;
+  const line = (k, v, note = '') => `<dt>${k}</dt><dd>${v}${note ? `<span class="ctl">${note}</span>` : ''}</dd>`;
+  const df = d.df !== 1 ? ` × DF ${d.df}` : '';
+  return `<div class="dcard"><h3><span class="swatch" style="background:${famColor(f)}"></span>${esc(f.name)} <span class="muted" style="font-weight:400">${esc(f.code)}</span></h3>
+    <dl>
+      <dt style="grid-column:1/-1;color:var(--ink);font-weight:600;margin-top:2px">Positive (+${type})</dt>
+      ${line(`Uniform ${f2(d.w)} klf × area ${f2(d.areaP)} ${au}`, f1(d.uP))}
+      ${line(`Conc. ${f2(d.Pc)} k × ordinate ${d.ordP > 0 ? d.ordP.toFixed(3) : '0'} ${ou}${at(d.cPx)}`, f1(d.cP))}
+      ${line('Lane before impact', f1(d.laneMax))}
+      ${line('Impact', pct(d.Ip))}
+      ${line('Lane +' + type, `<b>${f1(f.max[d.__r])}</b> ${ux}`, df ? 'incl.' + df : '')}
+      <dt style="grid-column:1/-1;color:var(--ink);font-weight:600;margin-top:8px">Negative (−${type})</dt>
+      ${line(`Uniform ${f2(d.w)} klf × area ${f2(d.areaN)} ${au}`, f1(d.uN))}
+      ${line(`Conc. ${f2(d.Pc)} k × ordinate ${d.ordN < 0 ? d.ordN.toFixed(3) : '0'} ${ou}${at(d.cNx)}`, f1(d.cN))}
+      ${type === 'M' && d.c2 ? line(`2nd conc. ${f2(d.Pc)} k in other span${at(d.c2x)}`, f1(d.c2)) : ''}
+      ${line('Lane before impact', f1(d.laneMin))}
+      ${line('Impact', pct(d.In))}
+      ${line('Lane −' + type, `<b>${f1(f.min[d.__r])}</b> ${ux}`, df ? 'incl.' + df : '')}
+    </dl>
+    <div class="pos muted">Uniform load covers only the matching-sign portions of the influence line; concentrated loads sit at the peak ordinate.</div></div>`;
+}
+function ilOptions() {
+  const m = RES.model;
+  const o = [];
+  m.sections.forEach(s => {
+    if (!(s.side === 'R' && s.span > 0)) o.push([s.iM, `Moment · ${secLabel(s)} (${f2(s.x)} ft)`]);
+  });
+  m.sections.forEach(s => {
+    const side = s.side === 'L' && s.span < m.spans.length - 1 ? ' left of pier' : s.side === 'R' && s.span > 0 ? ' right of pier' : '';
+    o.push([s.iV, `Shear · ${secLabel(s)}${side} (${f2(s.x)} ft)`]);
+  });
+  m.reactRows.forEach((r, j) => o.push([r, `Reaction · support ${j + 1} (${f2(m.sup[j])} ft)`]));
+  return o.map(([v, l]) => `<option value="${v}" ${v === ilResp ? 'selected' : ''}>${esc(l)}</option>`).join('');
+}
+
+/* ---------- SVG helpers ---------- */
+function niceTicks(lo, hi, n = 6) {
+  if (hi - lo < 1e-9) { hi = lo + 1; }
+  const raw = (hi - lo) / n, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const st = [1, 2, 2.5, 5, 10].map(k => k * mag).find(k => raw <= k);
+  const a = Math.floor(lo / st) * st, b = Math.ceil(hi / st) * st, t = [];
+  for (let v = a; v <= b + st * 1e-6; v += st) t.push(+v.toFixed(10));
+  return { t, a, b };
+}
+function frame(el, { xMax, yLo, yHi, ylabel, H = 300 }) {
+  const W = 960, pl = 66, pr = 14, pt = 12, pb = 34;
+  const xt = niceTicks(0, xMax, 10), yt = niceTicks(yLo, yHi, 6);
+  const X = x => pl + (x / xMax) * (W - pl - pr);
+  const Y = y => pt + (yt.b - y) / (yt.b - yt.a) * (H - pt - pb);
+  const m = RES.model;
+  let g = '';
+  yt.t.forEach(v => { g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--grid)"/><text class="ax" x="${pl - 8}" y="${Y(v) + 4}" text-anchor="end">${Math.abs(v) >= 1000 ? v.toLocaleString() : +v.toFixed(2)}</text>`; });
+  xt.t.filter(v => v <= xMax + 1e-9).forEach(v => { g += `<text class="ax" x="${X(v)}" y="${H - pb + 16}" text-anchor="middle">${+v.toFixed(2)}</text>`; });
+  m.sup.forEach(s => { g += `<line x1="${X(s)}" x2="${X(s)}" y1="${pt}" y2="${H - pb}" stroke="var(--line-2)" stroke-dasharray="3 3"/>`; });
+  g += `<line x1="${pl}" x2="${W - pr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--zero)"/>`;
+  g += `<text class="axl" x="${W - pr}" y="${H - 4}" text-anchor="end">Distance from left support (ft)</text>`;
+  g += `<text class="axl" transform="translate(13 ${(H - pb + pt) / 2}) rotate(-90)" text-anchor="middle">${ylabel}</text>`;
+  return { W, H, X, Y, pl, pr, pt, pb, g };
+}
+function drawEnvelope(sel, type, fams) {
+  const el = $(sel), m = RES.model;
+  const secs = m.sections.filter(s => !(type === 'M' && s.side === 'R' && s.span > 0));
+  const r = s => type === 'M' ? s.iM : s.iV;
+  let lo = 0, hi = 0;
+  fams.forEach(f => secs.forEach(s => { lo = Math.min(lo, f.min[r(s)]); hi = Math.max(hi, f.max[r(s)]); }));
+  const F = frame(el, { xMax: m.Ltot, yLo: lo, yHi: hi, ylabel: type === 'M' ? 'Moment (k-ft)' : 'Shear (k)' });
+  let paths = '';
+  fams.forEach(f => {
+    const c = famColor(f), dash = famDash(f) ? `stroke-dasharray="${famDash(f)}"` : '';
+    const mk = arr => 'M' + secs.map(s => `${F.X(s.x).toFixed(2)},${F.Y(arr[r(s)]).toFixed(2)}`).join('L');
+    paths += `<path d="${mk(f.max)}" fill="none" stroke="${c}" stroke-width="2" ${dash} stroke-linejoin="round"/>`;
+    paths += `<path d="${mk(f.min)}" fill="none" stroke="${c}" stroke-width="2" ${dash} stroke-linejoin="round" opacity=".9"/>`;
+  });
+  const ss = m.sections[selSec];
+  const selLine = `<line x1="${F.X(ss.x)}" x2="${F.X(ss.x)}" y1="${F.pt}" y2="${F.H - F.pb}" stroke="var(--accent)" stroke-width="1.5"/>`;
+  el.innerHTML = `<svg viewBox="0 0 ${F.W} ${F.H}" role="img" aria-label="${type === 'M' ? 'Moment' : 'Shear'} envelope chart">${F.g}${selLine}${paths}
+    <line class="hov" x1="0" x2="0" y1="${F.pt}" y2="${F.H - F.pb}" stroke="var(--ink-3)" stroke-dasharray="2 3" visibility="hidden"/>
+    <rect x="${F.pl}" y="${F.pt}" width="${F.W - F.pl - F.pr}" height="${F.H - F.pt - F.pb}" fill="transparent" style="cursor:crosshair"/></svg><div class="tip"></div>`;
+  const svg = el.querySelector('svg'), tip = el.querySelector('.tip'), hov = el.querySelector('.hov');
+  const nearest = ev => {
+    const b = svg.getBoundingClientRect(), sx = (ev.clientX - b.left) * F.W / b.width;
+    const x = (sx - F.pl) / (F.W - F.pl - F.pr) * m.Ltot;
+    let best = null, bd = Infinity;
+    m.sections.forEach((s, i) => { const d = Math.abs(s.x - x); if (d < bd - 1e-9) { bd = d; best = i; } });
+    return best;
+  };
+  svg.addEventListener('mousemove', ev => {
+    const si = nearest(ev), s = m.sections[si], b = svg.getBoundingClientRect();
+    const same = type === 'V' ? m.sections.filter(q => Math.abs(q.x - s.x) < 1e-6) : [s];
+    hov.setAttribute('x1', F.X(s.x)); hov.setAttribute('x2', F.X(s.x)); hov.setAttribute('visibility', 'visible');
+    tip.innerHTML = `<div class="h">${secLabel(s)} · x = ${f2(s.x)} ft</div>` + same.map(q => {
+      const lab = same.length > 1 ? `<div class="muted" style="margin-top:4px">${q.side === 'L' ? 'Left of support' : 'Right of support'}</div>` : '';
+      return lab + `<table>${fams.map(f => `<tr><td><span class="swatch" style="display:inline-block;background:${famColor(f)}"></span></td><td>${esc(f.name)}</td><td class="n">${f1(f.max[r(q)])}</td><td class="n">${f1(f.min[r(q)])}</td></tr>`).join('')}</table>`;
+    }).join('');
+    tip.style.display = 'block';
+    const px = (F.X(s.x) / F.W) * b.width;
+    tip.style.left = Math.min(px + 14, b.width - tip.offsetWidth - 4) + 'px';
+    tip.style.top = '8px';
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.display = 'none'; hov.setAttribute('visibility', 'hidden'); });
+  svg.addEventListener('click', ev => selectSec(nearest(ev), tab === 'R' ? 'D' : tab));
+}
+function drawIL() {
+  const el = $('#chIL'), m = RES.model, L = RES.il[ilResp], q = m.resp[ilResp];
+  if (!L) return;
+  let lo = 0, hi = 0; L.Y.forEach(y => { lo = Math.min(lo, y); hi = Math.max(hi, y); });
+  const F = frame(el, { xMax: m.Ltot, yLo: lo, yHi: hi, ylabel: q.type === 'M' ? 'Moment per kip (k-ft/k)' : 'kips per kip', H: 240 });
+  const Z = F.Y(0);
+  let line = '', pos = '', neg = '';
+  for (let i = 0; i < L.X.length; i++) line += (i ? 'L' : 'M') + F.X(L.X[i]).toFixed(2) + ',' + F.Y(L.Y[i]).toFixed(2);
+  const fill = sign => { let d = ''; for (let i = 0; i < L.X.length; i++) { const y = sign > 0 ? Math.max(0, L.Y[i]) : Math.min(0, L.Y[i]); d += (i ? 'L' : 'M') + F.X(L.X[i]).toFixed(2) + ',' + F.Y(y).toFixed(2); } return d + `L${F.X(m.Ltot)},${Z}L${F.X(0)},${Z}Z`; };
+  el.innerHTML = `<svg viewBox="0 0 ${F.W} ${F.H}" role="img" aria-label="Influence line">${F.g}
+    <path d="${fill(1)}" fill="var(--pos-fill)"/><path d="${fill(-1)}" fill="var(--neg-fill)"/>
+    <path d="${line}" fill="none" stroke="var(--ink)" stroke-width="1.6"/>
+    ${q.type !== 'R' ? `<line x1="${F.X(q.x)}" x2="${F.X(q.x)}" y1="${F.pt}" y2="${F.H - F.pb}" stroke="var(--accent)" stroke-width="1.2"/>` : ''}</svg>`;
+  const u = q.type === 'M' ? 'k-ft/k·ft' : 'k/k·ft';
+  $('#ilStats').innerHTML = `<span class="num">+area ${L.pos.toFixed(2)} · −area ${L.neg.toFixed(2)} · max ${L.maxOrd.toFixed(3)} @ ${f2(L.maxX)} ft · min ${L.minOrd.toFixed(3)} @ ${f2(L.minX)} ft</span>`;
+}
+function drawBeam() {
+  const el = $('#beam'), m = RES.model, W = 960, H = 128, pl = 30, pr = 30, base = 62;
+  const X = x => pl + x / m.Ltot * (W - pl - pr);
+  const Imax = Math.max(...m.segs.map(g => Math.max(g.I1, g.I2)));
+  let s = '';
+  m.segs.forEach((g, i) => {
+    const h1 = 6 + 20 * g.I1 / Imax, h2 = 6 + 20 * g.I2 / Imax;
+    s += `<path d="M${X(g.x0)},${base}L${X(g.x1)},${base}L${X(g.x1)},${base - h2}L${X(g.x0)},${base - h1}Z" fill="${i % 2 ? 'var(--accent-soft)' : 'var(--panel-2)'}" stroke="var(--ink-2)" stroke-width="1"><title>Segment ${i + 1}: ${f2(g.x1 - g.x0)} ft, E = ${g.E} ksi, I = ${g.I1}${g.I2 !== g.I1 ? '→' + g.I2 : ''} in⁴</title></path>`;
+  });
+  m.sections.forEach((q, i) => { if (q.side === 'B') s += `<line x1="${X(q.x)}" x2="${X(q.x)}" y1="${base + 2}" y2="${base + 6}" stroke="var(--ink-3)"/>`; });
+  m.sup.forEach((x, j) => {
+    s += `<path d="M${X(x)},${base}l-8,13h16Z" fill="var(--panel)" stroke="var(--ink)" stroke-width="1.3"/>`;
+    s += `<text class="ax" x="${X(x)}" y="${base + 27}" text-anchor="middle">${j + 1}</text>`;
+  });
+  m.spans.forEach((L, i) => {
+    const a = X(m.sup[i]), b = X(m.sup[i + 1]), y = base + 44;
+    s += `<line x1="${a}" x2="${b}" y1="${y}" y2="${y}" stroke="var(--ink-3)"/><line x1="${a}" x2="${a}" y1="${y - 4}" y2="${y + 4}" stroke="var(--ink-3)"/><line x1="${b}" x2="${b}" y1="${y - 4}" y2="${y + 4}" stroke="var(--ink-3)"/>`;
+    s += `<rect x="${(a + b) / 2 - 34}" y="${y - 8}" width="68" height="16" fill="var(--panel)"/><text class="ax" x="${(a + b) / 2}" y="${y + 4}" text-anchor="middle" style="fill:var(--ink-2)">${f2(L)} ft</text>`;
+  });
+  const sx = X(m.sections[selSec].x);
+  s += `<path d="M${sx},${base - 36}l-5,-8h10Z" fill="var(--accent)"/>`;
+  el.innerHTML = `<div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Beam elevation with supports and segments">${s}</svg></div>
+    <p class="hint" style="margin:0">Segment depth is drawn proportional to I. Ticks mark analysis points; the marker shows the selected point.</p>`;
+}
+
+/* ---------- CSV ---------- */
+function exportCSV() {
+  if (!RES || RES.errors) { alert('Run a valid analysis first.'); return; }
+  const m = RES.model, fams = RES.families, q = v => `"${String(v).replace(/"/g, '""')}"`;
+  const L = [];
+  L.push(['Project', q(S.project.name)].join(','), ['Notes', q(S.project.notes)].join(','));
+  L.push(['Spans (ft)', ...m.spans].join(','));
+  L.push(['Segments', 'Length ft', 'E ksi', 'I start in4', 'I end in4'].join(','));
+  m.segs.forEach((g, i) => L.push([i + 1, f2(g.x1 - g.x0), g.E, g.I1, g.I2].join(',')));
+  L.push(['Results', isPerLane() ? 'per lane' : 'distribution factors applied'].join(','), '');
+  ['M', 'V'].forEach(type => {
+    L.push(type === 'M' ? 'MOMENT (k-ft)' : 'SHEAR (k)');
+    L.push(['Span', 'x/L', 'Side', 'x ft', ...fams.flatMap(f => [q(f.name + ' +' + type), q(f.name + ' -' + type), q(f.name + ' +ctrl'), q(f.name + ' -ctrl')])].join(','));
+    m.sections.forEach(s => {
+      if (type === 'M' && s.side === 'R' && s.span > 0) return;
+      const r = type === 'M' ? s.iM : s.iV;
+      L.push([s.span + 1, s.frac.toFixed(4), s.side === 'L' ? 'left' : s.side === 'R' ? 'right' : '', f2(s.x), ...fams.flatMap(f => [f1(f.max[r]), f1(f.min[r]), q(f.detail[r].ctrlMax), q(f.detail[r].ctrlMin)])].join(','));
+    });
+    L.push('');
+  });
+  L.push('REACTIONS (k)');
+  L.push(['Support', 'x ft', ...fams.flatMap(f => [q(f.name + ' max'), q(f.name + ' min')])].join(','));
+  m.reactRows.forEach((r, j) => L.push([j + 1, f2(m.sup[j]), ...fams.flatMap(f => [f1(f.max[r]), f1(f.min[r])])].join(',')));
+  download((S.project.name || 'beam').replace(/[^\w\-]+/g, '_') + '_envelopes.csv', L.join('\r\n'), 'text/csv');
+}
+
+renderInputs();
+run();
+})();
+</script>
+<script>
+(() => {
+  const root=document.documentElement, button=document.getElementById('themeSwitch');
+  const media=matchMedia('(prefers-color-scheme: dark)');
+  function dark(){return root.dataset.theme ? root.dataset.theme==='dark' : media.matches}
+  function label(){button.textContent=dark()?'Light mode':'Dark mode';button.setAttribute('aria-label',dark()?'Switch to light mode':'Switch to dark mode')}
+  button.addEventListener('click',()=>{const next=dark()?'light':'dark';root.dataset.theme=next;try{localStorage.setItem('opendot-bridge-se-theme',next)}catch(e){}label()});
+  media.addEventListener('change',label);label();
+  const header=document.querySelector('header.top');
+  function height(){root.style.setProperty('--top-height',Math.ceil(header.getBoundingClientRect().height)+'px')}
+  if('ResizeObserver' in window)new ResizeObserver(height).observe(header);
+  height();
+})();
+</script>
+</body>
+</html>

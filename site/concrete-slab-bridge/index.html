@@ -1,0 +1,1867 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Study equivalent-strip concrete slab bridge design and HL-93 load rating.">
+<link rel="canonical" href="https://bridge-se.open-dot.org/concrete-slab-bridge/">
+<link rel="icon" type="image/png" href="/assets/bridge-se-logo.png">
+<script defer src="https://collect.open-dot.org/script.js" data-website-id="d095389c-d46e-4589-88fa-12d03c0df856" data-host-url="https://collect.open-dot.org" data-domains="open-dot.org,bridge-se.open-dot.org" data-exclude-search="true"></script>
+<style>.bridge-nav{max-width:1500px;margin:0 auto 14px;font:500 13px/1.5 system-ui,sans-serif}.bridge-nav a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}.bridge-nav a:focus-visible{outline:2px solid currentColor;outline-offset:3px}.bridge-nav span{margin:0 8px;color:var(--muted)}</style>
+<style id="bridge-se-theme-style">.bridge-theme-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}</style>
+<script id="bridge-se-theme-init">try{const t=localStorage.getItem("opendot-bridge-se-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head><body>
+<nav class="bridge-nav" aria-label="Breadcrumb"><a href="https://open-dot.org/">Open DOT</a><span>›</span><a href="https://bridge-se.open-dot.org/">Bridge SE</a><span>›</span>Concrete Slab Bridge</nav>
+<title>Concrete Slab Bridge Check</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: calc-sheet workbench — input rail left, results sheet right; stacks on phones */
+:root{
+  --bg:#eef1ef; --surface:#fbfcfb; --sunk:#e3e8e5; --ink:#17201d; --muted:#56655f; --line:#cdd6d2;
+  --accent:#0b6e4f; --accent-ink:#ffffff; --ok:#1f7a45; --warn:#a86a0c; --bad:#b42318;
+  --pos:#2557a4; --neg:#b4532a; --cap:#17201d; --dl:#8a7a2e;
+  --f-display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
+  --pos:#7ea7e8; --neg:#e48a60; --cap:#e3ebe7; --dl:#d4bf5e; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
+  --pos:#7ea7e8; --neg:#e48a60; --cap:#e3ebe7; --dl:#d4bf5e; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:1.75rem;line-height:1.1}
+h2{font-size:1.15rem}
+h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.n,td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;max-width:1500px;margin:0 auto 16px}
+header p{margin:4px 0 0;color:var(--muted);max-width:76ch}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+button,.btn{font:500 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+select{font:13px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--surface);color:var(--ink)}
+.wrap{display:grid;grid-template-columns:minmax(0,390px) minmax(0,1fr);gap:18px;max-width:1500px;margin:0 auto}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.rail{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sheet{display:flex;flex-direction:column;gap:16px;min-width:0}
+details.grp{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.grp>summary{list-style:none;cursor:pointer;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-family:var(--f-display);font-weight:600;font-size:1rem}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::after{content:"+";font-family:var(--f-mono);color:var(--muted)}
+details.grp[open]>summary::after{content:"–"}
+.gbody{padding:4px 14px 14px;display:flex;flex-direction:column;gap:10px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+label.f{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f input,label.f select{font:14px var(--f-mono);padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+label.f select{font-family:var(--f-body)}
+.hint{font-size:12px;color:var(--muted);margin:0}
+table.z{width:100%;border-collapse:collapse;font-size:12.5px;table-layout:fixed}
+table.z th:first-child{width:76px} table.z th:last-child{width:34px}
+table.z th{font-weight:500;color:var(--muted);text-align:left;padding:2px 3px}
+table.z td{padding:2px 3px}
+table.z input,table.z select{font:13px var(--f-mono);width:100%;min-width:0;padding:4px 5px;border:1px solid var(--line);border-radius:4px;background:var(--bg);color:var(--ink)}
+table.z button{padding:3px 8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.card-h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.verdict{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.pill{display:inline-flex;align-items:center;gap:6px;font:600 12px var(--f-body);padding:3px 10px;border-radius:999px;border:1px solid currentColor}
+.pill.ok{color:var(--ok)} .pill.bad{color:var(--bad)} .pill.warn{color:var(--warn)}
+.tw{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:13px}
+table.t th,table.t td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+table.t th{font-weight:600;font-size:12px;color:var(--muted);background:var(--sunk)}
+table.t td.n,table.t th.n{text-align:right}
+table.t td.wr{white-space:normal;min-width:180px}
+table.t tbody tr.sel{background:color-mix(in srgb,var(--accent) 12%,transparent)}
+table.t tbody tr[data-x]{cursor:pointer}
+.r-ok{color:var(--ok)} .r-warn{color:var(--warn)} .r-bad{color:var(--bad);font-weight:600}
+.bar{display:inline-block;height:6px;border-radius:3px;background:var(--line);width:90px;vertical-align:middle;position:relative;overflow:hidden;margin-left:6px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:3px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.tile{border:1px solid var(--line);border-radius:8px;padding:10px 12px;background:var(--bg)}
+.tile b{display:block;font:600 1.6rem var(--f-display)}
+.tile small{color:var(--muted);font-size:12px}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:14px;height:3px;margin-right:5px;vertical-align:3px;border-radius:2px}
+.ws{display:flex;flex-direction:column;gap:4px}
+.ws .row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:baseline;padding:4px 0;border-bottom:1px dotted var(--line)}
+.ws .eq{font-family:var(--f-mono);font-size:13px;min-width:0;overflow-wrap:anywhere}
+.ws .eq b{font-family:var(--f-body)}
+.ws .ref{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.ws .note{font-size:12px;color:var(--muted);padding-top:6px}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.92em;margin:0 2px}
+.frac>span:first-child{border-bottom:1px solid currentColor;padding:0 3px}
+.frac>span:last-child{padding:0 3px}
+.warnbox{border-left:3px solid var(--warn);padding:6px 10px;background:color-mix(in srgb,var(--warn) 9%,transparent);font-size:13px;border-radius:0 6px 6px 0}
+.errbox{border-left:3px solid var(--bad);padding:8px 12px;background:color-mix(in srgb,var(--bad) 10%,transparent);border-radius:0 6px 6px 0}
+.repf{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px;margin-bottom:12px}
+.repf label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.repf input{font:14px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);min-width:0}
+.repb{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+.repb button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px}
+.repb button small{font-size:11.5px;line-height:1.35;opacity:.85;font-weight:400}
+.status{font-size:12px;color:var(--muted)}
+#methodNotes{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13px}
+footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
+[hidden]{display:none!important}
+</style>
+
+<header>
+  <div>
+    <h1>Concrete Slab Bridge Check</h1>
+    <p>Cast-in-place reinforced concrete slab bridges by the equivalent strip method: interior strip and edge beam per foot of width, AASHTO LRFD 10th Edition with IDOT Design Guide 3.2.11 and ABD 15.8, and the HL-93 design load rating (MBE LRFR).</p>
+  </div>
+  <div class="actions">
+    <select id="exsel" aria-label="Load an example"><option value="">Load an example…</option></select>
+    <button id="saveJson" type="button">Save input</button>
+    <label class="btn" style="display:inline-block">Load input<input id="loadJson" type="file" accept=".json,application/json" hidden></label>
+    <button id="themeSwitch" type="button" aria-label="Switch to dark mode">Dark mode</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="rail" id="rail"></aside>
+  <main class="sheet">
+    <div class="errbox" id="errBox" hidden></div>
+    <section class="card" id="c-verdict"></section>
+    <section class="card" id="c-rating"></section>
+    <section class="card" id="c-chart"></section>
+    <section class="card" id="c-points"></section>
+    <section class="card" id="c-ws"></section>
+    <section class="card" id="c-dist"></section>
+    <section class="card" id="c-report">
+      <div class="card-h"><h2>Calculation report</h2><span class="status" id="repStatus">PDF, letter size</span></div>
+      <div class="repf">
+        <label>Structure number<input data-rep="structure" autocomplete="off"></label>
+        <label>Bridge / feature<input data-rep="bridge" autocomplete="off" placeholder="uses the model name"></label>
+        <label>Location<input data-rep="location" autocomplete="off"></label>
+        <label>Designed by (initials)<input data-rep="designedBy" autocomplete="off" maxlength="12"></label>
+        <label>Date<input data-rep="date" type="date"></label>
+      </div>
+      <div class="repb">
+        <button type="button" data-mode="summary" class="primary"><b>Executive summary</b><small>Description, cross section, governing ratios and ratings, worksheets of the controlling checks</small></button>
+        <button type="button" data-mode="tenth"><b>Comprehensive, tenth points</b><small>Summary plus input, loads, distribution, effects and every check at tenth points and governing locations</small></button>
+        <button type="button" data-mode="all"><b>Comprehensive, all points</b><small>As above at every analysis point</small></button>
+      </div>
+      <p class="hint" style="margin-top:10px">The PDF carries a blank “Checked by” field for independent review. Title-block entries are saved with the input. If this preview does not allow downloads, open the tool from the Bridge SE site.</p>
+    </section>
+    <section class="card"><h2 style="margin-bottom:8px">Method and limitations</h2><ul id="methodNotes"></ul></section>
+  </main>
+</div>
+<footer>Bridge SE · Concrete Slab Bridge Check · benchmarked against IDOT Design Guide 3.2.11 (May 2019). Engineering judgment and the governing specifications remain the user’s responsibility.</footer>
+
+<script>/* AASHTO LRFD tension development length and lap splices of deformed bars — edition comparison engine.
+ * Editions: '10' (10th, 2024), '9' (9th, 2020), '8' (8th, 2017), '7' (7th, 2014 and earlier, before the 2015 interims).
+ * Units: kip, in., ksi. Pure functions; no DOM.
+ */
+(function (root) {
+  'use strict';
+  const BARS = [
+    { id: '#3', db: 0.375, Ab: 0.11, w: 0.376 }, { id: '#4', db: 0.5, Ab: 0.2, w: 0.668 }, { id: '#5', db: 0.625, Ab: 0.31, w: 1.043 },
+    { id: '#6', db: 0.75, Ab: 0.44, w: 1.502 }, { id: '#7', db: 0.875, Ab: 0.6, w: 2.044 }, { id: '#8', db: 1.0, Ab: 0.79, w: 2.67 },
+    { id: '#9', db: 1.128, Ab: 1.0, w: 3.4 }, { id: '#10', db: 1.27, Ab: 1.27, w: 4.303 }, { id: '#11', db: 1.41, Ab: 1.56, w: 5.313 },
+    { id: '#14', db: 1.693, Ab: 2.25, w: 7.65 }, { id: '#18', db: 2.257, Ab: 4.0, w: 13.6 },
+  ];
+  const EDITIONS = {
+    '10': { name: '10th Edition (2024)', short: '10th (2024)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '9': { name: '9th Edition (2020)', short: '9th (2020)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '8': { name: '8th Edition (2017)', short: '8th (2017)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '7': { name: '7th Edition (2014) and earlier', short: '7th (2014)', art: { dev: '5.11.2.1', lap: '5.11.5.3.1', comp: '5.11.5.5.1' } },
+  };
+  const ES = 29000;
+  const big = b => b.id === '#14' || b.id === '#18';
+  const r4 = v => Math.round(v * 1e4) / 1e4;
+
+  function defaults() {
+    return {
+      fc: 4.0, fy: 60, concrete: 'normal', wc: 0.145, fct: null, K1: 1.0,
+      topBar: false, coating: 'none', clearCover: 2.0, spacing: 12.0, spiral: false,
+      useConfinement: true, Atr: 0, sTr: 0, nDev: 1, betaT: 0,
+      erOnDev: false, erOnLaps: false,
+      asRatio: 1.0, pctSpliced: 100,
+      compM: 'other',
+      roundUp: true, roundLdFirst: false,
+    };
+  }
+
+  // concrete density modification factor (8th–10th) or lightweight factor (7th)
+  function lambdaOf(ed, I) {
+    if (I.concrete === 'normal') return { v: 1.0, how: 'normal weight concrete' };
+    if (ed === '7') {
+      if (I.fct > 0) { const v = Math.max(1.0, 0.22 * Math.sqrt(I.fc) / I.fct); return { v, how: '0.22√f′c / fct ≥ 1.0', inc: true }; }
+      return I.concrete === 'sand' ? { v: 1.2, how: 'sand-lightweight concrete', inc: true } : { v: 1.3, how: 'all-lightweight concrete', inc: true };
+    }
+    if (I.fct > 0) return { v: Math.min(1.0, 4.7 * I.fct / Math.sqrt(I.fc)), how: '4.7 fct / √f′c ≤ 1.0 (5.4.2.8-1)' };
+    return { v: Math.min(1.0, Math.max(0.75, 7.5 * I.wc)), how: '0.75 ≤ 7.5 wc ≤ 1.0 (5.4.2.8-2)' };
+  }
+  function epoxySevere(b, I) { // cover less than 3db or clear spacing less than 6db
+    return I.clearCover < 3 * b.db || (I.spacing - b.db) < 6 * b.db;
+  }
+  function coatingFactor(ed, b, I) {
+    if (I.coating === 'epoxy') return epoxySevere(b, I) ? { v: 1.5, how: 'epoxy-coated, cover < 3db or clear spacing < 6db' } : { v: 1.2, how: 'epoxy-coated, cover ≥ 3db and clear spacing ≥ 6db' };
+    return { v: 1.0, how: I.coating === 'galv' ? 'zinc-coated (galvanized)' : 'uncoated' };
+  }
+  function cbOf(b, I) { return I.cbOverride != null ? I.cbOverride : Math.min(I.clearCover + b.db / 2, I.spacing / 2); }
+  function Ec(I) { return 120000 * I.K1 * Math.pow(I.wc, 2) * Math.pow(I.fc, 0.33); }
+
+  // ---------- input validation: blank, non-numeric or contradictory input is an error, never a silent default ----------
+  const NUM = [['fc', "f′c"], ['fy', 'fy'], ['wc', 'wc'], ['K1', 'K1'], ['clearCover', 'Clear cover'], ['spacing', 'Bar spacing'], ['Atr', 'Atr'], ['sTr', 'Transverse spacing s'], ['nDev', 'Number of bars developed n'], ['betaT', 'βt'], ['asRatio', 'As provided / As required'], ['pctSpliced', 'Percent spliced']];
+  const isNum = v => typeof v === 'number' && Number.isFinite(v);
+  /** Version 1 inputs carried a separate λer that acted on ℓd, and on laps when erOnLaps was set.
+   *  Translate it only where the Version 1 result is reproduced exactly; otherwise report a conflict and change nothing.
+   *  Returns { I, changed, notice, conflict }. */
+  function migrate(inp) {
+    const o = Object.assign({}, inp || {});
+    if (!('lamEr' in o)) return { I: o, changed: false };
+    const le = o.lamEr, r = o.asRatio === undefined ? 1 : o.asRatio, laps = !!o.erOnLaps;
+    if ('erOnDev' in o) return { I: o, conflict: 'The input has both the earlier separate λer (' + le + ') and the current setting for applying λer; remove one.' };
+    if (le === 1 || le === null || le === undefined) {
+      const I = Object.assign({}, o); delete I.lamEr; I.erOnDev = false; I.erOnLaps = false;
+      return { I, changed: true, notice: 'Saved input from an earlier version had λer = 1.0 (no excess-reinforcement reduction)' + (laps && r !== 1 ? ', with "apply λer to laps" checked, which had no effect at λer = 1.0' : '') + '. It is kept as: λer not applied to the development length or to laps. Lengths are unchanged.' };
+    }
+    if (isNum(le) && isNum(r) && r >= 1 && le > 0 && le < 1 && Math.abs(le * r - 1) <= 1e-9) {
+      const I = Object.assign({}, o); delete I.lamEr; I.erOnDev = true;
+      return { I, changed: true, notice: 'Saved input from an earlier version had λer = ' + le + ' = 1/' + r + '. It is kept as: λer applied to the development length' + (laps ? ' and to laps' : ' only') + '. Lengths are unchanged.' };
+    }
+    return { I: o, conflict: 'Saved input from an earlier version has λer = ' + le + ' with As provided / As required = ' + r + (isNum(r) && r > 0 ? ' (1/ratio = ' + (1 / r).toFixed(3) + ')' : '') + '. The current version derives λer from the ratio, so this cannot be carried over unchanged. Choose how to continue; no lengths are shown until you do.' };
+  }
+  function normalize(inp) {
+    const m = migrate(inp), I = Object.assign(defaults(), m.I);
+    if (m.conflict) I._conflict = m.conflict;
+    delete I.lamEr;
+    return I;
+  }
+  function check(inp) {
+    const I = inp && inp._norm ? inp : normalize(inp), e = [];
+    NUM.forEach(([k, n]) => { if (!isNum(I[k])) e.push(n + ' is blank or not a number.'); });
+    if (e.length) return e;
+    if (!(I.fc > 0)) e.push("f′c must be greater than zero.");
+    if (!(I.fy > 0)) e.push('fy must be greater than zero.');
+    if (!(I.wc > 0)) e.push('wc must be greater than zero.');
+    if (!(I.K1 > 0)) e.push('K1 must be greater than zero (5.4.2.4); it is not replaced by 1.0.');
+    if (!(I.clearCover >= 0)) e.push('Clear cover must be zero or more.');
+    if (!(I.spacing > 0)) e.push('Bar spacing must be greater than zero.');
+    if (I.Atr < 0) e.push('Atr must be zero or more.');
+    if (I.sTr < 0) e.push('Transverse spacing s must be zero or more.');
+    if (I.Atr > 0 && !(I.sTr > 0)) e.push('Atr is entered but the transverse spacing s is zero: enter s, or set Atr = 0 to ignore transverse reinforcement.');
+    if (!(I.nDev >= 1) || !Number.isInteger(I.nDev)) e.push('The number of bars developed n must be a whole number of at least 1.');
+    if (I.betaT < -1 || I.betaT > 0) e.push('βt must be between −1 and 0.');
+    if (!(I.asRatio >= 1)) e.push('As provided / As required must be at least 1.0 (less than 1.0 means the reinforcement is inadequate).');
+    if (!(I.pctSpliced >= 0 && I.pctSpliced <= 100)) e.push('Percent spliced must be between 0 and 100.');
+    if (I.fct != null && !(isNum(I.fct) && I.fct > 0)) e.push('fct must be greater than zero, or left blank.');
+    if (!['normal', 'sand', 'all'].includes(I.concrete)) e.push('Unknown concrete type.');
+    if (!['none', 'galv', 'epoxy'].includes(I.coating)) e.push('Unknown bar coating.');
+    if (I._conflict) e.push(I._conflict.replace('Saved input from an earlier version has', 'λer contradicts the ratio:'));
+    return e;
+  }
+  // hard applicability limits of each edition: outside them no lengths are produced
+  function scope(ed, I) {
+    const e = [];
+    if (I.fc < 2.4) e.push("f′c below 2.4 ksi is below the minimum for structural concrete (5.4.2.1).");
+    if (ed === '7') {
+      if (I.fc > 10) e.push("f′c above 10.0 ksi is outside the 7th Edition development length provisions.");
+      if (I.fy > 75) e.push('fy above 75 ksi is outside the 7th Edition (5.4.3.1).');
+    } else {
+      if (I.fc > 15) e.push("f′c above 15.0 ksi is outside the provisions of Article 5.10.8.2.1.");
+      if (I.fy > 100) e.push('fy above 100 ksi is not permitted (5.4.3.1).');
+      if (I.concrete !== 'normal' && I.fc > 10 && ed !== '10') e.push('Lightweight concrete above 10.0 ksi is outside the provisions of this edition.');
+    }
+    return e;
+  }
+  function blockedResult(ed, b, why) {
+    const out = { ld: null, lapA: null, lapB: null, lapC: null, lapReq: null, lc: null };
+    return { ed, bar: b.id, db: b.db, Ab: b.Ab, blocked: true, scope: why, ldb: null, ld: null, factors: [], steps: [], lap: {}, lapReq: null, lapClass: null, comp: { lc: null }, out, warnings: why.slice(), devOK: false, lapOK: false, classWhy: 'Outside the scope of this edition: ' + why.join(' '), lapBasisNote: '' };
+  }
+
+  function classOf(ed, I) {
+    const r = I.asRatio, p = I.pctSpliced;
+    if (ed === '7') {
+      if (r >= 2) return p <= 75 ? 'A' : 'B';
+      return p <= 50 ? 'B' : 'C';
+    }
+    return r >= 2 && p <= 50 ? 'A' : 'B';
+  }
+  function compM(I) {
+    if (I.fc < 3.0) return { v: 1.33, how: "f′c < 3.0 ksi" };
+    return { ties: { v: 0.83, how: 'ties or hoops with effective area ≥ 0.15% of thickness × spacing' }, spiral: { v: 0.75, how: 'spirals or welded/mechanically closed hoops' }, other: { v: 1.0, how: 'all other cases' } }[I.compM] || { v: 1.0, how: 'all other cases' };
+  }
+
+  /** Development and splice lengths of one bar under one edition. Returns values and the worksheet steps. */
+  function compute(ed, barId, inp) {
+    const I = normalize(inp), b = BARS.find(x => x.id === barId);
+    if (!b) throw new Error('Unknown bar ' + barId);
+    const E = EDITIONS[ed]; if (!E) throw new Error('Unknown edition ' + ed);
+    const errs = check(Object.assign({ _norm: true }, I)); if (errs.length) { const er = new Error(errs.join(' ')); er.code = 'input'; er.errors = errs; throw er; }
+    const sc = scope(ed, I); if (I.spacing <= b.db) sc.push('Bar spacing ' + I.spacing + ' in. is not more than the bar diameter (' + b.db + ' in.).');
+    if (sc.length) return blockedResult(ed, b, sc);
+    const erV = 1 / I.asRatio, erDev = I.erOnDev ? erV : 1, erLap = I.erOnLaps ? erV : 1;
+    const S = [], W = [], R = { ed, bar: b.id, db: b.db, Ab: b.Ab };
+    const fc = I.fc, fy = I.fy, sq = Math.sqrt(fc);
+    const lam = lambdaOf(ed, I), cf = coatingFactor(ed, b, I);
+    let ldb, ld, factors = [];
+    let devOK = true, lapOK = !big(b);
+
+    // applicability
+    if (ed !== '7') {
+      if (ed !== '10' && big(b)) { devOK = false; W.push(b.id + ' bars are outside Article 5.10.8.2.1 (No. 11 and smaller) in this edition.'); }
+      if (fc > 10) W.push('f′c > 10.0 ksi: transverse reinforcement of at least #3 bars at 12.0 in. is required along the development and splice length.');
+      if (fy > 75) W.push('fy > 75.0 ksi: transverse reinforcement per Article 5.7.2.5 (beams) or 5.10.4.3 (columns) is required over the development and splice length.');
+    }
+    if (big(b)) W.push(b.id + ' bars may not be lap spliced in tension.');
+
+    if (ed === '7') {
+      // ---- 7th edition and earlier: Article 5.11.2.1
+      if (big(b)) {
+        const k = b.id === '#14' ? 2.7 : 3.5;
+        ldb = k * fy / sq;
+        S.push({ lhs: 'ℓ_{db}', expr: k + '\\f{f_{y}}{√(f′_{c})}', sub: k + ' × \\f{' + fy + '}{√' + fc + '}', val: ldb, unit: 'in.', ref: '5.11.2.1.1' });
+      } else {
+        const a = 1.25 * b.Ab * fy / sq, m = 0.4 * b.db * fy;
+        ldb = Math.max(a, m);
+        S.push({ lhs: 'ℓ_{db}', expr: '\\f{1.25A_{b}f_{y}}{√(f′_{c})} ≥ 0.4d_{b}f_{y}', sub: 'max(\\f{1.25 × ' + b.Ab + ' × ' + fy + '}{√' + fc + '}, 0.4 × ' + b.db + ' × ' + fy + ') = max(' + a.toFixed(2) + ', ' + m.toFixed(2) + ')', val: ldb, unit: 'in.', ref: '5.11.2.1.1' });
+      }
+      const top = I.topBar ? 1.4 : 1.0, tc = Math.min(top * cf.v, 1.7);
+      const lw = lam.v;
+      const sp = (I.spacing >= 6 && I.clearCover >= 3) ? 0.8 : 1.0;
+      const spi = I.spiral ? 0.75 : 1.0, er = erDev;
+      factors = [
+        { k: 'top', sym: 'top bar', v: top, how: I.topBar ? 'more than 12.0 in. of fresh concrete below' : 'not a top bar' },
+        { k: 'cf', sym: 'epoxy', v: cf.v, how: cf.how },
+        { k: 'tc', sym: 'top × epoxy ≤ 1.7', v: tc, how: 'product limited to 1.7' },
+        { k: 'lw', sym: 'lightweight', v: lw, how: lam.how },
+        { k: 'sp', sym: 'spacing', v: sp, how: sp < 1 ? 'c–c spacing ≥ 6.0 in. and clear cover ≥ 3.0 in.' : 'c–c spacing < 6.0 in. or clear cover < 3.0 in.' },
+        { k: 'spi', sym: 'spiral', v: spi, how: I.spiral ? 'enclosed in a spiral (≥ 0.25 in. at ≤ 4.0 in. pitch)' : 'no spiral' },
+        { k: 'er', sym: 'excess As', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio : 'not applied' },
+      ];
+      const prod = tc * lw * sp * spi;
+      const ldRaw = ldb * prod * er, ldLapRaw = ldb * prod * erLap;
+      S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × (top × epoxy) × lightweight × spacing × spiral × excess', sub: ldb.toFixed(2) + ' × ' + tc.toFixed(2) + ' × ' + lw.toFixed(2) + ' × ' + sp.toFixed(2) + ' × ' + spi.toFixed(2) + ' × ' + er.toFixed(3), val: ldRaw, unit: 'in.', ref: '5.11.2.1.2, .3' });
+      ld = Math.max(ldRaw, 12);
+      S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{d} ≥ 12.0 in.', val: ld, unit: 'in.', ref: '5.11.2.1.1' });
+      R.ldLapBasis = ldLapRaw; // 7th: the 12-in. minimum on ℓd does not apply to lap splices (5.11.2.1.1); 12 in. applies to the lap
+      R.lapBasisNote = 'Lap based on ℓd before its 12.0-in. minimum, which does not apply to lap splices (5.11.2.1.1); the lap itself is not less than 12.0 in.';
+    } else {
+      // ---- 8th, 9th, 10th: Article 5.10.8.2.1
+      const rl = (I.topBar || (ed !== '10' && fc > 10)) ? 1.3 : 1.0;
+      const rlHow = I.topBar ? 'more than 12.0 in. of fresh concrete cast below' : (ed !== '10' && fc > 10) ? 'f′c > 10.0 ksi' : 'not a top bar' + (ed !== '10' ? ', f′c ≤ 10.0 ksi' : '');
+      const rlcf = Math.min(rl * cf.v, 1.7);
+      const cb = cbOf(b, I);
+      let rc = 1.0, rcHow = 'not applied', ktr = 0;
+      if (ed === '10') {
+        ktr = I.Atr > 0 && I.sTr > 0 && I.nDev > 0 ? I.Atr / (I.sTr * I.nDev) : 0;
+        const ns = ES / Ec(I), bt = Math.max(-1, Math.min(0, I.betaT || 0));
+        if (I.useConfinement) {
+          const raw = b.db * cb / Math.pow(cb * (1 - bt) + 1.67 * ns * ktr, 2);
+          rc = Math.min(1.0, Math.max(0.3, raw));
+          rcHow = '0.3 ≤ λrc ≤ 1.0';
+          R.rcCalc = { cb, bt, ns, ktr, raw, Ec: Ec(I) };
+        }
+        const er = erDev, lerLap = erLap;
+        const base = (f) => 0.17 * b.db * Math.pow(f / (1.97 * lam.v * Math.pow(fc, 0.25)), 2);
+        ldb = base(er * fy);
+        S.push({ lhs: 'ℓ_{db}', expr: '0.17d_{b}(\\f{λ_{er}f_{y} − F_{h}/A_{b}}{1.97λf′_{c}^{0.25}})^{2}', sub: '0.17 × ' + b.db + ' × (\\f{' + er.toFixed(3) + ' × ' + fy + ' − 0}{1.97 × ' + lam.v.toFixed(3) + ' × ' + fc + '^{0.25}})^{2}', val: ldb, unit: 'in.', ref: '5.10.8.2.1a-2' });
+        factors = [
+          { k: 'rl', sym: 'λrl', v: rl, how: rlHow }, { k: 'cf', sym: 'λcf', v: cf.v, how: cf.how }, { k: 'rlcf', sym: 'λrl × λcf ≤ 1.7', v: rlcf, how: 'product limited to 1.7' },
+          { k: 'rc', sym: 'λrc', v: rc, how: rcHow }, { k: 'er', sym: 'λer', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio + ', applied to fy inside ℓdb' : 'not applied' }, { k: 'lam', sym: 'λ', v: lam.v, how: lam.how + ', inside ℓdb' },
+        ];
+        if (I.useConfinement) {
+          if (ktr > 0) S.push({ lhs: 'k_{tr}', expr: '\\f{A_{tr}}{sn}', sub: '\\f{' + I.Atr + '}{' + I.sTr + ' × ' + I.nDev + '}', val: ktr, unit: 'in.', ref: '5.10.8.2.1c-3' });
+          S.push({ lhs: 'λ_{rc}', expr: '\\f{d_{b}c_{b}}{(c_{b}(1 − β_{t}) + 1.67n_{s}k_{tr})^{2}}, 0.3 ≤ λ_{rc} ≤ 1.0', sub: '\\f{' + b.db + ' × ' + cb.toFixed(3) + '}{(' + cb.toFixed(3) + '(1 − (' + bt + ')) + 1.67 × ' + ns.toFixed(3) + ' × ' + ktr.toFixed(4) + ')^{2}} = ' + R.rcCalc.raw.toFixed(4), val: rc, unit: '', ref: '5.10.8.2.1c-2' });
+        }
+        const ldRaw = ldb * rlcf * rc;
+        S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × λ_{rl} × λ_{cf} × λ_{rc}', sub: ldb.toFixed(2) + ' × ' + rlcf.toFixed(2) + ' × ' + rc.toFixed(3), val: ldRaw, unit: 'in.', ref: '5.10.8.2.1a-1' });
+        ld = Math.max(ldRaw, 12);
+        const ldLap = Math.max(base(lerLap * fy) * rlcf * rc, 12);
+        R.ldLapBasis = ldLap;
+      } else {
+        ktr = I.Atr > 0 && I.sTr > 0 && I.nDev > 0 ? 40 * I.Atr / (I.sTr * I.nDev) : 0;
+        if (I.useConfinement) { rc = Math.min(1.0, Math.max(0.4, b.db / (cb + ktr))); rcHow = '0.4 ≤ λrc ≤ 1.0'; R.rcCalc = { cb, ktr, raw: b.db / (cb + ktr) }; }
+        ldb = 2.4 * b.db * fy / sq;
+        S.push({ lhs: 'ℓ_{db}', expr: '2.4d_{b}\\f{f_{y}}{√(f′_{c})}', sub: '2.4 × ' + b.db + ' × \\f{' + fy + '}{√' + fc + '}', val: ldb, unit: 'in.', ref: '5.10.8.2.1a-2' });
+        const er = erDev;
+        factors = [
+          { k: 'rl', sym: 'λrl', v: rl, how: rlHow }, { k: 'cf', sym: 'λcf', v: cf.v, how: cf.how }, { k: 'rlcf', sym: 'λrl × λcf ≤ 1.7', v: rlcf, how: 'product limited to 1.7' },
+          { k: 'rc', sym: 'λrc', v: rc, how: rcHow }, { k: 'er', sym: 'λer', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio : 'not applied' }, { k: 'lam', sym: 'λ', v: lam.v, how: lam.how },
+        ];
+        if (I.useConfinement) {
+          if (ktr > 0) S.push({ lhs: 'k_{tr}', expr: '\\f{40A_{tr}}{sn}', sub: '\\f{40 × ' + I.Atr + '}{' + I.sTr + ' × ' + I.nDev + '}', val: ktr, unit: 'in.', ref: '5.10.8.2.1c-3' });
+          S.push({ lhs: 'λ_{rc}', expr: '\\f{d_{b}}{c_{b} + k_{tr}}, 0.4 ≤ λ_{rc} ≤ 1.0', sub: '\\f{' + b.db + '}{' + cb.toFixed(3) + ' + ' + ktr.toFixed(3) + '} = ' + R.rcCalc.raw.toFixed(4), val: rc, unit: '', ref: '5.10.8.2.1c-2' });
+        }
+        const ldRaw = ldb * rlcf * rc * er / lam.v;
+        S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × \\f{λ_{rl} × λ_{cf} × λ_{rc} × λ_{er}}{λ}', sub: ldb.toFixed(2) + ' × \\f{' + rlcf.toFixed(2) + ' × ' + rc.toFixed(3) + ' × ' + er.toFixed(3) + '}{' + lam.v.toFixed(3) + '}', val: ldRaw, unit: 'in.', ref: '5.10.8.2.1a-1' });
+        ld = Math.max(ldRaw, 12);
+        R.ldLapBasis = Math.max(ldb * rlcf * rc * erLap / lam.v, 12);
+      }
+      if (ld > S[S.length - 1].val + 1e-9) S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{d} ≥ 12.0 in.', val: ld, unit: 'in.', ref: '5.10.8.2.1a' });
+      R.cb = cb; R.ktr = ktr;
+      R.lapBasisNote = 'Lap based on ℓd including its 12.0-in. minimum' + (I.erOnLaps ? '' : ' and λer = 1.0') + '.';
+    }
+    if (ed === '7' && !I.erOnLaps) R.lapBasisNote += ' Excess reinforcement factor not applied to the lap.';
+    R.er = { dev: erDev, lap: erLap };
+    R.ldb = ldb; R.ld = devOK ? ld : null; R.factors = factors; R.lambda = lam; R.coating = cf;
+    // ---- tension lap splices
+    const cls = classOf(ed, I);
+    const fac = { A: 1.0, B: 1.3, C: 1.7 };
+    R.lap = {};
+    const basis = R.ldLapBasis;
+    (ed === '7' ? ['A', 'B', 'C'] : ['A', 'B']).forEach(c => { R.lap[c] = devOK && lapOK ? Math.max(fac[c] * basis, 12) : null; });
+    R.lapClass = cls; R.lapReq = R.lap[cls];
+    // ---- compression lap splice (unchanged across these editions, ksi form)
+    const m = compM(I);
+    let lc = fy <= 60 ? 0.5 * m.v * fy * b.db : m.v * (0.9 * fy - 24) * b.db;
+    lc = Math.max(lc, 12);
+    R.comp = { m: m.v, mHow: m.how, lc: big(b) ? null : lc };
+    // rounding
+    const rd = v => (v == null ? null : I.roundUp ? Math.ceil(v - 1e-9) : v);
+    if (I.roundUp && I.roundLdFirst && devOK && lapOK) { const lb = Math.ceil(basis - 1e-9); Object.keys(R.lap).forEach(c => { R.lap[c] = Math.max(fac[c] * lb, 12); }); R.lapReq = R.lap[cls]; }
+    R.out = { ld: rd(R.ld), lapA: rd(R.lap.A), lapB: rd(R.lap.B), lapC: rd(R.lap.C), lapReq: rd(R.lapReq), lc: rd(R.comp.lc) };
+    R.steps = S; R.warnings = W; R.devOK = devOK; R.lapOK = lapOK;
+    R.classWhy = ed === '7' ? 'Table 5.11.5.3.1-1: As provided / As required ' + (I.asRatio >= 2 ? '≥ 2' : '< 2') + ', ' + I.pctSpliced + '% spliced → Class ' + cls
+      : (cls === 'A' ? 'As provided ≥ 2 × As required and ≤ 50% spliced → Class A' : 'Class B (Class A requires As provided ≥ 2 × As required and ≤ 50% spliced)');
+    return R;
+  }
+  function table(ed, inp) { return BARS.map(b => compute(ed, b.id, inp)); }
+  const api = { BARS, EDITIONS, defaults, compute, table, check, scope, normalize, migrate, r4 };
+  if (typeof module !== 'undefined') module.exports = api; else root.LapCheck = api;
+})(this);
+
+/* Concrete Slab Bridge Check — cast-in-place reinforced concrete slab bridges, AASHTO LRFD (10th Ed.) with IDOT Design Guide 3.2.11
+ * (May 2019, 8th Ed. basis) and ABD 15.8; HL-93 design load rating by the MBE (LRFR).
+ * Equivalent strip method (4.6.2.3) for the interior strip and the edge beam (4.6.2.1.4b), per foot of width.
+ * Continuous slab of constant thickness (or simple span). Units: kip, ft, in., ksi.
+ */
+(function (root) {
+  'use strict';
+  const LapCheck = typeof module !== 'undefined' ? require('../lap/lapcheck.js') : root.LapCheck;
+  const ES = 29000;
+  const BARS = {}; LapCheck.BARS.forEach(b => { BARS[b.id] = b; });
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+  const beta1 = fc => clamp(0.85 - 0.05 * (fc - 4), 0.65, 0.85);
+  const alpha1 = fc => (fc <= 10 ? 0.85 : Math.max(0.75, 0.85 - 0.02 * (fc - 10)));
+  const EcOf = (fc, wc, K1) => 120000 * (K1 || 1) * wc * wc * Math.pow(fc, 0.33); // 5.4.2.4-1
+
+  // ---------- constant-EI continuous beam (Müller-Breslau influence lines) ----------
+  function solveDense(A, B) {
+    const n = A.length, m = B[0].length;
+    for (let c = 0; c < n; c++) {
+      let p = c, mx = Math.abs(A[c][c]);
+      for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > mx) { mx = Math.abs(A[r][c]); p = r; }
+      if (p !== c) { [A[p], A[c]] = [A[c], A[p]]; [B[p], B[c]] = [B[c], B[p]]; }
+      const piv = A[c][c];
+      for (let r = c + 1; r < n; r++) { const f = A[r][c] / piv; if (f === 0) continue; for (let k = c; k < n; k++) A[r][k] -= f * A[c][k]; for (let k = 0; k < m; k++) B[r][k] -= f * B[c][k]; }
+    }
+    const X = Array.from({ length: n }, () => new Float64Array(m));
+    for (let r = n - 1; r >= 0; r--) for (let k = 0; k < m; k++) { let s = B[r][k]; for (let j = r + 1; j < n; j++) s -= A[r][j] * X[j][k]; X[r][k] = s / A[r][r]; }
+    return X;
+  }
+  function stiffness(x) {
+    const nd = 2 * x.length, K = Array.from({ length: nd }, () => new Float64Array(nd));
+    for (let e = 0; e < x.length - 1; e++) {
+      const L = x[e + 1] - x[e], c = 1 / L ** 3, k = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]], dof = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) K[dof[i]][dof[j]] += c * k[i][j];
+    }
+    return K;
+  }
+  function supportShapes(x, supNodes) {
+    const K = stiffness(x), nd = 2 * x.length, fixed = new Set(supNodes.map(i => 2 * i)), free = [];
+    for (let i = 0; i < nd; i++) if (!fixed.has(i)) free.push(i);
+    const A = free.map(i => Float64Array.from(free.map(j => K[i][j]))), B = free.map(i => Float64Array.from(supNodes.map(sn => -K[i][2 * sn])));
+    const X = solveDense(A, B);
+    return supNodes.map((sn0, k) => { const u = new Float64Array(nd); free.forEach((dof, r) => { u[dof] = X[r][k]; }); supNodes.forEach((sn, j) => { u[2 * sn] = j === k ? 1 : 0; }); return u; });
+  }
+  function hermite(u, x, e, p) { const L = x[e + 1] - x[e], t = (p - x[e]) / L; return (1 - 3 * t * t + 2 * t ** 3) * u[2 * e] + L * (t - 2 * t * t + t ** 3) * u[2 * e + 1] + (3 * t * t - 2 * t ** 3) * u[2 * e + 2] + L * (-t * t + t ** 3) * u[2 * e + 3]; }
+  function elemIntegral(u, x, e) { const L = x[e + 1] - x[e]; return L * (u[2 * e] + u[2 * e + 2]) / 2 + L * L * (u[2 * e + 1] - u[2 * e + 3]) / 12; }
+
+  // ---------- HL-93 parts, one lane (static vehicle and lane separately so that impact applies to the vehicle only) ----------
+  function scanFS(IL, wts, offs, cb) { const ng = IL.length, n = ng + offs[offs.length - 1]; for (let i = 0; i < n; i++) { let sp = 0, sn = 0; for (let a = 0; a < wts.length; a++) { const j = i - offs[a]; if (j >= 0 && j < ng) { const v = wts[a] * IL[j]; if (v > 0) sp += v; else sn += v; } } cb(sp, sn, i); } }
+  function scanF(IL, wts, offs) { const ng = IL.length, n = ng + offs[offs.length - 1], f = new Float64Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let a = 0; a < wts.length; a++) { const j = i - offs[a]; if (j >= 0 && j < ng) s += wts[a] * IL[j]; } f[i] = s; } return f; }
+  function hl93Parts(IL, h, dual) {
+    const st = v => Math.round(v / h);
+    let tP = 0, tN = 0, dP = 0, dN = 0, f14f = null, f14r = null;
+    for (let s2 = 14; s2 <= 30; s2 += 1) {
+      scanFS(IL, [8, 32, 32], [0, st(14), st(14 + s2)], (p, n) => { if (p > tP) tP = p; if (n < tN) tN = n; });
+      scanFS(IL, [32, 32, 8], [0, st(s2), st(s2 + 14)], (p, n) => { if (p > tP) tP = p; if (n < tN) tN = n; });
+    }
+    scanFS(IL, [25, 25], [0, st(4)], (p, n) => { if (p > dP) dP = p; if (n < dN) dN = n; });
+    let lP = 0, lN = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lP += IL[j]; else lN += IL[j]; }
+    lP *= 0.64 * h; lN *= 0.64 * h;
+    const out = { truckP: tP, truckN: tN, tandemP: dP, tandemN: dN, laneP: lP, laneN: lN, vehP: Math.max(tP, dP), vehN: Math.min(tN, dN), dualN: 0 };
+    if (dual) {
+      const neg = arr => { const n = arr.length; const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = Math.min(arr[i], 0); return o; };
+      f14f = neg(scanF(IL, [8, 32, 32], [0, st(14), st(28)])); f14r = neg(scanF(IL, [32, 32, 8], [0, st(14), st(28)]));
+      const sep = st(78); let dmin = 0; // second truck's front axle at least 50 ft behind the first truck's rear axle
+      for (const f of [f14f, f14r]) { let pm = Infinity; for (let a = sep; a < f.length; a++) { pm = Math.min(pm, f[a - sep]); const v = f[a] + pm; if (v < dmin) dmin = v; } }
+      out.dualN = dmin;
+    }
+    return out;
+  }
+  function fatigueParts(IL, h) { const st = v => Math.round(v / h); let mx = 0, mn = 0; for (const f of [scanF(IL, [8, 32, 32], [0, st(14), st(44)]), scanF(IL, [32, 32, 8], [0, st(30), st(44)])]) for (let i = 0; i < f.length; i++) { if (f[i] > mx) mx = f[i]; if (f[i] < mn) mn = f[i]; } return { max: mx, min: mn }; }
+  function designLanes(w) { if (!(w > 0)) return 1; if (w >= 20 - 1e-9 && w <= 24 + 1e-9) return 2; return Math.max(1, Math.floor(w / 12)); }
+
+  // ---------- section mechanics, per foot of width ----------
+  // reinforcement at x on one face: zones [{bar, s, from, to}] (ft); ends inside the slab are developed linearly over ℓd
+  function steelAt(zones, x, face, h, cover, Ltot, ldOf) {
+    let As = 0, Ay = 0, nPerFt = 0, dbMax = 0, partial = false;
+    zones.forEach(z => {
+      if (x < z.from - 1e-9 || x > z.to + 1e-9) return;
+      const b = BARS[z.bar], perFt = 12 / z.s;
+      let f = 1;
+      const ld = ldOf(z.bar, face) / 12; // ft
+      if (z.from > 1e-6) f = Math.min(f, (x - z.from) / ld);
+      if (z.to < Ltot - 1e-6) f = Math.min(f, (z.to - x) / ld);
+      f = clamp(f, 0, 1); if (f < 1) partial = true;
+      const a = b.Ab * perFt * f, d = h - cover - b.db / 2; // depth from the compression face
+      As += a; Ay += a * d; nPerFt += perFt; dbMax = Math.max(dbMax, b.db);
+    });
+    return { As, ds: As > 0 ? Ay / As : 0, s: nPerFt > 0 ? 12 / nPerFt : null, db: dbMax, partial };
+  }
+  function flexure(As, ds, fc, fy, b) {
+    if (!(As > 0)) return { Mn: 0, phi: 0.9, c: 0, a: 0, et: 0, Mr: 0 };
+    const a1 = alpha1(fc), b1 = beta1(fc);
+    const c = As * fy / (a1 * fc * b1 * b), a = b1 * c, et = 0.003 * (ds - c) / c;
+    const ecl = 0.002, etl = 0.005;
+    const phi = et >= etl ? 0.9 : et <= ecl ? 0.75 : 0.75 + 0.15 * (et - ecl) / (etl - ecl);
+    const Mn = As * fy * (ds - a / 2) / 12; // k-ft
+    return { Mn, phi, c, a, et, Mr: phi * Mn, a1, b1, fsOK: c / ds <= 0.003 / (0.003 + ecl) };
+  }
+  function cracked(As, ds, n, b) { const rho = As / (b * ds), k = Math.sqrt((rho * n) ** 2 + 2 * rho * n) - rho * n, j = 1 - k / 3; return { rho, k, j }; }
+
+  // ---------- main ----------
+  function run(m) {
+    const warn = [], notes = [];
+    // a field left out of the model takes its default (opt); a field present but blank, null or non-numeric is an error
+    const opt = (v, d) => (v === undefined ? d : v);
+    const num = (v, name, o = {}) => { if (v === null || v === '' || typeof v === 'boolean') throw new Error(name + ' is blank or not a number.'); const x = +v; if (!Number.isFinite(x)) throw new Error(name + ' must be a number.'); if (o.pos && !(x > 0)) throw new Error(name + ' must be greater than zero.'); if (o.min != null && x < o.min) throw new Error(name + ' must be at least ' + o.min + '.'); if (o.max != null && x > o.max) throw new Error(name + ' must not exceed ' + o.max + '.'); return x; };
+    const spans = (m.spans || []).map(Number);
+    if (!spans.length || spans.some(L => !(L > 0))) throw new Error('Enter at least one span length greater than zero.');
+    if (spans.some(L => L > 120)) throw new Error('Span lengths above 120 ft are outside the scope of this tool.');
+    const supX = [0]; spans.forEach(L => supX.push(supX[supX.length - 1] + L));
+    const Ltot = supX[supX.length - 1];
+    const cont = spans.length > 1 && m.continuous !== false;
+    const h = num(m.h, 'Slab thickness', { pos: true, max: 48 });
+    const W = num(m.width, 'Out-to-out width', { pos: true });
+    const par = Object.assign({ n: 2, w: 0.45, base: 19 }, m.parapet || {});
+    num(par.n, 'Number of parapets', { min: 0, max: 2 }); num(par.w, 'Parapet weight', { min: 0 }); num(par.base, 'Parapet base width', { min: 0 });
+    if (!Number.isInteger(+par.n)) throw new Error('Number of parapets must be 0, 1 or 2.');
+    const road = m.roadway == null || m.roadway === '' ? W - 2 * (+par.base) / 12 : num(m.roadway, 'Clear roadway', { pos: true, max: W });
+    if (!(road > 0)) throw new Error('Clear roadway must be greater than zero.');
+    const skew = num(opt(m.skew, 0), 'Skew', { min: 0, max: 60 });
+    const fc = num(m.fc, "f'c", { min: 2.4, max: 15 }), fy = num(opt(m.fy, 60), 'fy', { min: 40, max: 100 });
+    const wc = num(opt(m.wc, 0.145), 'wc for Ec', { pos: true, max: 0.2 }), wDL = num(opt(m.wDL, 0.150), 'Unit weight for DC', { pos: true, max: 0.2 }), K1 = num(opt(m.K1, 1), 'K1', { pos: true });
+    const covB = num(opt(m.coverBot, 1.5), 'Bottom clear cover', { min: 0 }), covT = num(opt(m.coverTop, 2.5), 'Top clear cover', { min: 0 });
+    if (covB + covT >= h) throw new Error('The covers leave no depth for the reinforcement.');
+    const rebarType = opt(m.rebar, 'A706');
+    if (!['A706', 'A615'].includes(rebarType)) throw new Error('Unknown reinforcement type.');
+    const gamma3 = rebarType === 'A615' ? 0.67 : 0.75;
+    const gammaE = num(opt(m.gammaE, 0.75), 'Crack exposure factor γe', { pos: true, max: 1 });
+    ['dc1x', 'dc2x', 'dwx', 'fws'].forEach(k => num(opt(m[k], 0), { dc1x: 'Added DC1', dc2x: 'Added DC2', dwx: 'Added DW', fws: 'Future wearing surface' }[k]));
+    if (m.NL != null && m.NL !== '') { const nl = num(m.NL, 'Design lanes', { pos: true }); if (!Number.isInteger(nl)) throw new Error('Design lanes must be a whole number.'); }
+    ['abutFace', 'pierHalf'].forEach(k => num(opt(m[k], 0), k === 'abutFace' ? 'Abutment CL to face' : 'Pier CL to face', { min: 0, max: 10 }));
+    { const rr = m.rating || {}; ['phiC', 'phiS', 'gDW'].forEach(k => num(opt(rr[k], k === 'gDW' ? 1.5 : 1), { phiC: 'φc', phiS: 'φs', gDW: 'γDW' }[k], { pos: true, max: 2 })); }
+    { const es = m.edgeShear || {}; num(opt(es.Av, 0), 'Edge beam Av', { min: 0 }); num(opt(es.s, 0), 'Edge beam s', { min: 0 }); if (es.Av > 0 && !(es.s > 0)) throw new Error('Edge beam Av is entered but its spacing s is zero: enter s, or set Av = 0.'); }
+    Object.entries(m.trans || {}).forEach(([k, t]) => { if (!t || !t.bar) return; const nm = { botTrans: 'Bottom transverse', topTrans: 'Top transverse', topLong: 'Top longitudinal' }[k] || k; if (!BARS[t.bar]) throw new Error(nm + ': unknown bar size.'); num(t.s, nm + ' spacing', { pos: true }); });
+    const ed = m.devEdition || '10';
+    const reinf = m.reinf || {}, bot = reinf.bot || [], top = reinf.top || [];
+    [['Bottom', bot], ['Top', top]].forEach(([nm, zs]) => zs.forEach((z, i) => {
+      if (!BARS[z.bar]) throw new Error(nm + ' bar zone ' + (i + 1) + ': unknown bar size "' + z.bar + '".');
+      num(z.s, nm + ' bar zone ' + (i + 1) + ' spacing', { pos: true }); num(z.from, nm + ' bar zone ' + (i + 1) + ' start', { min: 0 }); num(z.to, nm + ' bar zone ' + (i + 1) + ' end', { max: Ltot + 1e-6 });
+      if (!(+z.to > +z.from)) throw new Error(nm + ' bar zone ' + (i + 1) + ': the end must be beyond the start.');
+    }));
+    if (!bot.length) throw new Error('Enter the bottom longitudinal reinforcement.');
+    if (cont && !top.length) throw new Error('Enter the top longitudinal reinforcement over the piers.');
+    const E1 = m.Ec > 0 ? +m.Ec : EcOf(fc, wc, K1), n = ES / E1;
+    // development lengths (LapCheck), straight bars, per face
+    const ldCache = {};
+    const ldOf = (bar, face) => {
+      const k = bar + face; if (ldCache[k]) return ldCache[k];
+      const zs = (face === 'top' ? top : bot).filter(z => z.bar === bar), sMin = Math.min(...zs.map(z => +z.s));
+      const r = LapCheck.compute(ed, bar, { fc, fy, wc, K1, topBar: face === 'top' && h - covT > 12, coating: m.coating || 'epoxy', clearCover: face === 'top' ? covT : covB, spacing: sMin, useConfinement: true, roundUp: false });
+      if (r.blocked) throw new Error('Development length of ' + bar + ' bars: ' + r.scope.join(' '));
+      ldCache[k] = r.ld || r.ldb; return ldCache[k];
+    };
+
+    // ----- loads, per ft of width -----
+    const loads = { DC1: wDL * h / 12 + (+m.dc1x || 0), DC2: par.n * par.w / W + (+m.dc2x || 0), DW: (+m.fws || 0) / 1000 + (+m.dwx || 0) };
+    // ----- live load distribution (4.6.2.3) -----
+    const NL = m.NL > 0 ? +m.NL : designLanes(road);
+    const r = Math.min(1.0, 1.05 - 0.25 * Math.tan(skew * Math.PI / 180));
+    const Lmod = L => Math.min(L, 60);
+    const strip = L => {
+      const L1 = Lmod(L), Em = Math.min(84 + 1.44 * Math.sqrt(L1 * Math.min(W, 60)), 12 * W / NL), Es1 = 10 + 5 * Math.sqrt(L1 * Math.min(W, 30));
+      const gM = r / Em * 12, gS = r / Es1 * 12, g = NL > 1 ? Math.max(gM, gS) : gS;
+      const Eedge = Math.min(par.base + 12 + Es1 / 4, Es1 / 2, 72);
+      const frac = Math.max(0, (Eedge - par.base) / 120);
+      return { L1, Em, Es1, gM, gS, g, gF: gS / 1.2, Eedge, frac };
+    };
+    const IM = 0.33, IMf = 0.15;
+
+    // ----- analysis grid and influence lines -----
+    const hgrid = (() => { let hh = 0.05; while (Ltot / hh > 3000) hh *= 2; return hh; })();
+    const xs0 = [...supX]; spans.forEach((L, i) => { for (let k = 1; k < 20; k++) xs0.push(supX[i] + L * k / 20); });
+    const xn = [...new Set(xs0.map(v => +v.toFixed(6)))].sort((a, b) => a - b);
+    const supNodes = supX.map(s => xn.findIndex(v => Math.abs(v - s) < 1e-6));
+    const shapes = cont ? supportShapes(xn, supNodes) : null;
+    const ng = Math.floor(Ltot / hgrid + 1e-9) + 1, xg = new Float64Array(ng); for (let j = 0; j < ng; j++) xg[j] = Math.min(j * hgrid, Ltot);
+    let Rg = null;
+    if (cont) { Rg = shapes.map(() => new Float64Array(ng)); let e = 0; for (let j = 0; j < ng; j++) { while (e < xn.length - 2 && xg[j] > xn[e + 1]) e++; for (let k = 0; k < shapes.length; k++) Rg[k][j] = hermite(shapes[k], xn, e, xg[j]); } }
+    const spanOf = s => { for (let i = 0; i < spans.length; i++) if (s <= supX[i + 1] + 1e-7) return i; return spans.length - 1; };
+    function IL(s, side) {
+      const IMm = new Float64Array(ng), IV = new Float64Array(ng);
+      if (cont) {
+        for (let j = 0; j < ng; j++) {
+          let mm = 0, v = 0; const p = xg[j];
+          for (let k = 0; k < supX.length; k++) { const xs = supX[k], rr = Rg[k][j]; if (xs < s - 1e-7) { mm += rr * (s - xs); v += rr; } else if (side === 'r' && xs <= s + 1e-7) v += rr; }
+          if (p < s - 1e-7) { mm -= s - p; v -= 1; } else if (p <= s + 1e-7 && side !== 'r') v -= 1;
+          IMm[j] = mm; IV[j] = v;
+        }
+      } else {
+        const i = spanOf(s), a = supX[i], L = spans[i], u = s - a;
+        for (let j = 0; j < ng; j++) { const p = xg[j]; if (p < a - 1e-9 || p > a + L + 1e-9) continue; const q = p - a; IMm[j] = q <= u ? q * (L - u) / L : u * (L - q) / L; IV[j] = q < u - 1e-9 ? -q / L : (q > u + 1e-9 ? (L - q) / L : (side === 'r' ? (L - q) / L : -q / L)); }
+      }
+      return { IM: IMm, IV };
+    }
+    function uniform(w) {
+      if (!cont) return { M: s => { const i = spanOf(s), u = s - supX[i], L = spans[i]; return w * u * (L - u) / 2; }, V: (s, side) => { const i = spanOf(s), u = s - supX[i], L = spans[i]; if (u <= 1e-7 && side !== 'r' && i > 0) { const L0 = spans[i - 1]; return -w * L0 / 2; } return w * (L / 2 - u); } };
+      const R = shapes.map(u => { let sum = 0; for (let e = 0; e < xn.length - 1; e++) sum += w * elemIntegral(u, xn, e); return sum; });
+      return { R, M: s => { let mm = 0; supX.forEach((xs, k) => { if (xs < s - 1e-7) mm += R[k] * (s - xs); }); return mm - w * s * s / 2; }, V: (s, side) => { let v = 0; supX.forEach((xs, k) => { if (xs < s - 1e-7 || (side === 'r' && Math.abs(xs - s) <= 1e-7)) v += R[k]; }); return v - w * s; } };
+    }
+    const dl = { DC1: uniform(loads.DC1), DC2: uniform(loads.DC2), DW: uniform(loads.DW) }, uni1 = uniform(1);
+    const dualAt = s => cont && (m.dualTruck || 'contraflexure') !== 'off' && uni1.M(s) < 0;
+
+    // ----- support geometry and critical sections for shear -----
+    const supW = supX.map((s, k) => (k === 0 || k === supX.length - 1 ? (+m.abutFace >= 0 && m.abutFace != null ? +m.abutFace : 0) : (+m.pierHalf >= 0 && m.pierHalf != null ? +m.pierHalf : 0))); // CL to face, ft
+
+    // ----- points of interest -----
+    const xsP = [];
+    spans.forEach((L, i) => { for (let k = 0; k <= 20; k++) xsP.push({ x: supX[i] + L * k / 20, span: i + 1, frac: k / 20 }); });
+    (m.extraX || []).forEach(x => xsP.push({ x: +x, span: spanOf(+x) + 1, frac: null, tag: 'user' }));
+    // bar ends inside the slab: theoretical cutoff points and full-development points
+    [...bot.map(z => ['bot', z]), ...top.map(z => ['top', z])].forEach(([face, z]) => { [+z.from, +z.to].forEach(x => { if (x > 1e-6 && x < Ltot - 1e-6) { xsP.push({ x, span: spanOf(x) + 1, tag: face + ' bar end' }); const ld = ldOf(z.bar, face) / 12; [x - ld, x + ld].forEach(y => { if (y > 0 && y < Ltot) xsP.push({ x: y, span: spanOf(y) + 1, tag: face + ' bars developed' }); }); } }); });
+    const pts = [];
+    xsP.sort((a, b) => a.x - b.x).forEach(p => { const q = pts.find(o => Math.abs(o.x - p.x) < 1e-6); if (q) { if (p.tag) q.tags.push(p.tag); if (q.frac == null) q.frac = p.frac; } else pts.push({ x: +p.x, span: p.span, frac: p.frac, tags: p.tag ? [p.tag] : [] }); });
+    pts.forEach(p => { const i = p.span - 1; p.label = p.frac != null ? (i + 1) + '-' + (p.frac * 10).toFixed(p.frac * 10 % 1 ? 1 : 0) + 'L' : 'x=' + p.x.toFixed(2); });
+
+    const S = strip; const sOf = x => { const i = spanOf(x); let L = spans[i]; if (cont) { const k = supX.reduce((bi, s, kk) => (Math.abs(s - x) < Math.abs(supX[bi] - x) ? kk : bi), 0); if (k > 0 && k < supX.length - 1 && uni1.M(x) < 0) L = (spans[k - 1] + spans[k]) / 2; } return S(L); };
+    const Sg = S(Math.min(...spans)); // reporting (shortest span); each point uses its own span
+    const gF = (v, gmax, gmin, sign) => (Math.sign(v) === sign || v === 0 ? gmax : gmin) * v;
+
+    function effects(p) {
+      const st = sOf(p.x);
+      p.MDC1 = dl.DC1.M(p.x); p.MDC2 = dl.DC2.M(p.x); p.MDW = dl.DW.M(p.x);
+      const il = IL(p.x, 'r'), hp = hl93Parts(il.IM, hgrid, dualAt(p.x)), fp = fatigueParts(il.IM, hgrid);
+      p.lane = hp; p.fat = fp; p.strip = st;
+      // interior strip: g × [(1 + IM) vehicle + lane]; edge beam: [0.5(1 + IM) vehicle + frac × lane] / edge width
+      const eW = st.Eedge / 12;
+      p.LLp = { int: st.g * ((1 + IM) * hp.vehP + hp.laneP), edge: (0.5 * (1 + IM) * hp.vehP + st.frac * hp.laneP) / eW };
+      const sN = { int: st.g * ((1 + IM) * hp.vehN + hp.laneN), edge: (0.5 * (1 + IM) * hp.vehN + st.frac * hp.laneN) / eW };
+      if (hp.dualN < 0) { const dI = 0.9 * st.g * ((1 + IM) * hp.dualN + hp.laneN), dE = 0.9 * (0.5 * (1 + IM) * hp.dualN + st.frac * hp.laneN) / eW; p.dualI = dI < sN.int; p.dualE = dE < sN.edge; sN.int = Math.min(sN.int, dI); sN.edge = Math.min(sN.edge, dE); }
+      p.LLn = sN;
+      p.FLp = st.gF * (1 + IMf) * fp.max; p.FLn = st.gF * (1 + IMf) * fp.min;
+      const D = p.MDC1 + p.MDC2;
+      ['int', 'edge'].forEach(k => { p['MuP_' + k] = gF(p.MDC1, 1.25, 0.9, 1) + gF(p.MDC2, 1.25, 0.9, 1) + gF(p.MDW, 1.5, 0.65, 1) + 1.75 * Math.max(p.LLp[k], 0); p['MuN_' + k] = gF(p.MDC1, 1.25, 0.9, -1) + gF(p.MDC2, 1.25, 0.9, -1) + gF(p.MDW, 1.5, 0.65, -1) + 1.75 * Math.min(p.LLn[k], 0); p['MsP_' + k] = D + p.MDW + Math.max(p.LLp[k], 0); p['MsN_' + k] = D + p.MDW + Math.min(p.LLn[k], 0); });
+      p.Mperm = D + p.MDW;
+    }
+    pts.forEach(effects);
+
+    // ----- flexural checks at each point -----
+    const fcT = 0.24 * Math.sqrt(fc), Sx = 12 * h * h / 6, Mcr = gamma3 * 1.6 * fcT * Sx / 12; // k-ft per ft (5.6.3.3-1, no prestress)
+    const checks = [];
+    const add = c => { checks.push(c); return c; };
+    pts.forEach(p => {
+      p.bot = steelAt(bot, p.x, 'bot', h, covB, Ltot, ldOf); p.top = steelAt(top, p.x, 'top', h, covT, Ltot, ldOf);
+      p.flexP = flexure(p.bot.As, p.bot.ds, fc, fy, 12); p.flexN = flexure(p.top.As, p.top.ds, fc, fy, 12);
+      p.ck = [];
+      ['int', 'edge'].forEach(k => {
+        const tag = k === 'int' ? 'Interior strip' : 'Edge beam';
+        [['P', p['MuP_' + k], p.flexP, p.bot, p['MsP_' + k], 'bottom'], ['N', p['MuN_' + k], p.flexN, p.top, p['MsN_' + k], 'top']].forEach(([sg, Mu, F, stl, Ms, face]) => {
+          const dem = sg === 'P' ? Math.max(Mu, 0) : Math.max(-Mu, 0);
+          if (dem < 1e-6) return;
+          const base = { x: p.x, label: p.label, span: p.span, strip: k, sign: sg, face };
+          if (!(stl.As > 0)) { p.ck.push(add(Object.assign({}, base, { id: 'flex', lim: 'Strength I', what: tag + ', ' + (sg === 'P' ? 'positive' : 'negative') + ' flexure', art: '5.6.3.2', demand: dem, cap: 0, ratio: Infinity, unit: 'k-ft/ft', note: 'no ' + face + ' reinforcement at this point' }))); return; }
+          p.ck.push(add(Object.assign({}, base, { id: 'flex', lim: 'Strength I', what: tag + ', ' + (sg === 'P' ? 'positive' : 'negative') + ' flexure', art: '5.6.3.2', demand: dem, cap: F.Mr, ratio: dem / F.Mr, unit: 'k-ft/ft', note: 'As = ' + stl.As.toFixed(2) + ' in.²/ft, ds = ' + stl.ds.toFixed(2) + ' in., φ = ' + F.phi.toFixed(3) + (stl.partial ? ', bars partly developed' : '') })));
+          const req = Math.min(Mcr, 1.33 * dem);
+          p.ck.push(add(Object.assign({}, base, { id: 'minr', lim: 'Strength I', what: tag + ', minimum reinforcement (' + (sg === 'P' ? '+M' : '−M') + ')', art: '5.6.3.3', demand: req, cap: F.Mr, ratio: req / F.Mr, unit: 'k-ft/ft', note: 'min(Mcr = ' + Mcr.toFixed(1) + ', 1.33Mu = ' + (1.33 * dem).toFixed(1) + ')' })));
+          // Service I crack control
+          const Msv = sg === 'P' ? Math.max(Ms, 0) : Math.max(-Ms, 0);
+          if (Msv > 1e-6) {
+            const cr = cracked(stl.As, stl.ds, n, 12), fss = Msv * 12 / (stl.As * cr.j * stl.ds);
+            const dc = h - stl.ds, bs = 1 + dc / (0.7 * (h - dc)), smax = 700 * gammaE / (bs * fss) - 2 * dc;
+            p.ck.push(add(Object.assign({}, base, { id: 'crack', lim: 'Service I', what: tag + ', crack control (' + face + ' bars)', art: '5.6.7', demand: stl.s, cap: smax, ratio: smax > 0 ? stl.s / smax : Infinity, unit: 'in.', note: 'fss = ' + fss.toFixed(2) + ' ksi, βs = ' + bs.toFixed(3) + ', dc = ' + dc.toFixed(3) + ' in.', calc: { Ms: Msv, fss, bs, dc, j: cr.j, k: cr.k, rho: cr.rho, n, As: stl.As, ds: stl.ds, h, gammaE } })));
+            p.ck.push(add(Object.assign({}, base, { id: 'fss', lim: 'Service I', what: tag + ', steel stress fss ≤ 0.6fy (' + face + ' bars)', art: '5.6.7', demand: fss, cap: 0.6 * fy, ratio: fss / (0.6 * fy), unit: 'ksi', note: 'Ms = ' + Msv.toFixed(1) + ' k-ft/ft' })));
+          }
+        });
+      });
+      // fatigue of the reinforcement (Fatigue I, interior strip; DG 3.2.11)
+      ['bot', 'top'].forEach(face => {
+        const stl = p[face]; if (!(stl.As > 0)) return;
+        const pos = face === 'bot', Mtens = M => (pos ? M : -M); // moment producing tension in this face
+        const MFmax = 1.75 * Math.max(Mtens(pos ? p.FLp : p.FLn), 0), MFmin = 1.75 * Mtens(pos ? p.FLn : p.FLp);
+        const perm = Mtens(p.Mperm);
+        const range = Math.abs(p.FLp - p.FLn) * 1.75;
+        if (range < 1e-6) return;
+        // only where this face is in tension under permanent load plus fatigue maximum
+        if (perm + MFmax <= 0) return;
+        const cr = cracked(stl.As, stl.ds, n, 12), den = stl.As * cr.j * stl.ds;
+        const df = range * 12 / den, fmin = (perm + MFmin) * 12 / den;
+        const TH = 26 - 22 * fmin / fy;
+        p.ck.push(add({ id: 'fatigue', lim: 'Fatigue I', what: 'Reinforcement fatigue (' + face + ' bars)', art: '5.5.3.2', x: p.x, label: p.label, span: p.span, strip: 'int', face, demand: df, cap: TH, ratio: df / TH, unit: 'ksi', note: 'fmin = ' + fmin.toFixed(2) + ' ksi', calc: { range, perm, MFmin, j: cr.j, As: stl.As, ds: stl.ds, fmin, df } }));
+      });
+    });
+
+    // ----- edge beam shear (5.7.3.3; DG 3.2.11) -----
+    const eb = { Av: +opt((m.edgeShear || {}).Av, 0), s: +opt((m.edgeShear || {}).s, 0) };
+    const shear = [];
+    const crit = [];
+    supX.forEach((s, k) => { const face = supW[k]; if (k > 0) crit.push({ x: s - face, side: 'l', sup: k }); if (k < supX.length - 1) crit.push({ x: s + face, side: 'r', sup: k }); });
+    // critical section at dv from the support face (5.7.3.2); dv taken at the section itself (two passes)
+    crit.forEach(c => { c.face = c.x; let x = c.x; for (let it = 0; it < 3; it++) { const dv = shearAt(x, true).dv / 12; x = c.side === 'r' ? c.face + dv : c.face - dv; } c.x = x; });
+    const shearPts = pts.filter(p => crit.some(c => (c.side === 'r' ? p.x > c.x + 1e-6 : p.x < c.x - 1e-6) && Math.abs(p.x - supX[c.sup]) < spans[Math.min(c.sup, spans.length - 1)] / 2 + 1e-6));
+    function shearAt(x, isCrit) {
+      const st = sOf(x), eWin = st.Eedge, eW = eWin / 12;
+      const il = IL(x, 'r'), hpV = hl93Parts(il.IV, hgrid, false);
+      const VDC1 = dl.DC1.V(x, 'r'), VDC2 = dl.DC2.V(x, 'r'), VDW = dl.DW.V(x, 'r');
+      const VLLp = 0.5 * (1 + IM) * hpV.vehP + st.frac * hpV.laneP, VLLn = 0.5 * (1 + IM) * hpV.vehN + st.frac * hpV.laneN; // whole edge beam
+      const VuP = (gF(VDC1, 1.25, 0.9, 1) + gF(VDC2, 1.25, 0.9, 1) + gF(VDW, 1.5, 0.65, 1)) * eW + 1.75 * Math.max(VLLp, 0);
+      const VuN = (gF(VDC1, 1.25, 0.9, -1) + gF(VDC2, 1.25, 0.9, -1) + gF(VDW, 1.5, 0.65, -1)) * eW + 1.75 * Math.min(VLLn, 0);
+      const sgn = Math.abs(VuP) >= Math.abs(VuN) ? 1 : -1, Vu = Math.abs(sgn > 0 ? VuP : VuN);
+      const p = { x }; effects(p);
+      const MuP = p.MuP_edge * eW, MuN = p.MuN_edge * eW;
+      const Mu = Math.abs(MuP) >= Math.abs(MuN) ? MuP : MuN; // governing moment at the section (whole edge beam)
+      const face = Mu < 0 ? 'top' : 'bot';
+      const stl = steelAt(face === 'top' ? top : bot, x, face, h, face === 'top' ? covT : covB, Ltot, ldOf);
+      const AsE = stl.As * eW, F = flexure(stl.As, stl.ds, fc, fy, 12);
+      const dv = Math.max(stl.ds - F.a / 2, 0.9 * stl.ds, 0.72 * h), bv = eWin;
+      const MuUse = Math.max(Math.abs(Mu) * 12, Vu * dv); // k-in., not less than Vu dv
+      let es = AsE > 0 ? (MuUse / dv + Vu) / (ES * AsE) : 0.006;
+      es = clamp(es, -0.0004, 0.006);
+      const hasAv = eb.Av > 0 && eb.s > 0, AvMin = 0.0316 * Math.sqrt(fc) * bv * (eb.s || 0) / fy; // 5.7.2.5-1
+      const minTr = hasAv && (eb.Av >= AvMin - 1e-9 || m.betaMode === 'dg');
+      const ag = m.ag > 0 ? +m.ag : 0.75, sxe = clamp(dv * 1.38 / (ag + 0.63), 12, 80);
+      const beta = minTr ? 4.8 / (1 + 750 * es) : 4.8 / (1 + 750 * es) * 51 / (39 + sxe); // 5.7.3.4.2-1 or -2
+      const theta = 29 + 3500 * es, cot = 1 / Math.tan(theta * Math.PI / 180);
+      const Vc = 0.0316 * beta * Math.sqrt(fc) * bv * dv;
+      const Vs = hasAv ? eb.Av * fy * dv * cot / eb.s : 0;
+      const Vn = Math.min(Vc + Vs, 0.25 * fc * bv * dv);
+      const phiV = 0.9;
+      // longitudinal reinforcement for shear (5.7.3.5): T = |Mu|/(dv φf) + (Vu/φv − 0.5Vs) cot θ ≤ As fy (developed bars)
+      const VsL = Math.min(Vs, Vu / phiV), Treq = Math.abs(Mu) * 12 / (dv * F.phi) + Math.max(Vu / phiV - 0.5 * VsL, 0) * cot, Tprov = AsE * fy;
+      return { x, isCrit, eWin, AvMin, minTr, sxe, Treq, Tprov, phiF: F.phi, VDC1, VDC2, VDW, VLLp, VLLn, VuP, VuN, Vu, Mu, MuUse, face, As: AsE, ds: stl.ds, a: F.a, dv, bv, es, beta, theta, Vc, Vs, Vn, phiV, ratio: Vu / (phiV * Vn), hasAv, partial: stl.partial, st };
+    }
+    crit.forEach(c => { const q = shearAt(c.x, true); q.sup = c.sup; shear.push(q); });
+    shearPts.forEach(p => { if (!shear.some(q => Math.abs(q.x - p.x) < 1e-6)) shear.push(shearAt(p.x, false)); });
+    shear.sort((a, b) => a.x - b.x);
+    shear.forEach(q => add({ id: 'long', lim: 'Strength I', what: 'Edge beam longitudinal reinforcement for shear (' + q.face + ' bars)', art: '5.7.3.5', x: q.x, label: 'x=' + q.x.toFixed(2), strip: 'edge', demand: q.Treq, cap: q.Tprov, ratio: q.Tprov > 0 ? q.Treq / q.Tprov : Infinity, unit: 'k', note: 'As = ' + q.As.toFixed(2) + ' in.² over ' + q.eWin.toFixed(0) + ' in.' + (q.partial ? ', bars partly developed' : ''), calc: q }));
+    shear.forEach(q => add({ id: 'shear', lim: 'Strength I', what: 'Edge beam shear' + (q.isCrit ? ' (critical section)' : ''), art: '5.7.3.3', x: q.x, label: 'x=' + q.x.toFixed(2), strip: 'edge', demand: q.Vu, cap: q.phiV * q.Vn, ratio: q.ratio, unit: 'k', note: 'bv = ' + q.bv.toFixed(1) + ' in., dv = ' + q.dv.toFixed(2) + ' in., β = ' + q.beta.toFixed(3) + ', θ = ' + q.theta.toFixed(1) + '°' + (q.hasAv ? '' : ', no shear reinforcement'), calc: q }));
+
+    // ----- distribution, top and shrinkage/temperature reinforcement (ABD 15.8, 5.10.6) -----
+    const dist = (() => {
+      const th = skew * Math.PI / 180, out = [];
+      const Lr = Math.max(...spans), wB = Math.max(W - 24, 0);
+      const AsBotMax = Math.max(...pts.map(p => p.bot.As)), AsTopMax = Math.max(0, ...pts.map(p => p.top.As));
+      if (!cont) {
+        const parts = { base: 0.21, skew: Math.tan(th) * 0.35 * (1 + 0.02 * (Lr - 20)), length: Math.max(0.30 - 0.0075 * Lr, 0), width: Math.max(0.02 * Math.sqrt(wB), 0) };
+        const tot = Math.min(parts.base + parts.skew + parts.length + parts.width, 0.70);
+        out.push({ k: 'botTrans', name: 'Bottom transverse', parts, mult: 1, max: 0.70, beta: tot, base: 'As(bot,long)', AsLong: AsBotMax, req: tot * AsBotMax });
+        out.push({ k: 'topTrans', name: 'Top transverse', parts: null, beta: 0.20, base: 'As(bot,long)', AsLong: AsBotMax, req: 0.20 * AsBotMax });
+        out.push({ k: 'topLong', name: 'Top longitudinal', parts: null, beta: 0.20, base: 'As(bot,long)', AsLong: AsBotMax, req: 0.20 * AsBotMax });
+      } else {
+        const pb = { base: 0.21, skew: Math.tan(th) * 0.2 * (1 + 0.02 * (Lr - 20)), length: Math.max(0.32 - 0.0055 * Lr, 0), width: Math.max(0.02 * Math.sqrt(wB), 0) };
+        const tb = Math.min((pb.base + pb.skew + pb.length + pb.width) * 1.1, 0.80);
+        out.push({ k: 'botTrans', name: 'Bottom transverse', parts: pb, mult: 1.1, max: 0.80, beta: tb, base: 'As(bot,long)', AsLong: AsBotMax, req: tb * AsBotMax });
+        const pt = { base: 0.24, skew: Math.max(Math.tan(th) * 0.55 * (1 - 0.013 * (Lr - 20)), 0), length: Math.max(0.12 - 0.0025 * Lr, 0), width: Math.max(Math.sin(th) * 0.02 * Math.sqrt(wB) * (Lr / 20), 0) };
+        const tt = Math.min((pt.base + pt.skew + pt.length + pt.width) * 1.2, 1.0);
+        out.push({ k: 'topTrans', name: 'Top transverse', parts: pt, mult: 1.2, max: 1.0, beta: tt, base: 'As(top,long)', AsLong: AsTopMax, req: tt * AsTopMax });
+      }
+      const b = W * 12, AsST = clamp(1.30 * b * h / (2 * (b + h) * fy), 0.11, 0.60);
+      return { items: out, AsST, sMaxST: Math.min(18, 3 * h), span: Lr };
+    })();
+    const tr = m.trans || {};
+    dist.items.forEach(it => {
+      const pv = tr[it.k];
+      if (!pv || !pv.bar) { add({ id: 'dist', lim: 'Detailing', what: it.name + ' reinforcement — not entered', art: 'ABD 15.8, 5.10.6', demand: Math.max(it.req, dist.AsST), cap: 0, ratio: Infinity, unit: 'in.²/ft', missing: true, note: 'required by IDOT ABD 15.8 and Article 5.10.6; enter the bar and spacing' }); warn.push(it.name + ' reinforcement is not entered: the distribution check fails until it is (ABD 15.8, 5.10.6).'); return; }
+      it.prov = BARS[pv.bar].Ab * 12 / pv.s; it.provTxt = pv.bar + ' @ ' + pv.s + ' in.';
+      const reqUse = Math.max(it.req, dist.AsST);
+      add({ id: 'dist', lim: 'Detailing', what: it.name + ' reinforcement', art: 'ABD 15.8, 5.10.6', demand: reqUse, cap: it.prov, ratio: reqUse / it.prov, unit: 'in.²/ft', note: 'β = ' + it.beta.toFixed(3) + ' × ' + it.AsLong.toFixed(2) + (reqUse > it.req ? '; shrinkage and temperature governs' : '') });
+      if (pv.s > dist.sMaxST + 1e-9) add({ id: 'distS', lim: 'Detailing', what: it.name + ' spacing', art: '5.10.6', demand: pv.s, cap: dist.sMaxST, ratio: pv.s / dist.sMaxST, unit: 'in.', note: 'maximum min(18 in., 3h)' });
+    });
+
+    // ----- load rating (MBE 6A, HL-93) -----
+    const rf = m.rating || {};
+    const phiC = +opt(rf.phiC, 1.0), phiS = +opt(rf.phiS, 1.0), phiCS = Math.max(0.85, phiC * phiS), gDW = +opt(rf.gDW, 1.5);
+    const rows = [];
+    const RFc = (cap, dead, ll, g) => (ll > 1e-9 ? (cap - dead) / (g * ll) : Infinity);
+    const naOf = (rfv, gll, cap) => rfv > 10 && gll < 0.001 * Math.abs(cap); // display only (same rule as the girder apps)
+    pts.forEach(p => {
+      ['int', 'edge'].forEach(k => {
+        [['P', p.flexP, p.LLp[k], 1], ['N', p.flexN, p.LLn[k], -1]].forEach(([sg, F, LL, sign]) => {
+          const ll = sign * LL; if (!(ll > 1e-9)) return;
+          const noSteel = !(F.Mr > 0);
+          const dead = sign * (gF(p.MDC1, 1.25, 0.9, sign) + gF(p.MDC2, 1.25, 0.9, sign) + gF(p.MDW, gDW, 0.65, sign));
+          const cap = noSteel ? 0 : phiCS * F.Mr;
+          const inv = RFc(cap, dead, ll, 1.75), op = RFc(cap, dead, ll, 1.35);
+          rows.push({ noSteel, lim: 'Strength I flexure (' + (sg === 'P' ? '+M' : '−M') + '), ' + (k === 'int' ? 'interior strip' : 'edge beam'), x: p.x, label: p.label, cap, dead, ll, inv, op, na: naOf(inv, 1.75 * ll, cap), unit: 'k-ft/ft', strip: k, sign: sg });
+        });
+      });
+    });
+    shear.forEach(q => [1, -1].forEach(sgn => {
+      const ll = sgn * (sgn > 0 ? q.VLLp : q.VLLn); if (!(ll > 1e-9)) return;
+      const eW = q.eWin / 12;
+      const dead = sgn * (gF(q.VDC1, 1.25, 0.9, sgn) + gF(q.VDC2, 1.25, 0.9, sgn) + gF(q.VDW, gDW, 0.65, sgn)) * eW;
+      const cap = Math.max(0.85, phiC) * q.phiV * q.Vn; // φs = 1.0 for shear
+      const inv = RFc(cap, dead, ll, 1.75), op = RFc(cap, dead, ll, 1.35);
+      rows.push({ lim: 'Strength I shear, edge beam', x: q.x, label: 'x=' + q.x.toFixed(2) + (sgn > 0 ? ' (+V)' : ' (−V)'), dir: sgn, cap, dead, ll, inv, op, na: naOf(inv, 1.75 * ll, cap), unit: 'k', strip: 'edge' });
+    }));
+    if (rows.some(r0 => r0.noSteel)) warn.push('Flexure is rated with zero resistance where live load causes tension on a face with no developed reinforcement; the rating factor there is governed by that condition.');
+    const lims = [...new Set(rows.map(r0 => r0.lim))];
+    const summary = lims.map(l => { const rr = rows.filter(r0 => r0.lim === l); const gi = rr.reduce((a, b) => (b.inv < a.inv ? b : a)), go = rr.reduce((a, b) => (b.op < a.op ? b : a)); return { lim: l, inv: gi, op: go }; });
+    const rating = { rows, summary, phiC, phiS, phiCS, gDW, inventory: summary.length ? summary.map(s0 => s0.inv).reduce((a, b) => (b.inv < a.inv ? b : a)) : null, operating: summary.length ? summary.map(s0 => s0.op).reduce((a, b) => (b.op < a.op ? b : a)) : null };
+
+    // ----- governing per check type -----
+    const types = [['flex', 'Strength I flexure'], ['minr', 'Minimum reinforcement'], ['crack', 'Crack control'], ['fss', 'Service steel stress ≤ 0.6fy'], ['fatigue', 'Reinforcement fatigue'], ['shear', 'Edge beam shear'], ['long', 'Longitudinal reinforcement for shear'], ['dist', 'Distribution reinforcement'], ['distS', 'Distribution bar spacing']];
+    const gov = types.map(([id, name]) => { const cs = checks.filter(c => c.id === id && !Number.isNaN(c.ratio)); if (!cs.length) return null; const g = cs.reduce((a, b) => (b.ratio > a.ratio ? b : a)); return Object.assign({ name }, g); }).filter(Boolean);
+    if (checks.some(c => c.ratio == null || Number.isNaN(c.ratio))) throw new Error('A check ratio is not a number; correct the input.');
+    if (!eb.Av) notes.push('Edge beam shear checked without shear reinforcement (Av = 0).');
+    if (W > 45) warn.push('Out-to-out width exceeds 45 ft: IDOT requires an open longitudinal joint (BM 3.2.11); check each portion separately with its own edge beams.');
+    if (pts.some(p => p.bot.partial || p.top.partial)) notes.push('Bars are taken as developed linearly over ℓd from interior bar ends (5.10.8), ℓd per AASHTO LRFD ' + LapCheck.EDITIONS[ed].name + '.');
+    return {
+      spans, supX, Ltot, cont, h, W, road, skew, NL, r, n, Ec: E1, fc, fy, loads, strip: Sg, stripAt: sOf, pts, checks, gov, shear, dist, rating, gamma3, gammaE, Mcr, fr: fcT, Sx, ed,
+      ld: Object.keys(ldCache).map(k => ({ key: k, ld: ldCache[k] })), warn, notes, IL, uniform: dl, crit, hgrid,
+    };
+  }
+  const api = { run, hl93Parts, fatigueParts, flexure, cracked, designLanes, BARS, EcOf };
+  if (typeof module !== 'undefined') module.exports = api; else root.SlabCheck = api;
+})(this);
+
+/* Example models for the Concrete Slab Bridge Check. */
+(function (root) {
+  'use strict';
+  const EX = {
+    dg: {
+      label: 'IDOT DG 3.2.11 example: two 36-ft spans, 30° skew',
+      model: {
+        name: 'IDOT DG 3.2.11 example: two 36-ft spans, 30° skew', spans: [36, 36], continuous: true, h: 16, width: 32, roadway: null, skew: 30,
+        fc: 4, fy: 60, wc: 0.145, wDL: 0.150, K1: 1, rebar: 'A706', coating: 'epoxy', devEdition: '10', gammaE: 0.75,
+        parapet: { n: 2, w: 0.45, base: 19 }, fws: 50, dc1x: 0, dc2x: 0, dwx: 0, coverBot: 1.5, coverTop: 2.5,
+        reinf: { bot: [{ bar: '#9', s: 6, from: 0, to: 72 }], top: [{ bar: '#9', s: 10, from: 0, to: 72 }, { bar: '#9', s: 10, from: 22, to: 50 }] },
+        edgeShear: { Av: 0.62, s: 11 }, abutFace: 1.0, pierHalf: 1.5,
+        trans: { botTrans: { bar: '#7', s: 6 }, topTrans: { bar: '#9', s: 7 } },
+        rating: { phiC: 1.0, phiS: 1.0, gDW: 1.5 }, dualTruck: 'contraflexure',
+      },
+    },
+    three: {
+      label: 'Three spans 30–38–30 ft, 15° skew, 40 ft wide',
+      model: {
+        name: 'Three-span slab 30–38–30 ft', spans: [30, 38, 30], continuous: true, h: 17, width: 40, roadway: null, skew: 15,
+        fc: 4, fy: 60, wc: 0.145, wDL: 0.150, K1: 1, rebar: 'A706', coating: 'epoxy', devEdition: '10', gammaE: 0.75,
+        parapet: { n: 2, w: 0.45, base: 19 }, fws: 50, dc1x: 0, dc2x: 0, dwx: 0, coverBot: 1.5, coverTop: 2.5,
+        reinf: { bot: [{ bar: '#9', s: 6, from: 0, to: 98 }], top: [{ bar: '#8', s: 10, from: 0, to: 98 }, { bar: '#9', s: 10, from: 20, to: 42 }, { bar: '#9', s: 10, from: 56, to: 78 }] },
+        edgeShear: { Av: 0.62, s: 11 }, abutFace: 1.0, pierHalf: 1.5,
+        trans: { botTrans: { bar: '#7', s: 6 }, topTrans: { bar: '#8', s: 7 } },
+        rating: { phiC: 1.0, phiS: 1.0, gDW: 1.5 }, dualTruck: 'contraflexure',
+      },
+    },
+    simple: {
+      label: 'Simple span 28 ft, no skew, 30 ft wide',
+      model: {
+        name: 'Simple-span slab 28 ft', spans: [28], continuous: false, h: 18, width: 30, roadway: null, skew: 0,
+        fc: 4, fy: 60, wc: 0.145, wDL: 0.150, K1: 1, rebar: 'A706', coating: 'epoxy', devEdition: '10', gammaE: 0.75,
+        parapet: { n: 2, w: 0.45, base: 19 }, fws: 50, dc1x: 0, dc2x: 0, dwx: 0, coverBot: 1.5, coverTop: 2.5,
+        reinf: { bot: [{ bar: '#9', s: 6, from: 0, to: 28 }], top: [{ bar: '#6', s: 12, from: 0, to: 28 }] },
+        edgeShear: { Av: 0.62, s: 11 }, abutFace: 1.0, pierHalf: 0,
+        trans: { botTrans: { bar: '#7', s: 6 }, topTrans: { bar: '#6', s: 12 }, topLong: { bar: '#6', s: 12 } },
+        rating: { phiC: 1.0, phiS: 1.0, gDW: 1.5 }, dualTruck: 'contraflexure',
+      },
+    },
+  };
+  if (typeof module !== 'undefined') module.exports = EX; else root.SLAB_EXAMPLES = EX;
+})(this);
+</script>
+<script>/* Standard 14 font metrics (Adobe AFM via ReportLab): widths per 1000 em, WinAnsi codes; Symbol map unicode -> [code, width] */
+var PDF_METRICS = {"w":{"Helvetica":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Helvetica-Bold":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,350,556,350,278,556,500,1000,556,556,333,1000,667,333,1000,350,611,350,350,278,278,500,500,350,556,1000,333,1000,556,333,944,350,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,333,400,584,333,333,333,611,556,278,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,584,611,611,611,611,611,556,611,556],"Helvetica-Oblique":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Courier":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600]},"win":{"32":32,"33":33,"34":34,"35":35,"36":36,"37":37,"38":38,"39":39,"40":40,"41":41,"42":42,"43":43,"44":44,"45":45,"46":46,"47":47,"48":48,"49":49,"50":50,"51":51,"52":52,"53":53,"54":54,"55":55,"56":56,"57":57,"58":58,"59":59,"60":60,"61":61,"62":62,"63":63,"64":64,"65":65,"66":66,"67":67,"68":68,"69":69,"70":70,"71":71,"72":72,"73":73,"74":74,"75":75,"76":76,"77":77,"78":78,"79":79,"80":80,"81":81,"82":82,"83":83,"84":84,"85":85,"86":86,"87":87,"88":88,"89":89,"90":90,"91":91,"92":92,"93":93,"94":94,"95":95,"96":96,"97":97,"98":98,"99":99,"100":100,"101":101,"102":102,"103":103,"104":104,"105":105,"106":106,"107":107,"108":108,"109":109,"110":110,"111":111,"112":112,"113":113,"114":114,"115":115,"116":116,"117":117,"118":118,"119":119,"120":120,"121":121,"122":122,"123":123,"124":124,"125":125,"126":126,"127":127,"8364":128,"8218":130,"402":131,"8222":132,"8230":133,"8224":134,"8225":135,"710":136,"8240":137,"352":138,"8249":139,"338":140,"381":142,"8216":145,"8217":146,"8220":147,"8221":148,"8226":149,"8211":150,"8212":151,"732":152,"8482":153,"353":154,"8250":155,"339":156,"382":158,"376":159,"160":160,"161":161,"162":162,"163":163,"164":164,"165":165,"166":166,"167":167,"168":168,"169":169,"170":170,"171":171,"172":172,"173":173,"174":174,"175":175,"176":176,"177":177,"178":178,"179":179,"180":180,"181":181,"182":182,"183":183,"184":184,"185":185,"186":186,"187":187,"188":188,"189":189,"190":190,"191":191,"192":192,"193":193,"194":194,"195":195,"196":196,"197":197,"198":198,"199":199,"200":200,"201":201,"202":202,"203":203,"204":204,"205":205,"206":206,"207":207,"208":208,"209":209,"210":210,"211":211,"212":212,"213":213,"214":214,"215":215,"216":216,"217":217,"218":218,"219":219,"220":220,"221":221,"222":222,"223":223,"224":224,"225":225,"226":226,"227":227,"228":228,"229":229,"230":230,"231":231,"232":232,"233":233,"234":234,"235":235,"236":236,"237":237,"238":238,"239":239,"240":240,"241":241,"242":242,"243":243,"244":244,"245":245,"246":246,"247":247,"248":248,"249":249,"250":250,"251":251,"252":252,"253":253,"254":254,"255":255},"sym":{"8704":[34,713],"8707":[36,549],"8715":[39,439],"8727":[42,500],"8722":[45,549],"8773":[64,549],"913":[65,722],"914":[66,667],"935":[67,722],"8710":[68,612],"917":[69,611],"934":[70,763],"915":[71,603],"919":[72,722],"921":[73,333],"977":[74,631],"922":[75,722],"923":[76,686],"924":[77,889],"925":[78,722],"927":[79,722],"928":[80,768],"920":[81,741],"929":[82,556],"931":[83,592],"932":[84,611],"933":[85,690],"962":[86,439],"8486":[87,768],"926":[88,645],"936":[89,795],"918":[90,611],"8756":[92,863],"8869":[94,658],"63717":[96,500],"945":[97,631],"946":[98,549],"967":[99,549],"948":[100,494],"949":[101,439],"966":[102,521],"947":[103,411],"951":[104,603],"953":[105,329],"981":[106,603],"954":[107,549],"955":[108,549],"957":[110,521],"959":[111,549],"960":[112,549],"952":[113,521],"961":[114,549],"963":[115,603],"964":[116,439],"965":[117,576],"982":[118,713],"969":[119,686],"958":[120,493],"968":[121,686],"950":[122,494],"8764":[126,549],"8364":[160,750],"978":[161,620],"8242":[162,247],"8804":[163,549],"8260":[164,167],"8734":[165,713],"9827":[167,753],"9830":[168,753],"9829":[169,753],"9824":[170,753],"8596":[171,1042],"8592":[172,987],"8593":[173,603],"8594":[174,987],"8595":[175,603],"8243":[178,411],"8805":[179,549],"8733":[181,713],"8706":[182,494],"8226":[183,460],"8800":[185,549],"8801":[186,549],"8776":[187,549],"8230":[188,1000],"63718":[189,603],"63719":[190,1000],"8629":[191,658],"8501":[192,823],"8465":[193,686],"8476":[194,795],"8472":[195,987],"8855":[196,768],"8853":[197,768],"8709":[198,823],"8745":[199,768],"8746":[200,768],"8835":[201,713],"8839":[202,713],"8836":[203,713],"8834":[204,713],"8838":[205,713],"8712":[206,713],"8713":[207,713],"8736":[208,768],"8711":[209,713],"63194":[210,790],"63193":[211,790],"63195":[212,890],"8719":[213,823],"8730":[214,549],"8901":[215,250],"8743":[217,603],"8744":[218,603],"8660":[219,1042],"8656":[220,987],"8657":[221,603],"8658":[222,987],"8659":[223,603],"9674":[224,494],"9001":[225,329],"63720":[226,790],"63721":[227,790],"63722":[228,786],"8721":[229,713],"63723":[230,384],"63724":[231,384],"63725":[232,384],"63726":[233,384],"63727":[234,384],"63728":[235,384],"63729":[236,494],"63730":[237,494],"63731":[238,494],"63732":[239,494],"9002":[241,329],"8747":[242,274],"8992":[243,686],"63733":[244,686],"8993":[245,686],"63734":[246,384],"63735":[247,384],"63736":[248,384],"63737":[249,384],"63738":[250,384],"63739":[251,384],"63740":[252,494],"63741":[253,494],"63742":[254,494]}};
+if (typeof module !== 'undefined') module.exports = PDF_METRICS;
+
+/* Minimal dependency-free PDF writer and flow layout for calculation reports.
+ * Standard-14 fonts (Helvetica family, Courier, Symbol for Greek and math signs) — nothing embedded.
+ * Coordinates: points, origin top-left, y downward (converted on output).
+ */
+(function (root) {
+  'use strict';
+  const MET = (typeof module !== 'undefined') ? require('./metrics.js') : root.PDF_METRICS;
+  const FONTS = { R: 'Helvetica', B: 'Helvetica-Bold', I: 'Helvetica-Oblique', M: 'Courier', S: 'Symbol' };
+  const FKEY = { R: 'F1', B: 'F2', I: 'F3', M: 'F4', S: 'F5' };
+  const ALIAS = { 0x394: 0x2206, 0x3A9: 0x2126, 0x2032: 0x27, 0x2033: 0x22, 0x2264: 0x2264, 0x2265: 0x2265, 0x2009: 0x20, 0x202F: 0x20, 0xA0: 0x20, 0x2011: 0x2D, 0x2010: 0x2D, 0x2212: 0x2212, 0x2113: 0x6C, 0x2074: 0x34, 0x2075: 0x35, 0x2076: 0x36, 0x2192: 0x2192, 0x2713: 0x221A, 0x2248: 0x2248 };
+  if (MET.sym[0x3BC] == null) MET.sym[0x3BC] = [109, 576];
+  // split a string into font segments: Latin in the requested font, Greek/math from Symbol
+  function segs(str, f) {
+    const out = []; let cur = null;
+    for (const ch of String(str)) {
+      let u = ch.codePointAt(0); if (ALIAS[u] != null) u = ALIAS[u];
+      let font = f, code;
+      if (u === 0x2212) { code = 0x2D; } // minus sign drawn as hyphen-minus in the text font
+      else if (u === 0x2206) { font = 'D'; code = 0; } // capital delta drawn as a vector triangle: viewers' Symbol substitutes often lack it
+      else if (MET.win[u] != null) code = MET.win[u];
+      else if (MET.sym[u] != null) { font = 'S'; code = MET.sym[u][0]; }
+      else code = 0x3F;
+      if (!cur || cur.f !== font) { cur = { f: font, codes: [] }; out.push(cur); }
+      cur.codes.push(code);
+    }
+    return out;
+  }
+  function segWidth(sg, size) {
+    let w = 0;
+    if (sg.f === 'D') w += 612 * sg.codes.length;
+    else if (sg.f === 'S') { sg.codes.forEach(c => { const e = Object.values(MET.sym).find(v => v[0] === c); w += e ? e[1] : 500; }); }
+    else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); }
+    return w * size / 1000;
+  }
+  const symW = {}; Object.values(MET.sym).forEach(v => { symW[v[0]] = v[1]; });
+  function textWidth(str, f, size) {
+    let w = 0;
+    segs(str, f).forEach(sg => { if (sg.f === 'D') w += 612 * sg.codes.length; else if (sg.f === 'S') sg.codes.forEach(c => { w += symW[c] || 500; }); else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); } });
+    return w * size / 1000;
+  }
+  const esc = codes => codes.map(c => (c === 0x28 || c === 0x29 || c === 0x5C ? '\\' + String.fromCharCode(c) : c < 32 || c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c))).join('');
+  const n2 = v => (Math.round(v * 100) / 100).toString();
+  const col = c => (c || [0, 0, 0]).map(v => n2(v)).join(' ');
+
+  class Doc {
+    constructor(o = {}) {
+      this.W = o.W || 612; this.H = o.H || 792; this.pages = []; this.info = o.info || {};
+      this.page = null;
+    }
+    addPage() { this.page = { ops: [] }; this.pages.push(this.page); return this.page; }
+    Y(y) { return this.H - y; }
+    text(x, y, str, o = {}) { // y = baseline
+      const f = o.font || 'R', size = o.size || 9, color = o.color;
+      const ops = this.page.ops; let cx = x;
+      ops.push('BT ' + col(color) + ' rg');
+      segs(str, f).forEach(sg => {
+        if (sg.f === 'D') {
+          const by = this.Y(y) + (o.rise || 0), lw = size * (f === 'B' ? 0.085 : 0.065), wd = 0.612 * size;
+          sg.codes.forEach(() => { const a = cx + 0.06 * size, b = cx + wd - 0.06 * size, h = 0.674 * size;
+            ops.push('ET q ' + col(color) + ' RG ' + n2(lw) + ' w [] 0 d 0 j ' + n2(a + lw / 2) + ' ' + n2(by + lw / 2) + ' m ' + n2(b - lw / 2) + ' ' + n2(by + lw / 2) + ' l ' + n2((a + b) / 2) + ' ' + n2(by + h - lw / 2) + ' l h S Q BT ' + col(color) + ' rg');
+            cx += wd; });
+          return;
+        }
+        ops.push('/' + FKEY[sg.f] + ' ' + n2(size) + ' Tf 1 0 0 1 ' + n2(cx) + ' ' + n2(this.Y(y) + (o.rise || 0)) + ' Tm (' + esc(sg.codes) + ') Tj');
+        cx += sg.f === 'S' ? sg.codes.reduce((a, c) => a + (symW[c] || 500), 0) * size / 1000 : sg.codes.reduce((a, c) => a + (MET.w[FONTS[sg.f]][c] || 556), 0) * size / 1000;
+      });
+      ops.push('ET');
+      return cx - x;
+    }
+    line(x1, y1, x2, y2, o = {}) { this.page.ops.push((o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ' + col(o.color) + ' RG ' + n2(x1) + ' ' + n2(this.Y(y1)) + ' m ' + n2(x2) + ' ' + n2(this.Y(y2)) + ' l S'); }
+    rect(x, y, w, h, o = {}) {
+      const p = n2(x) + ' ' + n2(this.Y(y + h)) + ' ' + n2(w) + ' ' + n2(h) + ' re ';
+      const dsh = o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ';
+      if (o.fill && o.stroke) this.page.ops.push(col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' + dsh + p + 'B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + p + 'f');
+      else this.page.ops.push(col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w [] 0 d ' + p + 'S');
+    }
+    poly(pts, o = {}) {
+      if (pts.length < 2) return;
+      let s = n2(pts[0][0]) + ' ' + n2(this.Y(pts[0][1])) + ' m ' + pts.slice(1).map(p => n2(p[0]) + ' ' + n2(this.Y(p[1])) + ' l').join(' ');
+      if (o.close) s += ' h';
+      const st = (o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ';
+      if (o.fill && o.stroke) this.page.ops.push(st + col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + s + ' B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + s + ' f');
+      else this.page.ops.push(st + col(o.stroke || o.color) + ' RG ' + s + ' S');
+    }
+    circle(cx, cy, r, o = {}) {
+      const k = 0.5523 * r, Y = this.Y(cy);
+      const s = n2(cx + r) + ' ' + n2(Y) + ' m ' + [[cx + r, Y + k, cx + k, Y + r, cx, Y + r], [cx - k, Y + r, cx - r, Y + k, cx - r, Y], [cx - r, Y - k, cx - k, Y - r, cx, Y - r], [cx + k, Y - r, cx + r, Y - k, cx + r, Y]].map(a => a.map(n2).join(' ') + ' c').join(' ');
+      this.page.ops.push((o.fill ? col(o.fill) + ' rg ' : '') + (o.stroke ? col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' : '') + s + (o.fill && o.stroke ? ' B' : o.fill ? ' f' : ' S'));
+    }
+    async save() {
+      const enc = s => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+      const deflate = async bytes => {
+        if (typeof CompressionStream === 'undefined') return null;
+        try { const cs = new CompressionStream('deflate'); const w = cs.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return new Uint8Array(buf); } catch (e) { return null; }
+      };
+      const objs = []; // [string or Uint8Array parts]
+      const add = parts => { objs.push(parts); return objs.length; };
+      const fontIds = {};
+      Object.keys(FONTS).forEach(k => {
+        fontIds[k] = add(['<< /Type /Font /Subtype /Type1 /BaseFont /' + FONTS[k] + (k === 'S' ? '' : ' /Encoding /WinAnsiEncoding') + ' >>']);
+      });
+      const fontRes = '<< ' + Object.keys(FONTS).map(k => '/' + FKEY[k] + ' ' + fontIds[k] + ' 0 R').join(' ') + ' >>';
+      const pagesId = add(null); // placeholder
+      const kids = [];
+      for (const pg of this.pages) {
+        const raw = enc(pg.ops.join('\n'));
+        const z = await deflate(raw);
+        const cid = add(z ? ['<< /Length ' + z.length + ' /Filter /FlateDecode >>\nstream\n', z, '\nendstream'] : ['<< /Length ' + raw.length + ' >>\nstream\n', raw, '\nendstream']);
+        kids.push(add(['<< /Type /Page /Parent ' + pagesId + ' 0 R /MediaBox [0 0 ' + this.W + ' ' + this.H + '] /Resources << /Font ' + fontRes + ' >> /Contents ' + cid + ' 0 R >>']));
+      }
+      objs[pagesId - 1] = ['<< /Type /Pages /Kids [' + kids.map(k => k + ' 0 R').join(' ') + '] /Count ' + kids.length + ' >>'];
+      const pdfStr = s => '(' + esc([...String(s)].map(ch => { const u = ch.codePointAt(0); return MET.win[u] != null ? MET.win[u] : 0x3F; })) + ')';
+      const d = new Date(), pad = v => String(v).padStart(2, '0');
+      const date = 'D:' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+      const infoId = add(['<< /Title ' + pdfStr(this.info.title || '') + ' /Subject ' + pdfStr(this.info.subject || '') + ' /Creator ' + pdfStr(this.info.creator || '') + ' /Producer (Bridge SE report writer) /CreationDate (' + date + ') >>']);
+      const catId = add(['<< /Type /Catalog /Pages ' + pagesId + ' 0 R >>']);
+      // assemble
+      const chunks = []; let len = 0; const offs = [];
+      const push = x => { const b = typeof x === 'string' ? enc(x) : x; chunks.push(b); len += b.length; };
+      push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+      objs.forEach((parts, i) => { offs.push(len); push((i + 1) + ' 0 obj\n'); parts.forEach(push); push('\nendobj\n'); });
+      const xref = len;
+      push('xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join(''));
+      push('trailer\n<< /Size ' + (objs.length + 1) + ' /Root ' + catId + ' 0 R /Info ' + infoId + ' 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+      const out = new Uint8Array(len); let o = 0; chunks.forEach(c => { out.set(c, o); o += c.length; });
+      return out;
+    }
+  }
+
+  // ---------- inline rich text: markup _x or _{xy} subscript, ^x or ^{xy} superscript, *bold* not supported (use runs) ----------
+  function parseRich(s, font) {
+    const runs = []; let i = 0, buf = '';
+    const flush = () => { if (buf) { runs.push({ t: buf, f: font, v: 0 }); buf = ''; } };
+    while (i < s.length) {
+      const ch = s[i];
+      if ((ch === '_' || ch === '^') && i + 1 < s.length) {
+        flush();
+        let t;
+        if (s[i + 1] === '{') { const j = s.indexOf('}', i + 2); t = s.slice(i + 2, j < 0 ? s.length : j); i = j < 0 ? s.length : j + 1; }
+        else { t = [...s.slice(i + 1)][0]; i += 1 + t.length; }
+        runs.push({ t, f: font, v: ch === '_' ? -1 : 1 });
+      } else { buf += ch; i++; }
+    }
+    flush();
+    return runs;
+  }
+  function richWidth(runs, size) { return runs.reduce((a, r) => a + textWidth(r.t, r.f, r.v ? size * 0.72 : size), 0); }
+  function drawRich(doc, x, y, runs, size, color) {
+    let cx = x;
+    runs.forEach(r => { const sz = r.v ? size * 0.72 : size; cx += doc.text(cx, y, r.t, { font: r.f, size: sz, color, rise: r.v < 0 ? -size * 0.22 : r.v > 0 ? size * 0.38 : 0 }); });
+    return cx - x;
+  }
+  // math expression with \f{num}{den} stacked fractions (and rich markup inside)
+  function parseMath(s, font) {
+    const out = []; let i = 0, buf = '';
+    while (i < s.length) {
+      if (s.startsWith('\\f{', i)) {
+        if (buf) { out.push({ k: 'r', runs: parseRich(buf, font) }); buf = ''; }
+        const grab = st => { let depth = 0, j = st; for (; j < s.length; j++) { if (s[j] === '{') depth++; else if (s[j] === '}') { depth--; if (depth === 0) break; } } return [s.slice(st + 1, j), j + 1]; };
+        const [num, a] = grab(i + 2), [den, b] = grab(a);
+        out.push({ k: 'f', num: parseRich(num, font), den: parseRich(den, font) }); i = b;
+      } else { buf += s[i]; i++; }
+    }
+    if (buf) out.push({ k: 'r', runs: parseRich(buf, font) });
+    return out;
+  }
+  function mathMetrics(parts, size) {
+    let w = 0, frac = false;
+    parts.forEach(p => { if (p.k === 'r') w += richWidth(p.runs, size); else { frac = true; w += Math.max(richWidth(p.num, size * 0.9), richWidth(p.den, size * 0.9)) + size * 0.3; } });
+    return { w, up: frac ? size * 1.15 : size * 0.85, down: frac ? size * 0.95 : size * 0.3 };
+  }
+  function drawMath(doc, x, y, parts, size, color) {
+    let cx = x;
+    parts.forEach(p => {
+      if (p.k === 'r') cx += drawRich(doc, cx, y, p.runs, size, color);
+      else {
+        const s2 = size * 0.9, wn = richWidth(p.num, s2), wd = richWidth(p.den, s2), w = Math.max(wn, wd) + size * 0.3;
+        const mid = y - size * 0.3;
+        drawRich(doc, cx + (w - wn) / 2, mid - size * 0.25, p.num, s2, color);
+        doc.line(cx + size * 0.08, mid, cx + w - size * 0.08, mid, { w: 0.5, color });
+        drawRich(doc, cx + (w - wd) / 2, mid + size * 0.85, p.den, s2, color);
+        cx += w;
+      }
+    });
+    return cx - x;
+  }
+  function wrapWords(str, f, size, width) {
+    const words = String(str).split(/(\s+)/); const lines = []; let cur = '';
+    words.forEach(w => {
+      if (/^\s+$/.test(w)) { cur += ' '; return; }
+      const t = cur + w;
+      if (textWidth(t.trim(), f, size) > width && cur.trim()) { lines.push(cur.trim()); cur = w; } else cur = t;
+    });
+    if (cur.trim()) lines.push(cur.trim());
+    return lines.length ? lines : [''];
+  }
+
+  // ---------- flow layout ----------
+  class Flow {
+    constructor(o) {
+      this.doc = new Doc({ info: o.info });
+      this.m = Object.assign({ l: 54, r: 54, t: 64, b: 56 }, o.margins || {});
+      this.header = o.header; this.footer = o.footer;
+      this.pal = Object.assign({ ink: [0.09, 0.11, 0.13], mute: [0.36, 0.40, 0.44], rule: [0.75, 0.78, 0.80], head: [0.92, 0.94, 0.95], accent: [0.12, 0.37, 0.55], bad: [0.70, 0.14, 0.09], ok: [0.12, 0.48, 0.27], zebra: [0.97, 0.975, 0.98] }, o.palette || {});
+      this.newPage();
+    }
+    get W() { return this.doc.W - this.m.l - this.m.r; }
+    newPage() { this.doc.addPage(); this.y = this.m.t; }
+    need(h) { if (this.y + h > this.doc.H - this.m.b) { this.newPage(); return true; } return false; }
+    space(h) { this.y += h; }
+    h1(t) { this.need(40); this.y += 6; this.doc.text(this.m.l, this.y + 14, t, { font: 'B', size: 15, color: this.pal.ink }); this.y += 22; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 1.2, color: this.pal.accent }); this.y += 10; }
+    h2(t) { this.need(34); this.y += 8; this.doc.text(this.m.l, this.y + 11, t, { font: 'B', size: 11.5, color: this.pal.accent }); this.y += 15; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 0.5, color: this.pal.rule }); this.y += 7; }
+    h3(t) { this.need(26); this.y += 4; this.doc.text(this.m.l, this.y + 9, t, { font: 'B', size: 9.5, color: this.pal.ink }); this.y += 14; }
+    para(t, o = {}) {
+      const size = o.size || 9, f = o.font || 'R', lh = size * 1.35, x = this.m.l + (o.indent || 0), w = (o.width || this.W) - (o.indent || 0);
+      wrapWords(t, f, size, w).forEach(ln => { this.need(lh); this.doc.text(x, this.y + size, ln, { font: f, size, color: o.color || this.pal.ink }); this.y += lh; });
+      this.y += o.after != null ? o.after : 3;
+    }
+    bullets(items, o = {}) { const size = o.size || 8.6; items.forEach(t => { const lines = wrapWords(t, 'R', size, this.W - 12); lines.forEach((ln, k) => { this.need(size * 1.35); if (!k) this.doc.text(this.m.l + 2, this.y + size, '•', { size, color: this.pal.mute }); this.doc.text(this.m.l + 12, this.y + size, ln, { size, color: o.color || this.pal.ink }); this.y += size * 1.35; }); this.y += 1.5; }); this.y += 2; }
+    // key/value grid: rows [[k, v], ...] in n column pairs
+    kv(rows, o = {}) {
+      const cols = o.cols || 2, size = o.size || 8.6, lh = size * 1.5, cw = this.W / cols, kw = o.kw || cw * 0.48;
+      const n = Math.ceil(rows.length / cols);
+      for (let r = 0; r < n; r++) {
+        // wrap values
+        let hmax = lh; const cells = [];
+        for (let c = 0; c < cols; c++) {
+          const it = rows[c * n + r]; if (!it) { cells.push(null); continue; }
+          const vl = wrapWords(String(it[1]), 'R', size, cw - kw - 8); cells.push({ k: it[0], vl }); hmax = Math.max(hmax, vl.length * size * 1.25 + size * 0.5);
+        }
+        this.need(hmax);
+        cells.forEach((cl, c) => { if (!cl) return; const x = this.m.l + c * cw; this.doc.text(x, this.y + size, cl.k, { size, color: this.pal.mute }); cl.vl.forEach((ln, k) => this.doc.text(x + kw, this.y + size + k * size * 1.25, ln, { size, font: 'R', color: this.pal.ink })); });
+        this.y += hmax;
+      }
+      this.y += 4;
+    }
+    // table: cols [{h, w (fraction), a: 'l'|'r'|'c'}], rows [[cells]]; cell may be {t, f, color}
+    table(cols, rows, o = {}) {
+      const size = o.size || 7.6, pad = 3, lh = size * 1.25, W = this.W, ws = cols.map(c => c.w * W / cols.reduce((a, q) => a + q.w, 0));
+      const head = () => {
+        const hl = cols.map((c, i) => wrapWords(c.h, 'B', size, ws[i] - 2 * pad));
+        const hh = Math.max(...hl.map(l => l.length)) * lh + 2 * pad;
+        this.need(hh + lh + 2 * pad);
+        this.doc.rect(this.m.l, this.y, W, hh, { fill: this.pal.head });
+        let x = this.m.l;
+        hl.forEach((ls, i) => { ls.forEach((ln, k) => { const tw = textWidth(ln, 'B', size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size + k * lh, ln, { font: 'B', size, color: this.pal.ink }); }); x += ws[i]; });
+        this.y += hh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.6, color: this.pal.mute });
+      };
+      head();
+      rows.forEach((row, ri) => {
+        const cells = row.map((c, i) => { const cc = c && typeof c === 'object' ? c : { t: c == null ? '' : String(c) }; cc.lines = wrapWords(cc.t, cc.f || 'R', size, ws[i] - 2 * pad); return cc; });
+        const rh = Math.max(...cells.map(c => c.lines.length)) * lh + 2 * pad - 1;
+        if (this.need(rh)) head();
+        if (o.zebra !== false && ri % 2) this.doc.rect(this.m.l, this.y, W, rh, { fill: this.pal.zebra });
+        if (o.hl && o.hl(ri)) this.doc.rect(this.m.l, this.y, W, rh, { fill: [1, 0.96, 0.85] });
+        let x = this.m.l;
+        cells.forEach((c, i) => { c.lines.forEach((ln, k) => { const f = c.f || (cols[i].mono ? 'R' : 'R'); const tw = textWidth(ln, f, size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size - 1 + k * lh, ln, { font: f, size, color: c.color || this.pal.ink }); }); x += ws[i]; });
+        this.y += rh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.25, color: this.pal.rule });
+      });
+      this.y += o.after != null ? o.after : 8;
+    }
+    // MathCAD-style worksheet lines: [{lhs, expr, sub, res, unit, ref, note}]
+    math(lines, o = {}) {
+      const size = o.size || 9, x0 = this.m.l + 8, refW = 92, avail = this.W - 8 - refW;
+      lines.forEach(L => {
+        if (L.note) { this.need(size * 1.6); wrapWords(L.note, 'I', size * 0.92, this.W - 16).forEach(ln => { this.need(size * 1.3); this.doc.text(x0, this.y + size, ln, { font: 'I', size: size * 0.92, color: this.pal.mute }); this.y += size * 1.3; }); this.y += 2; return; }
+        const pieces = [];
+        if (L.lhs) pieces.push(parseMath(L.lhs + (L.expr ? ' := ' : ' = '), 'I'));
+        const tail = [];
+        if (L.expr) tail.push(parseMath(L.expr, 'R'));
+        if (L.sub) tail.push(parseMath((L.expr ? ' = ' : '') + L.sub, 'R'));
+        if (L.res != null) tail.push(parseMath(' = ' + L.res + (L.unit ? ' ' + L.unit : ''), 'B'));
+        // lay out on one line if it fits, else wrap at the '=' pieces with an indent
+        const all = pieces.concat(tail), mets = all.map(p => mathMetrics(p, size));
+        const total = mets.reduce((a, q) => a + q.w, 0);
+        const rowsOut = [];
+        if (total <= avail) rowsOut.push(all.map((p, i) => [p, mets[i]]));
+        else { let cur = [], cw = 0; all.forEach((p, i) => { if (cur.length && cw + mets[i].w > avail) { rowsOut.push(cur); cur = []; cw = 24; } cur.push([p, mets[i]]); cw += mets[i].w; }); if (cur.length) rowsOut.push(cur); }
+        rowsOut.forEach((row, ri) => {
+          const up = Math.max(...row.map(q => q[1].up)), down = Math.max(...row.map(q => q[1].down));
+          this.need(up + down + 4);
+          const base = this.y + up + 1;
+          let cx = x0 + (ri ? 24 : 0);
+          row.forEach(([p, mt]) => { cx += drawMath(this.doc, cx, base, p, size, L.color || this.pal.ink); });
+          if (!ri && L.ref) { const tw = textWidth(L.ref, 'R', size * 0.85); this.doc.text(this.m.l + this.W - tw, base, L.ref, { size: size * 0.85, color: this.pal.mute }); }
+          this.y = base + down + 3;
+        });
+      });
+      this.y += 4;
+    }
+    box(h, draw) { this.need(h); draw(this.doc, this.m.l, this.y, this.W, h); this.y += h; }
+    async finish() {
+      const n = this.doc.pages.length;
+      this.doc.pages.forEach((pg, i) => { this.doc.page = pg; if (this.header) this.header(this.doc, i + 1, n, this.m); if (this.footer) this.footer(this.doc, i + 1, n, this.m); });
+      return this.doc.save();
+    }
+  }
+  const api = { Doc, Flow, textWidth, wrapWords, parseRich, parseMath };
+  if (typeof module !== 'undefined') module.exports = api; else root.PDFW = api;
+})(this);
+
+/* Concrete Slab Bridge Check — PDF calculation report and worksheets (shared by the UI and the PDF).
+ * Worksheets recompute each value from the numbers shown and compare with the analysis (0.5%);
+ * where a step is not reproduced the analysis value is shown with its basis.
+ */
+(function (root) {
+  'use strict';
+  const W = typeof module !== 'undefined' ? require('./pdfw.js') : root.PDFW;
+  const ES = 29000, IM = 0.33, IMF = 0.15;
+  const fx = (v, d = 1) => (v == null || !isFinite(v) ? (v === Infinity ? '∞' : '—') : (Math.abs(v) < 5e-13 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fn = (v, d) => (v == null || !isFinite(v) ? (v === Infinity ? '∞' : '—') : (+v).toFixed(d));
+  const sg = v => fn(v, Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 1 : Math.abs(v) >= 10 ? 2 : 3);
+  const ng = v => '(' + sg(v) + ')';
+  const plain = L => L.map(l => (l.note ? Object.assign({}, l, { note: l.note.replace(/_\{([^}]*)\}/g, '$1').replace(/\^\{([^}]*)\}/g, '$1') }) : l));
+  const fr = v => (v === Infinity ? '∞ (unbounded)' : fn(v, 3));
+  const frf = (v, na) => ((na && v > 10) || v === Infinity ? 'N/A' : fn(v, 2));
+  const close = (a, b, tol = 0.005) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
+  const hash = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+  const RED = [0.70, 0.14, 0.09], GRN = [0.12, 0.48, 0.27], AMB = [0.62, 0.40, 0.04];
+  const rCol = r => (r > 1 + 1e-9 ? RED : r > 0.95 ? AMB : null);
+  const rfCol = r => (r < 1 - 1e-9 ? RED : null);
+  const fac = (v, gmax, gmin, sign) => (Math.sign(v) === sign || v === 0 ? gmax : gmin);
+  const ptAt = (res, x) => res.pts.find(p => Math.abs(p.x - x) < 1e-6);
+  const b1Of = fc => Math.max(0.65, Math.min(0.85, 0.85 - 0.05 * (fc - 4)));
+  const a1Of = fc => (fc <= 10 ? 0.85 : Math.max(0.75, 0.85 - 0.02 * (fc - 10)));
+  const ratioLine = (dem, cap, r, unitTxt, expr) => { const ok = r <= 1 + 1e-9; return { lhs: 'Ratio', expr: expr || '\\f{demand}{resistance}', sub: '\\f{' + sg(dem) + '}{' + sg(cap) + '}', res: fr(r) + (ok ? '  ≤ 1.0  OK' : '  > 1.0  NOT SATISFIED'), color: ok ? null : RED }; };
+  const chk = (L, mine, eng, lhs, unit, basis) => { if (!close(mine, eng)) L.push({ lhs, sub: 'analysis value (' + basis + ')', res: sg(eng), unit }); return close(mine, eng) ? mine : eng; };
+
+  // ---------- strip and live load lines ----------
+  function stripLines(res, p, k, L) {
+    const st = p.strip;
+    if (k === 'int') {
+      L.push({ lhs: 'E_{MULT}', expr: '84 + 1.44√(L_{1}W_{1}) ≤ 12W/N_{L}', sub: 'L_{1} = ' + fn(st.L1, 2) + ' ft, W_{1} = ' + fn(Math.min(res.W, 60), 2) + ' ft, N_{L} = ' + res.NL, res: fn(st.Em, 2), unit: 'in.', ref: '4.6.2.3-2' });
+      L.push({ lhs: 'E_{SINGLE}', expr: '10 + 5√(L_{1}W_{1})', sub: 'W_{1} = ' + fn(Math.min(res.W, 30), 2) + ' ft', res: fn(st.Es1, 2), unit: 'in.', ref: '4.6.2.3-1' });
+      L.push({ lhs: 'r', expr: '1.05 − 0.25 tan θ ≤ 1.00', sub: 'θ = ' + fn(res.skew, 1) + '°', res: fn(res.r, 3), ref: '4.6.2.3-3' });
+      L.push({ lhs: 'g', expr: res.NL > 1 ? 'max(r·12/E_{MULT}, r·12/E_{SINGLE})' : 'r·12/E_{SINGLE}', sub: res.NL > 1 ? 'max(' + fn(st.gM, 4) + ', ' + fn(st.gS, 4) + ')' : fn(st.gS, 4), res: fn(st.g, 4), unit: 'lanes/ft' });
+    } else {
+      L.push({ lhs: 'E_{edge}', expr: 'b_{parapet} + 12 + E_{SINGLE}/4 ≤ min(E_{SINGLE}/2, 72)', sub: 'E_{SINGLE} = ' + fn(st.Es1, 2) + ' in.', res: fn(st.Eedge, 2), unit: 'in.', ref: '4.6.2.1.4b' });
+      L.push({ lhs: 'lane fraction', expr: '(E_{edge} − b_{parapet})/120', res: fn(st.frac, 3), ref: 'DG 3.2.11' });
+    }
+  }
+  function llLine(res, p, k, sign, L) {
+    const hp = p.lane, st = p.strip, eW = st.Eedge / 12;
+    const veh = sign > 0 ? hp.vehP : hp.vehN, lane = sign > 0 ? hp.laneP : hp.laneN, eng = sign > 0 ? p.LLp[k] : p.LLn[k];
+    const dual = sign < 0 && (k === 'int' ? p.dualI : p.dualE);
+    if (veh || lane) L.push({ note: 'One lane, static: ' + (dual ? 'two trucks ' + sg(hp.dualN) : (sign > 0 ? (hp.truckP >= hp.tandemP ? 'truck ' : 'tandem ') : (hp.truckN <= hp.tandemN ? 'truck ' : 'tandem ')) + sg(veh)) + ' k-ft, lane ' + sg(lane) + ' k-ft (influence-line analysis)' });
+    let v;
+    if (k === 'int') {
+      if (dual) { v = 0.9 * st.g * ((1 + IM) * hp.dualN + lane); L.push({ lhs: 'M_{LL+IM}', expr: '0.9g[(1 + IM)M_{2 trucks} + M_{lane}]', sub: '0.9 × ' + fn(st.g, 4) + '[1.33' + ng(hp.dualN) + ' + ' + ng(lane) + ']', res: fn(v, 2), unit: 'k-ft/ft', ref: '3.6.1.3.1' }); }
+      else { v = st.g * ((1 + IM) * veh + lane); L.push({ lhs: 'M_{LL+IM}', expr: 'g[(1 + IM)M_{veh} + M_{lane}]', sub: fn(st.g, 4) + '[1.33' + ng(veh) + ' + ' + ng(lane) + ']', res: fn(v, 2), unit: 'k-ft/ft', ref: '3.6.2.1' }); }
+    } else {
+      if (dual) { v = 0.9 * (0.5 * (1 + IM) * hp.dualN + st.frac * lane) / eW; L.push({ lhs: 'M_{LL+IM}', expr: '\\f{0.9[0.5(1 + IM)M_{2 trucks} + frac·M_{lane}]}{E_{edge}/12}', sub: '\\f{0.9[0.5 × 1.33' + ng(hp.dualN) + ' + ' + fn(st.frac, 3) + ng(lane) + ']}{' + fn(eW, 3) + '}', res: fn(v, 2), unit: 'k-ft/ft', ref: 'DG 3.2.11' }); }
+      else { v = (0.5 * (1 + IM) * veh + st.frac * lane) / eW; L.push({ lhs: 'M_{LL+IM}', expr: '\\f{0.5(1 + IM)M_{veh} + frac·M_{lane}}{E_{edge}/12}', sub: '\\f{0.5 × 1.33' + ng(veh) + ' + ' + fn(st.frac, 3) + ng(lane) + '}{' + fn(eW, 3) + '}', res: fn(v, 2), unit: 'k-ft/ft', ref: 'DG 3.2.11' }); }
+    }
+    return chk(L, v, eng, 'M_{LL+IM}', 'k-ft/ft', 'envelope');
+  }
+  function muLine(p, k, sign, LL, L) {
+    const g1 = fac(p.MDC1, 1.25, 0.9, sign), g2 = fac(p.MDC2, 1.25, 0.9, sign), g3 = fac(p.MDW, 1.5, 0.65, sign);
+    const ll = sign > 0 ? Math.max(LL, 0) : Math.min(LL, 0);
+    const v = g1 * p.MDC1 + g2 * p.MDC2 + g3 * p.MDW + 1.75 * ll;
+    L.push({ lhs: 'M_{u}', expr: 'γ_{DC}M_{DC1} + γ_{DC}M_{DC2} + γ_{DW}M_{DW} + 1.75M_{LL+IM}', sub: fn(g1, 2) + ng(p.MDC1) + ' + ' + fn(g2, 2) + ng(p.MDC2) + ' + ' + fn(g3, 2) + ng(p.MDW) + ' + 1.75' + ng(ll), res: fn(v, 2), unit: 'k-ft/ft', ref: 'Table 3.4.1-1' });
+    return chk(L, v, p['Mu' + (sign > 0 ? 'P' : 'N') + '_' + k], 'M_{u}', 'k-ft/ft', 'load combination');
+  }
+  function dlLines(res, p, L) {
+    const ld = res.loads;
+    L.push({ note: 'Dead loads per ft of width: DC1 ' + fn(ld.DC1, 4) + ' ksf (slab' + (ld.DC1 > 0 ? '' : '') + '), DC2 ' + fn(ld.DC2, 4) + ' ksf (parapets spread over W), DW ' + fn(ld.DW, 4) + ' ksf; moments from the continuous-beam analysis' });
+    L.push({ lhs: 'M_{DC1}, M_{DC2}, M_{DW}', sub: 'x = ' + fn(p.x, 2) + ' ft', res: fn(p.MDC1, 2) + ', ' + fn(p.MDC2, 2) + ', ' + fn(p.MDW, 2), unit: 'k-ft/ft' });
+  }
+  function resistLines(res, stl, F, L, face) {
+    const fc = res.fc, fy = res.fy, a1 = a1Of(fc), b1 = b1Of(fc);
+    L.push({ note: 'Resistance, ' + face + ' reinforcement, b = 12 in. (5.6.3.2)' });
+    L.push({ lhs: 'A_{s}', sub: (stl.partial ? 'bars partly developed at this point (5.10.8.1)' : 'developed bars') + ', ' + face, res: fn(stl.As, 3), unit: 'in.²/ft' });
+    L.push({ lhs: 'd_{s}', expr: 'h − cover − d_{b}/2', sub: 'centroid of A_{s}', res: fn(stl.ds, 3), unit: 'in.' });
+    L.push({ lhs: 'α_{1}, β_{1}', sub: "f′_{c} = " + fn(fc, 2) + ' ksi', res: fn(a1, 3) + ', ' + fn(b1, 3), ref: '5.6.2.2' });
+    const c = stl.As * fy / (a1 * fc * b1 * 12);
+    L.push({ lhs: 'c', expr: '\\f{A_{s}f_{y}}{α_{1}f′_{c}β_{1}b}', sub: '\\f{' + fn(stl.As, 3) + ' × ' + fn(fy, 0) + '}{' + fn(a1, 3) + ' × ' + fn(fc, 2) + ' × ' + fn(b1, 3) + ' × 12}', res: fn(c, 3), unit: 'in.', ref: '5.6.3.1.1-4' });
+    const a = b1 * c, et = 0.003 * (stl.ds - c) / c;
+    L.push({ lhs: 'a', expr: 'β_{1}c', res: fn(a, 3), unit: 'in.' });
+    L.push({ lhs: 'ε_{t}', expr: '0.003(d_{s} − c)/c', sub: '0.003(' + fn(stl.ds, 3) + ' − ' + fn(c, 3) + ')/' + fn(c, 3), res: fn(et, 5), ref: '5.6.2.1' });
+    const phi = et >= 0.005 ? 0.9 : et <= 0.002 ? 0.75 : 0.75 + 0.15 * (et - 0.002) / 0.003;
+    L.push({ lhs: 'φ', expr: et >= 0.005 ? 'tension controlled' : '0.75 + 0.15(ε_{t} − 0.002)/(0.005 − 0.002)', res: fn(phi, 3), ref: '5.5.4.2' });
+    const Mn = stl.As * fy * (stl.ds - a / 2) / 12;
+    L.push({ lhs: 'M_{n}', expr: 'A_{s}f_{y}(d_{s} − a/2)/12', sub: fn(stl.As, 3) + ' × ' + fn(fy, 0) + '(' + fn(stl.ds, 3) + ' − ' + fn(a, 3) + '/2)/12', res: fn(Mn, 2), unit: 'k-ft/ft', ref: '5.6.3.2.3-1' });
+    const Mr = phi * Mn;
+    L.push({ lhs: 'φM_{n}', sub: fn(phi, 3) + ' × ' + fn(Mn, 2), res: fn(Mr, 2), unit: 'k-ft/ft' });
+    return chk(L, Mr, F.Mr, 'φM_{n}', 'k-ft/ft', 'section analysis');
+  }
+  const kOf = c => c.strip || 'int', sOf = c => (c.sign === 'N' ? -1 : 1);
+
+  // ---------- worksheets ----------
+  function wsFlex(res, c) {
+    const p = ptAt(res, c.x), k = kOf(c), sign = sOf(c), L = [];
+    L.push({ note: (k === 'int' ? 'Interior strip' : 'Edge beam') + ', ' + (sign > 0 ? 'positive' : 'negative') + ' moment at x = ' + fn(p.x, 2) + ' ft (' + p.label + ')' });
+    stripLines(res, p, k, L); dlLines(res, p, L);
+    const LL = llLine(res, p, k, sign, L), Mu = Math.abs(muLine(p, k, sign, LL, L));
+    const stl = sign > 0 ? p.bot : p.top, F = sign > 0 ? p.flexP : p.flexN;
+    if (!(stl.As > 0)) { L.push({ note: 'No ' + c.face + ' reinforcement at this point' }); L.push(ratioLine(Mu, 0, Infinity)); return L; }
+    const Mr = resistLines(res, stl, F, L, c.face);
+    L.push(ratioLine(Mu, Mr, c.ratio, null, '\\f{|M_{u}|}{φM_{n}}'));
+    return L;
+  }
+  function wsMinr(res, c) {
+    const p = ptAt(res, c.x), sign = sOf(c), L = [], fc = res.fc, h = res.h;
+    const Mu = Math.abs(p['Mu' + (sign > 0 ? 'P' : 'N') + '_' + kOf(c)]);
+    const fr0 = 0.24 * Math.sqrt(fc), S = 12 * h * h / 6, Mcr = res.gamma3 * 1.6 * fr0 * S / 12;
+    L.push({ lhs: 'f_{r}', expr: "0.24√f′_{c}", res: fn(fr0, 3), unit: 'ksi', ref: '5.4.2.6' });
+    L.push({ lhs: 'S_{c}', expr: 'bh²/6', sub: '12 × ' + fn(h, 2) + '²/6', res: fn(S, 1), unit: 'in.³' });
+    L.push({ lhs: 'M_{cr}', expr: 'γ_{3}γ_{1}f_{r}S_{c}/12', sub: fn(res.gamma3, 2) + ' × 1.6 × ' + fn(fr0, 3) + ' × ' + fn(S, 1) + '/12', res: fn(Mcr, 2), unit: 'k-ft/ft', ref: '5.6.3.3-1' });
+    const req = Math.min(Mcr, 1.33 * Mu);
+    L.push({ lhs: 'M_{req}', expr: 'min(M_{cr}, 1.33M_{u})', sub: 'min(' + fn(Mcr, 2) + ', 1.33 × ' + fn(Mu, 2) + ')', res: fn(req, 2), unit: 'k-ft/ft' });
+    L.push({ lhs: 'φM_{n}', sub: c.face + ' reinforcement (see flexure)', res: fn(c.cap, 2), unit: 'k-ft/ft' });
+    L.push(ratioLine(req, c.cap, c.ratio, null, '\\f{M_{req}}{φM_{n}}'));
+    return L;
+  }
+  function svcLines(res, c, L) {
+    const p = ptAt(res, c.x), k = kOf(c), sign = sOf(c), C = c.calc || {};
+    L.push({ note: (k === 'int' ? 'Interior strip' : 'Edge beam') + ', Service I, ' + c.face + ' bars at x = ' + fn(p.x, 2) + ' ft' });
+    const LL = sign > 0 ? Math.max(p.LLp[k], 0) : Math.min(p.LLn[k], 0);
+    const Ms = Math.abs(p.MDC1 + p.MDC2 + p.MDW + LL);
+    L.push({ lhs: 'M_{s}', expr: 'M_{DC1} + M_{DC2} + M_{DW} + M_{LL+IM}', sub: fn(p.MDC1, 2) + ' + ' + fn(p.MDC2, 2) + ' + ' + fn(p.MDW, 2) + ' + ' + ng(LL), res: fn(Ms, 2), unit: 'k-ft/ft', ref: 'Table 3.4.1-1' });
+    const stl = sign > 0 ? p.bot : p.top, n = res.n;
+    L.push({ lhs: 'n', expr: 'E_{s}/E_{c}', sub: '29000/' + fn(res.Ec, 0), res: fn(n, 3), ref: '5.4.2.4' });
+    const rho = stl.As / (12 * stl.ds), kk = Math.sqrt((rho * n) ** 2 + 2 * rho * n) - rho * n, j = 1 - kk / 3;
+    L.push({ lhs: 'ρ', expr: 'A_{s}/(bd_{s})', sub: fn(stl.As, 3) + '/(12 × ' + fn(stl.ds, 3) + ')', res: fn(rho, 5) });
+    L.push({ lhs: 'k', expr: '√((ρn)² + 2ρn) − ρn', res: fn(kk, 4) });
+    L.push({ lhs: 'j', expr: '1 − k/3', res: fn(j, 4) });
+    let fss = Ms * 12 / (stl.As * j * stl.ds);
+    L.push({ lhs: 'f_{ss}', expr: '\\f{12M_{s}}{A_{s}jd_{s}}', sub: '\\f{12 × ' + fn(Ms, 2) + '}{' + fn(stl.As, 3) + ' × ' + fn(j, 4) + ' × ' + fn(stl.ds, 3) + '}', res: fn(fss, 2), unit: 'ksi', ref: '5.6.7' });
+    if (C.fss != null) fss = chk(L, fss, C.fss, 'f_{ss}', 'ksi', 'cracked section');
+    return { p, stl, fss };
+  }
+  function wsCrack(res, c) {
+    const L = [], { stl, fss } = svcLines(res, c, L), h = res.h;
+    const dc = h - stl.ds, bs = 1 + dc / (0.7 * (h - dc));
+    L.push({ lhs: 'd_{c}', expr: 'h − d_{s}', sub: fn(h, 2) + ' − ' + fn(stl.ds, 3), res: fn(dc, 3), unit: 'in.' });
+    L.push({ lhs: 'β_{s}', expr: '1 + \\f{d_{c}}{0.7(h − d_{c})}', sub: '1 + \\f{' + fn(dc, 3) + '}{0.7(' + fn(h, 2) + ' − ' + fn(dc, 3) + ')}', res: fn(bs, 3), ref: '5.6.7' });
+    let smax = 700 * res.gammaE / (bs * fss) - 2 * dc;
+    L.push({ lhs: 's_{max}', expr: '\\f{700γ_{e}}{β_{s}f_{ss}} − 2d_{c}', sub: '\\f{700 × ' + fn(res.gammaE, 2) + '}{' + fn(bs, 3) + ' × ' + fn(fss, 2) + '} − 2 × ' + fn(dc, 3), res: fn(smax, 2), unit: 'in.', ref: '5.6.7-1' });
+    smax = chk(L, smax, c.cap, 's_{max}', 'in.', 'crack control');
+    L.push({ lhs: 's', sub: 'bar spacing provided, ' + c.face, res: fn(c.demand, 2), unit: 'in.' });
+    L.push(ratioLine(c.demand, smax, c.ratio, null, '\\f{s}{s_{max}}'));
+    return L;
+  }
+  function wsFss(res, c) {
+    const L = [], { fss } = svcLines(res, c, L);
+    L.push({ lhs: '0.6f_{y}', sub: '0.6 × ' + fn(res.fy, 0), res: fn(0.6 * res.fy, 1), unit: 'ksi', ref: '5.6.7' });
+    L.push(ratioLine(fss, 0.6 * res.fy, c.ratio, null, '\\f{f_{ss}}{0.6f_{y}}'));
+    return L;
+  }
+  function wsFatigue(res, c) {
+    const p = ptAt(res, c.x), C = c.calc, L = [], st = p.strip, pos = c.face === 'bot';
+    L.push({ note: 'Interior strip, Fatigue I, ' + c.face + ' bars at x = ' + fn(p.x, 2) + ' ft; fatigue truck with 30 ft rear axle spacing, one lane' });
+    L.push({ lhs: 'g_{F}', expr: 'g_{SINGLE}/1.2', sub: fn(st.gS, 4) + '/1.2', res: fn(st.gF, 4), unit: 'lanes/ft', ref: '3.6.1.4.3b' });
+    L.push({ lhs: 'M_{FL}^{+}, M_{FL}^{−}', expr: 'g_{F}(1 + IM)M_{fatigue truck}', sub: fn(st.gF, 4) + ' × 1.15 × (' + sg(p.fat.max) + ', ' + sg(p.fat.min) + ')', res: fn(st.gF * (1 + IMF) * p.fat.max, 2) + ', ' + fn(st.gF * (1 + IMF) * p.fat.min, 2), unit: 'k-ft/ft', ref: '3.6.2.1' });
+    const range = 1.75 * Math.abs(p.FLp - p.FLn);
+    L.push({ lhs: 'γM_{range}', expr: '1.75(M_{FL}^{+} − M_{FL}^{−})', res: fn(range, 2), unit: 'k-ft/ft', ref: 'Table 3.4.1-1' });
+    const perm = pos ? p.Mperm : -p.Mperm, MFmin = 1.75 * (pos ? p.FLn : -p.FLp);
+    L.push({ lhs: 'M_{min}', expr: 'M_{DC+DW} + 1.75M_{FL} (opposite sense)', sub: ng(perm) + ' + ' + ng(MFmin), res: fn(perm + MFmin, 2), unit: 'k-ft/ft', ref: '5.5.3.1' });
+    const den = C.As * C.j * C.ds;
+    L.push({ lhs: 'A_{s}jd_{s}', sub: fn(C.As, 3) + ' × ' + fn(C.j, 4) + ' × ' + fn(C.ds, 3) + ' (cracked section, n = ' + fn(res.n, 3) + ')', res: fn(den, 3), unit: 'in.³/ft' });
+    let df = range * 12 / den, fmin = (perm + MFmin) * 12 / den;
+    L.push({ lhs: 'γ(Δf)', expr: '12γM_{range}/(A_{s}jd_{s})', res: fn(df, 2), unit: 'ksi' });
+    L.push({ lhs: 'f_{min}', expr: '12M_{min}/(A_{s}jd_{s})', res: fn(fmin, 2), unit: 'ksi' });
+    df = chk(L, df, C.df, 'γ(Δf)', 'ksi', 'fatigue analysis'); fmin = chk(L, fmin, C.fmin, 'f_{min}', 'ksi', 'fatigue analysis');
+    const TH = 26 - 22 * fmin / res.fy;
+    L.push({ lhs: '(ΔF)_{TH}', expr: '26 − 22f_{min}/f_{y}', sub: '26 − 22 × ' + fn(fmin, 2) + '/' + fn(res.fy, 0), res: fn(TH, 2), unit: 'ksi', ref: '5.5.3.2-1' });
+    L.push(ratioLine(df, TH, c.ratio, null, '\\f{γ(Δf)}{(ΔF)_{TH}}'));
+    return L;
+  }
+  function wsShear(res, c) {
+    const q = c.calc, L = [], fc = res.fc, fy = res.fy, eW = q.eWin / 12;
+    L.push({ note: 'Edge beam, x = ' + fn(q.x, 2) + ' ft' + (q.isCrit ? ', critical section at d_{v} from the support face (5.7.3.2)' : '') + '; width b_{v} = E_{edge} = ' + fn(q.bv, 1) + ' in.' });
+    const sgn = Math.abs(q.VuP) >= Math.abs(q.VuN) ? 1 : -1;
+    const g1 = fac(q.VDC1, 1.25, 0.9, sgn), g2 = fac(q.VDC2, 1.25, 0.9, sgn), g3 = fac(q.VDW, 1.5, 0.65, sgn), VLL = sgn > 0 ? q.VLLp : q.VLLn;
+    L.push({ lhs: 'V_{DC1}, V_{DC2}, V_{DW}', sub: 'per ft of width', res: fn(q.VDC1, 3) + ', ' + fn(q.VDC2, 3) + ', ' + fn(q.VDW, 3), unit: 'k/ft' });
+    L.push({ lhs: 'V_{LL+IM}', expr: '0.5(1 + IM)V_{veh} + frac·V_{lane}', sub: 'whole edge beam, influence-line analysis', res: fn(VLL, 2), unit: 'k', ref: 'DG 3.2.11' });
+    let Vu = Math.abs((g1 * q.VDC1 + g2 * q.VDC2 + g3 * q.VDW) * eW + 1.75 * VLL);
+    L.push({ lhs: 'V_{u}', expr: '(γ_{DC}V_{DC1} + γ_{DC}V_{DC2} + γ_{DW}V_{DW})E_{edge}/12 + 1.75V_{LL+IM}', sub: '(' + fn(g1, 2) + ng(q.VDC1) + ' + ' + fn(g2, 2) + ng(q.VDC2) + ' + ' + fn(g3, 2) + ng(q.VDW) + ')' + fn(eW, 3) + ' + 1.75' + ng(VLL), res: fn(Vu, 2), unit: 'k', ref: 'Table 3.4.1-1' });
+    Vu = chk(L, Vu, q.Vu, 'V_{u}', 'k', 'load combination');
+    L.push({ lhs: '|M_{u}|', sub: 'concurrent envelope, whole edge beam, ' + q.face + ' bars in tension', res: fn(Math.abs(q.Mu), 1), unit: 'k-ft' });
+    const dv = Math.max(q.ds - q.a / 2, 0.9 * q.ds, 0.72 * res.h);
+    L.push({ lhs: 'd_{v}', expr: 'max(d_{s} − a/2, 0.9d_{s}, 0.72h)', sub: 'max(' + fn(q.ds - q.a / 2, 2) + ', ' + fn(0.9 * q.ds, 2) + ', ' + fn(0.72 * res.h, 2) + ')', res: fn(dv, 2), unit: 'in.', ref: '5.7.2.8' });
+    const MuU = Math.max(Math.abs(q.Mu) * 12, Vu * dv);
+    let es = (MuU / dv + Vu) / (ES * q.As); es = Math.max(-0.0004, Math.min(0.006, es));
+    L.push({ lhs: '1000ε_{s}', expr: '1000 × \\f{|M_{u}|/d_{v} + V_{u}}{E_{s}A_{s}}', sub: '1000 × \\f{' + fn(MuU, 0) + '/' + fn(dv, 2) + ' + ' + fn(Vu, 2) + '}{29000 × ' + fn(q.As, 3) + '}', res: fn(es * 1000, 4), ref: '5.7.3.4.2-4' });
+    L.push({ note: '|M_{u}| not less than V_{u}d_{v}; A_{s} = developed ' + q.face + ' bars over the edge beam width' + (q.partial ? ' (partly developed)' : '') });
+    let beta;
+    if (q.minTr) { beta = 4.8 / (1 + 750 * es); L.push({ lhs: 'β', expr: '\\f{4.8}{1 + 750ε_{s}}', sub: 'A_{v} ' + (q.hasAv && res.model && res.model.betaMode === 'dg' ? 'per DG 3.2.11' : '≥ A_{v,min} = ' + fn(q.AvMin, 3) + ' in.²'), res: fn(beta, 3), ref: '5.7.3.4.2-1' }); }
+    else { beta = 4.8 / (1 + 750 * es) * 51 / (39 + q.sxe); L.push({ lhs: 'β', expr: '\\f{4.8}{1 + 750ε_{s}} × \\f{51}{39 + s_{xe}}', sub: 's_{xe} = ' + fn(q.sxe, 2) + ' in.' + (q.hasAv ? ', A_{v} < A_{v,min} = ' + fn(q.AvMin, 3) + ' in.²' : ', no shear reinforcement'), res: fn(beta, 3), ref: '5.7.3.4.2-2' }); }
+    beta = chk(L, beta, q.beta, 'β', '', 'general procedure');
+    const th = 29 + 3500 * es; L.push({ lhs: 'θ', expr: '29 + 3500ε_{s}', res: fn(th, 2), unit: '°', ref: '5.7.3.4.2-3' });
+    const Vc = 0.0316 * beta * Math.sqrt(fc) * q.bv * dv;
+    L.push({ lhs: 'V_{c}', expr: "0.0316β√f′_{c}b_{v}d_{v}", sub: '0.0316 × ' + fn(beta, 3) + ' × √' + fn(fc, 2) + ' × ' + fn(q.bv, 1) + ' × ' + fn(dv, 2), res: fn(Vc, 2), unit: 'k', ref: '5.7.3.3-3' });
+    const md = res.model || {}, Av = (md.edgeShear || {}).Av, s = (md.edgeShear || {}).s;
+    const Vs = q.hasAv ? Av * fy * dv / Math.tan(th * Math.PI / 180) / s : 0;
+    if (q.hasAv) L.push({ lhs: 'V_{s}', expr: 'A_{v}f_{y}d_{v} cot θ/s', sub: fn(Av, 2) + ' × ' + fn(fy, 0) + ' × ' + fn(dv, 2) + ' × cot ' + fn(th, 2) + '°/' + fn(s, 1), res: fn(Vs, 2), unit: 'k', ref: '5.7.3.3-4' });
+    const Vn = Math.min(Vc + Vs, 0.25 * fc * q.bv * dv);
+    L.push({ lhs: 'V_{n}', expr: 'min(V_{c} + V_{s}, 0.25f′_{c}b_{v}d_{v})', res: fn(Vn, 2), unit: 'k', ref: '5.7.3.3' });
+    let phiVn = 0.9 * Vn; L.push({ lhs: 'φV_{n}', sub: '0.90 × ' + fn(Vn, 2), res: fn(phiVn, 2), unit: 'k', ref: '5.5.4.2' });
+    phiVn = chk(L, phiVn, c.cap, 'φV_{n}', 'k', 'general procedure');
+    L.push(ratioLine(Vu, phiVn, c.ratio, null, '\\f{V_{u}}{φV_{n}}'));
+    return L;
+  }
+  function wsLong(res, c) {
+    const q = c.calc, L = [], th = q.theta, cot = 1 / Math.tan(th * Math.PI / 180), VsL = Math.min(q.Vs, q.Vu / 0.9);
+    L.push({ note: 'Edge beam at x = ' + fn(q.x, 2) + ' ft; V_{u}, θ, d_{v} as in the shear worksheet' });
+    const T = Math.abs(q.Mu) * 12 / (q.dv * q.phiF) + Math.max(q.Vu / 0.9 - 0.5 * VsL, 0) * cot;
+    L.push({ lhs: 'T_{req}', expr: '\\f{|M_{u}|}{d_{v}φ_{f}} + (\\f{V_{u}}{φ_{v}} − 0.5V_{s}) cot θ', sub: '\\f{' + fn(Math.abs(q.Mu) * 12, 0) + '}{' + fn(q.dv, 2) + ' × ' + fn(q.phiF, 3) + '} + (\\f{' + fn(q.Vu, 2) + '}{0.90} − 0.5 × ' + fn(VsL, 2) + ') × ' + fn(cot, 3), res: fn(T, 1), unit: 'k', ref: '5.7.3.5-1' });
+    const Tr = chk(L, T, c.demand, 'T_{req}', 'k', 'analysis');
+    L.push({ lhs: 'A_{s}f_{y}', sub: fn(q.As, 3) + ' × ' + fn(res.fy, 0) + (q.partial ? ' (bars partly developed)' : ''), res: fn(q.Tprov, 1), unit: 'k' });
+    L.push(ratioLine(Tr, q.Tprov, c.ratio, null, '\\f{T_{req}}{A_{s}f_{y}}'));
+    return L;
+  }
+  function wsDist(res, c) {
+    const L = [], D = res.dist, it = D.items.find(i => c.what.startsWith(i.name));
+    if (!it) return wsGeneric(c);
+    if (!(it.prov > 0)) { L.push({ lhs: 'A_{s,req}', sub: 'β = ' + fn(it.beta, 3) + ' × ' + fn(it.AsLong, 3) + ', not less than A_{s,ST} = ' + fn(D.AsST, 3), res: fn(Math.max(it.req, D.AsST), 3), unit: 'in.²/ft', ref: 'ABD 15.8, 5.10.6' }); L.push({ lhs: 'A_{s,prov}', sub: 'not entered', res: '0', unit: 'in.²/ft' }); L.push(ratioLine(Math.max(it.req, D.AsST), 0, Infinity)); return L; }
+    if (it.parts) {
+      const P = it.parts;
+      L.push({ lhs: 'β', expr: (it.mult !== 1 ? fn(it.mult, 1) + '(' : '') + 'base + skew + length + width' + (it.mult !== 1 ? ')' : '') + ' ≤ ' + fn(it.max, 2), sub: (it.mult !== 1 ? fn(it.mult, 1) + '(' : '') + fn(P.base, 3) + ' + ' + fn(P.skew, 3) + ' + ' + fn(P.length, 3) + ' + ' + fn(P.width, 3) + (it.mult !== 1 ? ')' : ''), res: fn(it.beta, 3), ref: 'ABD 15.8' });
+      L.push({ note: 'L = ' + fn(D.span, 2) + ' ft (longest span), θ = ' + fn(res.skew, 1) + '°, width term with W − 24 = ' + fn(Math.max(res.W - 24, 0), 2) + ' ft' });
+    } else L.push({ lhs: 'β', sub: 'fixed ratio', res: fn(it.beta, 3), ref: 'ABD 15.8' });
+    L.push({ lhs: 'A_{s,req}', expr: 'β × ' + it.base.replace('(', '_{(').replace(')', ')}'), sub: fn(it.beta, 3) + ' × ' + fn(it.AsLong, 3), res: fn(it.req, 3), unit: 'in.²/ft' });
+    L.push({ lhs: 'A_{s,ST}', expr: '\\f{1.30bh}{2(b + h)f_{y}}, 0.11 ≤ A_{s} ≤ 0.60', res: fn(D.AsST, 3), unit: 'in.²/ft', ref: '5.10.6-1' });
+    const req = Math.max(it.req, D.AsST);
+    L.push({ lhs: 'A_{s,prov}', sub: it.provTxt || '—', res: fn(it.prov, 3), unit: 'in.²/ft' });
+    L.push(ratioLine(req, it.prov, c.ratio, null, '\\f{max(A_{s,req}, A_{s,ST})}{A_{s,prov}}'));
+    return L;
+  }
+  function wsGeneric(c) { const L = [{ lhs: c.what, sub: c.note || '', res: sg(c.demand) + ' / ' + sg(c.cap), unit: c.unit }]; L.push(ratioLine(c.demand, c.cap, c.ratio)); return L; }
+  function worksheet(res, c) {
+    if (!c) return null;
+    try {
+      switch (c.id) {
+        case 'flex': return wsFlex(res, c);
+        case 'minr': return wsMinr(res, c);
+        case 'crack': return wsCrack(res, c);
+        case 'fss': return wsFss(res, c);
+        case 'fatigue': return wsFatigue(res, c);
+        case 'shear': return wsShear(res, c);
+        case 'long': return wsLong(res, c);
+        case 'dist': return wsDist(res, c);
+        default: return wsGeneric(c);
+      }
+    } catch (e) { return [{ note: 'Worksheet not available: ' + e.message }].concat(wsGeneric(c)); }
+  }
+  function wsRating(res, row, key) {
+    const L = [], r = res.rating, inv = key === 'inv', g = inv ? 1.75 : 1.35, shear = /shear/.test(row.lim), u = shear ? 'k' : 'k-ft/ft';
+    if (row.noSteel) L.push({ note: 'No developed ' + (row.sign === 'N' ? 'top' : 'bottom') + ' reinforcement at this section: resistance taken as zero' });
+    if (row.dir) L.push({ note: 'Shear direction ' + (row.dir > 0 ? 'positive' : 'negative') + '; both directions are rated' });
+    L.push({ lhs: 'C', expr: shear ? 'φ_{c}φR_{n}' : 'φ_{c}φ_{s}φR_{n}', sub: shear ? 'φ_{c} = ' + fn(Math.max(r.phiC, 0.85), 2) + ' (φ_{s} = 1.0 for shear)' : 'φ_{c}φ_{s} = ' + fn(r.phiCS, 2) + ' (≥ 0.85)', res: sg(row.cap), unit: u, ref: 'MBE 6A.4.2.1' });
+    L.push({ lhs: 'γ_{DC}DC + γ_{DW}DW', sub: 'γ_{DC} 1.25 (0.90 where it relieves), γ_{DW} ' + fn(r.gDW, 2), res: sg(row.dead), unit: u });
+    L.push({ lhs: 'LL + IM', sub: row.strip === 'int' ? 'interior strip' : 'edge beam', res: sg(row.ll), unit: u });
+    const v = (row.cap - row.dead) / (g * row.ll);
+    L.push({ lhs: inv ? 'RF_{inv}' : 'RF_{op}', expr: '\\f{C − γ_{DC}DC − γ_{DW}DW}{γ_{LL}(LL + IM)}', sub: '\\f{' + sg(row.cap) + ' − ' + ng(row.dead) + '}{' + fn(g, 2) + ' × ' + sg(row.ll) + '}', res: frf(v, row.na), ref: 'MBE 6A.4.2.1-1', color: v < 1 - 1e-9 ? RED : null });
+    return L;
+  }
+
+  // ---------- figures ----------
+  function elevation(F, res, model, gov) {
+    const Lt = res.Ltot;
+    F.box(128, (d, x0, y0, w) => {
+      const X = v => x0 + 12 + (w - 24) * v / Lt, yT = y0 + 44, hh = 16, yB = yT + hh;
+      d.rect(X(0), yT, X(Lt) - X(0), hh, { fill: [0.86, 0.87, 0.86], stroke: [0.45, 0.47, 0.5], w: 0.5 });
+      // bars: top zones above, bottom zones below the slab outline, each zone on its own track
+      const zl = (zs, y0b, dir, col) => zs.forEach((z, i) => { const y = y0b + dir * (2.2 + (i % 3) * 2.4); d.line(X(+z.from), y, X(+z.to), y, { w: 1.1, color: col }); });
+      zl((model.reinf || {}).top || [], yT, 1, [0.70, 0.33, 0.16]); zl((model.reinf || {}).bot || [], yB, -1, [0.15, 0.34, 0.64]);
+      res.supX.forEach((s, k) => { const xx = X(s); d.poly([[xx, yB], [xx - 5, yB + 9], [xx + 5, yB + 9]], { fill: [0.3, 0.32, 0.35], close: true }); d.text(xx - 3, yB + 19, k === 0 || k === res.supX.length - 1 ? 'A' + (k ? 2 : 1) : 'P' + k, { size: 6.5, color: [0.35, 0.38, 0.4] }); });
+      for (let k = 0; k < res.spans.length; k++) { const a = res.supX[k], b = res.supX[k + 1], t = fx(b - a, 2) + ' ft'; d.line(X(a), yB + 26, X(b), yB + 26, { w: 0.4, color: [0.5, 0.52, 0.55] }); [a, b].forEach(v => d.line(X(v), yB + 23, X(v), yB + 29, { w: 0.4, color: [0.5, 0.52, 0.55] })); d.text((X(a) + X(b)) / 2 - W.textWidth(t, 'R', 7) / 2, yB + 36, t, { size: 7, color: [0.25, 0.27, 0.3] }); }
+      const grp = []; gov.forEach(g => { if (!g || g.x == null) return; const o = grp.find(q => Math.abs(X(q.x) - X(g.x)) < 7); if (o) o.tag += ' ' + g.tag; else grp.push({ x: g.x, tag: g.tag }); });
+      grp.forEach((g, k) => { const xx = X(g.x); d.line(xx, yT - 1, xx, yT - 14 - (k % 3) * 8, { w: 0.5, color: F.pal.accent }); d.circle(xx, yT - 1, 1.6, { fill: F.pal.accent }); d.text(xx + 2, yT - 15 - (k % 3) * 8, g.tag, { font: 'B', size: 6.5, color: F.pal.accent }); });
+      d.text(x0 + 12, y0 + 120, 'Elevation (not to scale vertically): top bar zones in brown, bottom bar zones in blue; markers at the governing locations.', { size: 6.8, color: F.pal.mute });
+    });
+  }
+  function crossSection(F, res, model) {
+    const Win = res.W * 12, h = res.h, par = Object.assign({ n: 2, base: 19 }, model.parapet || {}), st = res.strip;
+    const sc = Math.min(470 / Win, 2.2), parH = 34;
+    F.box(h * sc * 2.2 + parH * sc + 76, (d, x0, y0, w) => {
+      const cx = x0 + w / 2, X = u => cx + (u - Win / 2) * sc, ys = y0 + 30 + parH * sc, Y = v => ys + (h - v) * sc * 2.2;
+      const ink = [0.25, 0.27, 0.3];
+      d.rect(X(0), Y(h), Win * sc, h * sc * 2.2, { fill: [0.82, 0.83, 0.82], stroke: ink, w: 0.5 });
+      if (par.n > 0) [0, Win - par.base].forEach((u, i) => { if (i < par.n) d.rect(X(u), Y(h) - parH * sc, par.base * sc, parH * sc, { fill: [0.90, 0.91, 0.90], stroke: ink, w: 0.4 }); });
+      // edge beam and interior strip widths
+      const yd = Y(0) + 10;
+      d.rect(X(0), Y(h), st.Eedge * sc, h * sc * 2.2, { fill: [0.70, 0.78, 0.86] });
+      d.rect(X(0), Y(h), Win * sc, h * sc * 2.2, { stroke: ink, w: 0.5 });
+      const dim = (a, b, y, t) => { d.line(X(a), y, X(b), y, { w: 0.4, color: ink }); [a, b].forEach(v => d.line(X(v), y - 3, X(v), y + 3, { w: 0.4, color: ink })); d.text((X(a) + X(b)) / 2 - W.textWidth(t, 'R', 6.8) / 2, y + 9, t, { size: 6.8, color: ink }); };
+      dim(0, st.Eedge, yd, 'edge beam ' + fn(st.Eedge, 1) + ' in.');
+      dim(0, Win, yd + 18, 'W = ' + fn(res.W, 2) + ' ft out to out, h = ' + fn(h, 2) + ' in.');
+      const Ei = Math.min(res.NL > 1 ? st.Em : st.Es1, Win), mid = Win / 2;
+      d.rect(X(mid - Ei / 2), Y(h) - 4, Ei * sc, 2.5, { fill: F.pal.accent });
+      const t = 'interior strip E = ' + fn(Ei, 1) + ' in. per lane'; d.text(X(mid) - W.textWidth(t, 'B', 6.8) / 2, Y(h) - 7, t, { font: 'B', size: 6.8, color: F.pal.accent });
+      d.text(x0, y0 + 10, 'Cross section (thickness exaggerated ×2.2); shaded: edge beam', { font: 'B', size: 8, color: F.pal.ink });
+    });
+  }
+
+  // ---------- report ----------
+  async function build(model, res, opts) {
+    const mode = opts.mode || 'summary', meta = opts.meta || {};
+    res.model = model;
+    const edName = 'AASHTO LRFD 10th Edition (2024) / IDOT DG 3.2.11, ABD 15.8 / MBE LRFR';
+    const inputId = hash(JSON.stringify(Object.assign({}, model, { report: undefined })));
+    const now = new Date(), stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const titleTxt = mode === 'summary' ? 'Calculation summary' : mode === 'all' ? 'Comprehensive calculation — all analysis points' : 'Comprehensive calculation — tenth points and governing locations';
+    const structure = meta.structure || '(structure number)';
+    const F = new W.Flow({
+      info: { title: 'Concrete slab bridge ' + titleTxt.toLowerCase() + ' — ' + structure, subject: edName, creator: 'Bridge SE Concrete Slab Bridge Check ' + (opts.appVersion || '') },
+      header: (d, i, n, m) => { if (i === 1) return; d.text(m.l, 34, 'Concrete Slab Bridge Check · ' + structure, { font: 'B', size: 8, color: F.pal.ink }); d.text(d.W - m.r - W.textWidth(titleTxt, 'R', 8), 34, titleTxt, { size: 8, color: F.pal.mute }); d.line(m.l, 40, d.W - m.r, 40, { w: 0.4, color: F.pal.rule }); },
+      footer: (d, i, n, m) => { const y = d.H - 30; d.line(m.l, y - 9, d.W - m.r, y - 9, { w: 0.4, color: F.pal.rule }); d.text(m.l, y, 'Bridge SE Concrete Slab Bridge Check ' + (opts.appVersion || '') + ' · ' + edName, { size: 6.6, color: F.pal.mute }); d.text(m.l, y + 8.5, 'Generated ' + stamp + ' · input ID ' + inputId, { size: 6.6, color: F.pal.mute }); const s = 'Designed by ' + (meta.designedBy || '______') + '    Checked by ______'; d.text(d.W - m.r - W.textWidth(s, 'R', 6.8), y, s, { size: 6.8, color: F.pal.mute }); const t = 'Sheet ' + i + ' of ' + n; d.text(d.W - m.r - W.textWidth(t, 'B', 6.8), y + 8.5, t, { font: 'B', size: 6.8, color: F.pal.ink }); },
+    });
+    // ---- title block
+    F.doc.text(F.m.l, 50, 'CONCRETE SLAB BRIDGE CHECK', { font: 'B', size: 9, color: F.pal.accent });
+    F.y = 58; F.doc.text(F.m.l, F.y + 18, titleTxt, { font: 'B', size: 17, color: F.pal.ink }); F.y += 30;
+    F.doc.text(F.m.l, F.y + 9, edName, { size: 9, color: F.pal.mute }); F.y += 18;
+    const slabDef = 'Reinforced concrete slab, ' + res.spans.length + ' span' + (res.spans.length > 1 ? 's, ' + (res.cont ? 'continuous' : 'simple') : '');
+    const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Superstructure', slabDef]];
+    F.box(4 * 20 + 46, (d, x0, y0, w) => {
+      const rowH = 20, lw = 120;
+      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); d.text(x0 + lw + 8, y + 13.5, String(r[1]), { font: 'B', size: 9.5, color: F.pal.ink }); });
+      const y = y0 + 4 * rowH + 6, half = w / 2 - 4;
+      [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
+        d.rect(x, y, half, 36, { stroke: F.pal.mute, w: 0.6 });
+        d.text(x + 6, y + 12, k, { size: 7.5, color: F.pal.mute }); d.text(x + half - 92, y + 12, 'Date', { size: 7.5, color: F.pal.mute });
+        d.text(x + 6, y + 29, v, { font: 'B', size: 11, color: F.pal.ink }); d.text(x + half - 92, y + 29, dt, { size: 9.5, color: F.pal.ink });
+        if (!v) { d.line(x + 6, y + 31, x + half - 100, y + 31, { w: 0.4, color: F.pal.rule }); d.line(x + half - 92, y + 31, x + half - 8, y + 31, { w: 0.4, color: F.pal.rule }); }
+      });
+    });
+    F.space(10);
+
+    // ---- results
+    const C = res.checks;
+    if (C.some(c => c.ratio == null || Number.isNaN(c.ratio))) throw new Error('A check ratio is not a number; the report was not produced.');
+    const G = res.gov, nOver = C.filter(c => c.ratio > 1 + 1e-9).length, worstR = C.reduce((a, c) => Math.max(a, c.ratio), 0);
+    F.h2('Results');
+    F.para((nOver ? nOver + ' of ' + C.length + ' checks exceed 1.0' : 'All design checks satisfied') + '; highest ratio ' + (worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2)) + '.', { font: 'B', size: 10, color: nOver ? RED : GRN });
+    F.table([{ h: 'Check', w: 2.2 }, { h: 'Governing', w: 3 }, { h: 'x, ft', w: 0.7, a: 'r' }, { h: 'Demand', w: 1.1, a: 'r' }, { h: 'Capacity', w: 1.1, a: 'r' }, { h: 'Ratio', w: 0.8, a: 'r' }, { h: 'Article', w: 1.1 }],
+      G.map(g => [g.name, g.what, g.x != null ? fn(g.x, 2) : '—', sg(g.demand) + ' ' + g.unit, sg(g.cap) + ' ' + g.unit, { t: fr(g.ratio), f: 'B', color: rCol(g.ratio) }, g.art]));
+    const R = res.rating;
+    F.h3('HL-93 design load rating (MBE LRFR)');
+    F.table([{ h: 'Limit state', w: 3 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.8, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.8, a: 'r' }],
+      R.summary.map(q => [q.lim, { t: frf(q.inv.inv, q.inv.na), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), { t: frf(q.op.op, q.op.na), f: 'B', color: rfCol(q.op.op) }, fn(q.op.x, 2)]));
+    if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft); operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft). γDC 1.25, γDW ' + fn(R.gDW, 2) + ', γLL 1.75 / 1.35, φcφs ' + fn(R.phiCS, 2) + '. Interior strips are not rated for shear (5.12.2.1).', { size: 8.4 });
+    if (res.warn && res.warn.length) { F.h3('Warnings'); F.bullets(res.warn, { color: AMB }); }
+
+    // ---- description
+    F.h2('Slab description');
+    const ld = res.loads, st = res.strip, par = Object.assign({}, model.parapet);
+    const zTxt = zs => (zs || []).map(z => z.bar + ' @ ' + z.s + ' in. (' + fx(+z.from, 1) + '–' + fx(+z.to, 1) + ' ft)').join('; ');
+    F.kv([
+      ['Spans', res.spans.map(s => fx(s, 2)).join(' – ') + ' ft' + (res.spans.length > 1 ? (res.cont ? ', continuous' : ', simple spans') : '')],
+      ['Section', 'h = ' + fn(res.h, 2) + ' in., W = ' + fn(res.W, 2) + ' ft, roadway ' + fn(res.road, 2) + ' ft, skew ' + fn(res.skew, 1) + '°'],
+      ['Concrete', "f′c " + res.fc + ' ksi, Ec ' + fx(res.Ec, 0) + ' ksi, n ' + fn(res.n, 2)],
+      ['Reinforcement', 'fy ' + res.fy + ' ksi, ' + (model.rebar || 'A706') + ', ' + (model.coating || 'epoxy') + '; covers ' + model.coverBot + ' / ' + model.coverTop + ' in.'],
+      ['Bottom bars', zTxt(model.reinf.bot)],
+      ['Top bars', zTxt(model.reinf.top) || '—'],
+      ['Dead loads', 'DC1 ' + fn(ld.DC1, 4) + ', DC2 ' + fn(ld.DC2, 4) + ' (' + (par.n || 0) + ' parapets), DW ' + fn(ld.DW, 4) + ' ksf'],
+      ['Live load', 'HL-93, IM 33% on truck or tandem; fatigue truck IM 15%; NL ' + res.NL],
+      ['Strips', 'E ' + fn(st.Em, 1) + ' / ' + fn(st.Es1, 1) + ' in., r ' + fn(res.r, 3) + ', edge beam ' + fn(st.Eedge, 1) + ' in. (shortest span)'],
+      ['Edge beam shear', (model.edgeShear && model.edgeShear.Av > 0 ? 'Av ' + model.edgeShear.Av + ' in.² @ ' + model.edgeShear.s + ' in.' : 'no shear reinforcement') + '; general procedure'],
+      ['Development', 'ℓd by AASHTO LRFD ' + ({ 10: '10th (2024)', 9: '9th (2020)', 8: '8th (2017)' })[res.ed] + ', bars developed linearly from interior ends'],
+      ['Rating factors', 'φc ' + R.phiC + ', φs ' + R.phiS + ', γDW ' + R.gDW],
+    ], { cols: 2, kw: 78 });
+    const tagMap = [['flex', 'M'], ['crack', 'cr'], ['fatigue', 'f'], ['shear', 'V']];
+    elevation(F, res, model, tagMap.map(([id, t]) => { const g = G.find(q => q.id === id); return g && g.x != null ? { tag: t, x: g.x } : null; }));
+    F.para('Markers: M flexure, cr crack control, f fatigue, V edge beam shear.', { size: 7.5, color: F.pal.mute });
+    crossSection(F, res, model);
+
+    // ---- controlling checks
+    F.h2('Controlling checks');
+    F.para('Each worksheet shows the governing location of its check: the code equation, the values substituted and the result, per foot of width unless noted. Each value is recomputed from the numbers shown and compared with the analysis; where an intermediate step is not reproduced, the analysis value is shown with its basis. Units: kips, inches, ksi.', { size: 8.2, color: F.pal.mute });
+    const ws = c => { F.need(150); F.h3(c.name + ' — ' + c.what + (c.x != null ? ', x = ' + fn(c.x, 2) + ' ft' : '')); if (c.note) F.para(c.note + '.', { size: 8.2, color: F.pal.mute }); F.math(plain(worksheet(res, c))); };
+    const main = ['flex', 'crack', 'fss', 'fatigue', 'shear'];
+    (mode === 'summary' ? G.filter(g => main.includes(g.id) || g.ratio > 0.9) : G).forEach(ws);
+    F.need(120); F.h3('Governing load rating');
+    const ratL = [];
+    if (R.inventory) { ratL.push({ note: 'Inventory: ' + R.inventory.lim + ' at x = ' + fn(R.inventory.x, 2) + ' ft' }); ratL.push(...wsRating(res, R.inventory, 'inv')); }
+    if (R.operating) { ratL.push({ note: 'Operating: ' + R.operating.lim + ' at x = ' + fn(R.operating.x, 2) + ' ft' }); ratL.push(...wsRating(res, R.operating, 'op')); }
+    F.math(plain(ratL));
+
+    if (mode === 'summary') { F.h2('Basis and limitations'); F.bullets((opts.methodNotes || []).slice(0, 40), { size: 7.6 }); return F.finish(); }
+
+    // ================= comprehensive =================
+    F.newPage();
+    F.h1('Input');
+    const flat = [];
+    const walk = (o, pre) => Object.keys(o || {}).forEach(k => { const v = o[k]; if (k === 'report') return; if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, pre + k + '.'); else if (!Array.isArray(v) || v.every(x => typeof x !== 'object')) flat.push([pre + k, Array.isArray(v) ? v.join(', ') : String(v)]); });
+    walk(model, '');
+    F.kv(flat, { cols: 3, size: 7.4, kw: 80 });
+    ['bot', 'top'].forEach(face => { const zs = model.reinf[face] || []; if (!zs.length) return; F.h3((face === 'bot' ? 'Bottom' : 'Top') + ' longitudinal reinforcement zones'); F.table([{ h: 'Bar', w: 0.8 }, { h: 'Spacing, in.', w: 1, a: 'r' }, { h: 'From, ft', w: 1, a: 'r' }, { h: 'To, ft', w: 1, a: 'r' }, { h: 'As, in.²/ft', w: 1, a: 'r' }], zs.map(z => [z.bar, fn(+z.s, 1), fn(+z.from, 2), fn(+z.to, 2), fn(12 / z.s * ((root.SlabCheck || require('../slab/slabcheck.js')).BARS[z.bar] || {}).Ab, 3)]), { size: 7.4 }); });
+    F.h3('Development lengths used for bar ends');
+    F.table([{ h: 'Bar and face', w: 1.5 }, { h: 'ℓd, in.', w: 1, a: 'r' }], res.ld.map(q => [q.key.replace(/(bot|top)$/, ' $1'), fn(q.ld, 1)]), { size: 7.4 });
+
+    F.h1('Live load distribution');
+    const spU = [...new Set(res.spans)];
+    F.table([{ h: 'Span L, ft', w: 0.9, a: 'r' }, { h: 'L1, ft', w: 0.8, a: 'r' }, { h: 'E multi, in.', w: 1, a: 'r' }, { h: 'E single, in.', w: 1, a: 'r' }, { h: 'g multi', w: 0.9, a: 'r' }, { h: 'g single', w: 0.9, a: 'r' }, { h: 'g fatigue', w: 0.9, a: 'r' }, { h: 'E edge, in.', w: 0.9, a: 'r' }, { h: 'lane fraction', w: 0.9, a: 'r' }],
+      res.pts.map(p => p.strip).filter((s, i, a) => a.findIndex(o => Math.abs(o.L1 - s.L1) < 1e-9) === i).map(s => [fn(s.L1, 2), fn(s.L1, 2), fn(s.Em, 2), fn(s.Es1, 2), fn(s.gM, 4), fn(s.gS, 4), fn(s.gF, 4), fn(s.Eedge, 2), fn(s.frac, 3)]), { size: 7.4 });
+    F.para('Skew factor r = ' + fn(res.r, 3) + ' (θ = ' + fn(res.skew, 1) + '°), applied to both strips; NL = ' + res.NL + '. At negative-moment points the strip uses the average of the adjacent spans (' + spU.map(s => fx(s, 2)).join(', ') + ' ft).', { size: 8, color: F.pal.mute });
+
+    const govX = G.filter(g => g.x != null).map(g => g.x); R.summary.forEach(q => { govX.push(q.inv.x, q.op.x); });
+    const isGov = x => govX.some(g => Math.abs(g - x) < 1e-6);
+    const isTenth = x => { for (let k = 0; k < res.spans.length; k++) { const a = res.supX[k], L = res.spans[k], f = (x - a) / L; if (f >= -1e-9 && f <= 1 + 1e-9 && Math.abs(f * 10 - Math.round(f * 10)) < 1e-6) return true; } return false; };
+    const keep = x => mode === 'all' || isTenth(x) || isGov(x);
+    const pts = res.pts.filter(p => keep(p.x));
+    F.h1('Load effects' + (mode === 'all' ? '' : ' — tenth points and governing locations'));
+    F.para('Per ft of width, k-ft/ft. LL+IM includes impact on the vehicle and the strip distribution; Mu is Strength I.', { size: 8, color: F.pal.mute });
+    F.table([{ h: 'Point', w: 0.7 }, { h: 'x, ft', w: 0.7, a: 'r' }, { h: 'DC1', w: 0.7, a: 'r' }, { h: 'DC2', w: 0.6, a: 'r' }, { h: 'DW', w: 0.6, a: 'r' }, { h: 'LL+ int', w: 0.8, a: 'r' }, { h: 'LL− int', w: 0.8, a: 'r' }, { h: 'LL+ edge', w: 0.8, a: 'r' }, { h: 'LL− edge', w: 0.8, a: 'r' }, { h: 'FL+ / FL−', w: 1.1, a: 'r' }, { h: 'Mu+ int / edge', w: 1.3, a: 'r' }, { h: 'Mu− int / edge', w: 1.3, a: 'r' }, { h: 'Notes', w: 1.4 }],
+      pts.map(p => [p.label, fn(p.x, 2), fn(p.MDC1, 2), fn(p.MDC2, 2), fn(p.MDW, 2), fn(p.LLp.int, 2), fn(p.LLn.int, 2), fn(p.LLp.edge, 2), fn(p.LLn.edge, 2), fn(p.FLp, 2) + ' / ' + fn(p.FLn, 2), fn(p.MuP_int, 1) + ' / ' + fn(p.MuP_edge, 1), fn(p.MuN_int, 1) + ' / ' + fn(p.MuN_edge, 1), p.tags.join(', ') + (p.dualI || p.dualE ? (p.tags.length ? '; ' : '') + 'dual truck' : '')]), { size: 6.6, hl: k => isGov(pts[k].x) });
+
+    F.h1('Flexure, service and fatigue');
+    const mx = (p, id) => { const cs = p.ck.filter(q => q.id === id); return cs.length ? cs.reduce((a, b) => (b.ratio > a.ratio ? b : a)) : null; };
+    const rc = c => (c ? { t: fn(c.ratio, 3), color: rCol(c.ratio) } : '—');
+    F.table([{ h: 'Point', w: 0.7 }, { h: 'x, ft', w: 0.7, a: 'r' }, { h: 'As bot / top', w: 1.1, a: 'r' }, { h: 'ds bot / top', w: 1.1, a: 'r' }, { h: 'φMn+', w: 0.8, a: 'r' }, { h: 'φMn−', w: 0.8, a: 'r' }, { h: 'Flexure', w: 0.8, a: 'r' }, { h: 'Min. reinf.', w: 0.8, a: 'r' }, { h: 'fss max, ksi', w: 0.9, a: 'r' }, { h: 'Crack', w: 0.8, a: 'r' }, { h: 'fss / 0.6fy', w: 0.8, a: 'r' }, { h: 'γΔf / ΔFTH', w: 1.1, a: 'r' }, { h: 'Fatigue', w: 0.8, a: 'r' }],
+      pts.map(p => { const fs = mx(p, 'fss'), fa = mx(p, 'fatigue'); return [p.label, fn(p.x, 2), fn(p.bot.As, 2) + ' / ' + fn(p.top.As, 2), fn(p.bot.ds, 2) + ' / ' + (p.top.As > 0 ? fn(p.top.ds, 2) : '—'), fn(p.flexP.Mr, 1), fn(p.flexN.Mr, 1), rc(mx(p, 'flex')), rc(mx(p, 'minr')), fs ? fn(fs.demand, 2) : '—', rc(mx(p, 'crack')), rc(fs), fa ? fn(fa.demand, 2) + ' / ' + fn(fa.cap, 2) : '—', rc(fa)]; }), { size: 6.6, hl: k => isGov(pts[k].x) });
+
+    if (res.shear.length) {
+      const sh = res.shear.filter(q => mode === 'all' || q.isCrit || isTenth(q.x) || isGov(q.x));
+      F.h1('Edge beam shear');
+      F.table([{ h: 'x, ft', w: 0.7, a: 'r' }, { h: 'Vu, k', w: 0.8, a: 'r' }, { h: '|Mu|, k-ft', w: 0.9, a: 'r' }, { h: 'dv, in.', w: 0.7, a: 'r' }, { h: 'εs × 1000', w: 0.8, a: 'r' }, { h: 'β', w: 0.6, a: 'r' }, { h: 'θ, °', w: 0.6, a: 'r' }, { h: 'Vc, k', w: 0.8, a: 'r' }, { h: 'Vs, k', w: 0.8, a: 'r' }, { h: 'φVn, k', w: 0.8, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'T req / prov, k', w: 1.2, a: 'r' }, { h: 'Long. ratio', w: 0.8, a: 'r' }],
+        sh.map(q => [fn(q.x, 2) + (q.isCrit ? '*' : ''), fn(q.Vu, 1), fn(Math.abs(q.Mu), 1), fn(q.dv, 2), fn(q.es * 1000, 3), fn(q.beta, 3), fn(q.theta, 1), fn(q.Vc, 1), fn(q.Vs, 1), fn(q.phiV * q.Vn, 1), { t: fn(q.ratio, 3), color: rCol(q.ratio) }, fn(q.Treq, 0) + ' / ' + fn(q.Tprov, 0), { t: fn(q.Treq / q.Tprov, 3), color: rCol(q.Treq / q.Tprov) }]), { size: 6.6, hl: k => isGov(sh[k].x) });
+      F.para('* critical section at dv from the support face. Shear checked from the critical sections toward midspan.', { size: 7.6, color: F.pal.mute });
+    }
+    F.h1('Distribution and shrinkage-temperature reinforcement');
+    const D = res.dist;
+    F.table([{ h: 'Reinforcement', w: 1.4 }, { h: 'β', w: 0.7, a: 'r' }, { h: 'Base As', w: 1.2 }, { h: 'Required', w: 0.9, a: 'r' }, { h: 'Shrinkage-temp.', w: 1, a: 'r' }, { h: 'Provided', w: 1.4 }, { h: 'Ratio', w: 0.7, a: 'r' }],
+      D.items.map(it => { const req = Math.max(it.req, D.AsST), r = it.prov ? req / it.prov : null; return [it.name, fn(it.beta, 3), it.base + ' = ' + fn(it.AsLong, 2), fn(it.req, 3), fn(D.AsST, 3), it.provTxt ? it.provTxt + ' = ' + fn(it.prov, 3) : 'not entered', r == null ? '—' : { t: fn(r, 3), color: rCol(r) }]; }), { size: 7.2 });
+    F.para('Units in.²/ft. Maximum spacing for shrinkage and temperature reinforcement ' + fn(D.sMaxST, 1) + ' in.', { size: 7.6, color: F.pal.mute });
+
+    F.h1('Load rating by point');
+    const rows = R.rows.filter(r => keep(r.x) || isGov(r.x));
+    F.table([{ h: 'Limit state', w: 2.6 }, { h: 'x, ft', w: 0.7, a: 'r' }, { h: 'Capacity', w: 0.9, a: 'r' }, { h: 'Factored dead', w: 1, a: 'r' }, { h: 'LL+IM', w: 0.9, a: 'r' }, { h: 'RF inv.', w: 0.8, a: 'r' }, { h: 'RF op.', w: 0.8, a: 'r' }],
+      rows.map(r => [r.lim + (r.dir ? (r.dir > 0 ? ' (+V)' : ' (−V)') : '') + (r.noSteel ? ' — no developed reinforcement' : ''), fn(r.x, 2), sg(r.cap), sg(r.dead), sg(r.ll), { t: frf(r.inv, r.na), color: rfCol(r.inv) }, frf(r.op, r.na)]), { size: 6.8, hl: k => isGov(rows[k].x) });
+    F.para('Flexure per ft of width (k-ft/ft); shear for the whole edge beam (k).', { size: 7.6, color: F.pal.mute });
+
+    F.h1('Basis and limitations');
+    F.bullets((opts.methodNotes || []).concat((res.notes || []).filter((v, i, a) => a.indexOf(v) === i)), { size: 7.6 });
+    F.h3('Input record');
+    F.para('Input ID ' + inputId + '. The complete input below reproduces this calculation when loaded with Load input.', { size: 7.8, color: F.pal.mute });
+    const js = JSON.stringify(Object.assign({}, model, { report: undefined }));
+    for (let i = 0; i < js.length; i += 118) { F.need(9); F.doc.text(F.m.l, F.y + 7, js.slice(i, i + 118), { font: 'M', size: 6.3, color: F.pal.ink }); F.y += 8.4; }
+    return F.finish();
+  }
+  const api = { build, worksheet, wsRating, _t: { wsFlex, wsMinr, wsCrack, wsFss, wsFatigue, wsShear, wsLong, wsDist } };
+  if (typeof module !== 'undefined') module.exports = api; else root.SlabReport = api;
+})(this);
+</script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const KEY = 'slabcheck-v1';
+const clone = o => JSON.parse(JSON.stringify(o));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const f = (v, d = 2) => (v == null || !isFinite(v) ? (v === Infinity ? '∞' : '—') : (+v).toFixed(d));
+const BARIDS = SlabCheck.BARS ? Object.keys(SlabCheck.BARS) : [];
+let model, R = null, Rmodel = null, Rkey = null, selX = null, timer = null, openGroups = new Set(['Geometry', 'Reinforcement']);
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.spans) model = s; } catch (e) { /* ignore */ }
+if (!model) model = clone(SLAB_EXAMPLES.dg.model);
+const keyOf = m => JSON.stringify(Object.assign({}, m, { report: undefined }));
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(model)); } catch (e) { /* ignore */ } };
+function getP(o, p) { return p.split('.').reduce((a, k) => (a == null ? a : a[k]), o); }
+function setP(o, p, v) { const ks = p.split('.'); let a = o; ks.slice(0, -1).forEach(k => { if (a[k] == null || typeof a[k] !== 'object') a[k] = {}; a = a[k]; }); a[ks[ks.length - 1]] = v; }
+function fld(label, path, o = {}) {
+  const v = getP(model, path);
+  if (o.options) return `<label class="f"><span>${label}</span><select data-p="${path}">${o.options.map(([val, t]) => `<option value="${val}"${String(v) === String(val) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+  return `<label class="f"><span>${label}</span><input class="n" data-p="${path}" ${o.text ? '' : 'type="number" step="' + (o.step || 'any') + '"'} value="${v == null ? '' : esc(v)}" placeholder="${o.ph || ''}"></label>`;
+}
+function zoneTable(face) {
+  const zs = model.reinf[face];
+  return `<table class="z"><thead><tr><th>Bar</th><th>Spacing, in.</th><th>From, ft</th><th>To, ft</th><th></th></tr></thead><tbody>${zs.map((z, i) => `<tr><td><select data-z="${face}.${i}.bar">${BARIDS.filter(b => b !== '#14' && b !== '#18').map(b => `<option${b === z.bar ? ' selected' : ''}>${b}</option>`).join('')}</select></td><td><input type="number" step="0.5" data-z="${face}.${i}.s" value="${z.s}"></td><td><input type="number" step="0.5" data-z="${face}.${i}.from" value="${z.from}"></td><td><input type="number" step="0.5" data-z="${face}.${i}.to" value="${z.to}"></td><td><button type="button" data-del="${face}.${i}" aria-label="Remove zone">×</button></td></tr>`).join('')}</tbody></table><button type="button" data-add="${face}" style="margin-top:6px">Add ${face === 'bot' ? 'bottom' : 'top'} zone</button>`;
+}
+function transRow(k, label) {
+  const t = (model.trans || {})[k] || {};
+  return `<label class="f"><span>${label} bar</span><select data-t="${k}.bar"><option value="">—</option>${BARIDS.filter(b => b !== '#14' && b !== '#18').map(b => `<option${b === t.bar ? ' selected' : ''}>${b}</option>`).join('')}</select></label><label class="f"><span>spacing, in.</span><input class="n" type="number" step="0.5" data-t="${k}.s" value="${t.s == null ? '' : t.s}"></label>`;
+}
+function renderRail() {
+  const g = (t, body) => `<details class="grp" ${openGroups.has(t) ? 'open' : ''} data-g="${t}"><summary>${t}</summary><div class="gbody">${body}</div></details>`;
+  const spansTxt = model.spans.join(', ');
+  $('#rail').innerHTML =
+    g('Geometry', `<label class="f"><span>Span lengths, ft (comma separated, CL to CL of supports)</span><input class="n" id="spans" value="${esc(spansTxt)}"></label>
+      <div class="fields">${fld('Slab thickness h, in.', 'h', { step: 0.5 })}${fld('Out-to-out width W, ft', 'width', { step: 0.5 })}${fld('Clear roadway, ft (blank: W − parapets)', 'roadway', { step: 0.5, ph: 'auto' })}${fld('Skew θ, deg', 'skew', { step: 1 })}
+      ${fld('Continuity', 'continuous', { options: [['true', 'Continuous'], ['false', 'Simple spans']] })}${fld('Design lanes NL (blank: auto)', 'NL', { step: 1, ph: 'auto' })}
+      ${fld('Abutment CL to face, ft', 'abutFace', { step: 0.25 })}${fld('Pier CL to face, ft', 'pierHalf', { step: 0.25 })}</div>
+      <p class="hint">Support faces set the critical sections for edge beam shear at d<sub>v</sub> from the face.</p>`) +
+    g('Materials', `<div class="fields">${fld("f′c, ksi", 'fc', { step: 0.5 })}${fld('fy, ksi', 'fy', { step: 5 })}${fld('wc for Ec, kcf', 'wc', { step: 0.005 })}${fld('Unit weight for DC, kcf', 'wDL', { step: 0.005 })}
+      ${fld('Reinforcement', 'rebar', { options: [['A706', 'A706 Grade 60 (γ3 = 0.75)'], ['A615', 'A615 Grade 60 (γ3 = 0.67)']] })}${fld('Bar coating', 'coating', { options: [['epoxy', 'Epoxy coated'], ['none', 'Uncoated'], ['galv', 'Galvanized']] })}
+      ${fld('Development length by', 'devEdition', { options: [['10', 'LRFD 10th (2024)'], ['9', 'LRFD 9th (2020)'], ['8', 'LRFD 8th (2017)']] })}${fld('Crack exposure γe', 'gammaE', { step: 0.05 })}</div>`) +
+    g('Loads', `<div class="fields">${fld('Parapets, number', 'parapet.n', { step: 1 })}${fld('Parapet weight, k/ft each', 'parapet.w', { step: 0.01 })}${fld('Parapet base width, in.', 'parapet.base', { step: 0.5 })}${fld('Future wearing surface, psf', 'fws', { step: 5 })}
+      ${fld('Added DC1, ksf', 'dc1x', { step: 0.005 })}${fld('Added DC2, ksf', 'dc2x', { step: 0.005 })}${fld('Added DW, ksf', 'dwx', { step: 0.005 })}${fld('90% dual truck', 'dualTruck', { options: [['contraflexure', 'Between contraflexure points'], ['off', 'Not applied']] })}</div>
+      <p class="hint">Parapet weight is spread over the out-to-out width as DC2 (DG 3.2.11). Live load per lane is HL-93 with IM 33% on the truck or tandem only.</p>`) +
+    g('Reinforcement', `<div class="fields">${fld('Bottom clear cover, in.', 'coverBot', { step: 0.25 })}${fld('Top clear cover, in.', 'coverTop', { step: 0.25 })}</div>
+      <h3>Bottom longitudinal</h3>${zoneTable('bot')}<h3>Top longitudinal</h3>${zoneTable('top')}
+      <p class="hint">Zones that overlap add. Bars ending inside the slab are developed linearly over ℓ<sub>d</sub>; bars at the slab ends are taken as anchored.</p>`) +
+    g('Edge beam and distribution', `<div class="fields">${fld('Edge beam Av, in.² (parapet bars)', 'edgeShear.Av', { step: 0.01 })}${fld('Edge beam s, in.', 'edgeShear.s', { step: 0.5 })}
+      ${transRow('botTrans', 'Bottom transverse')}${transRow('topTrans', 'Top transverse')}${model.continuous === false || model.spans.length < 2 ? transRow('topLong', 'Top longitudinal') : ''}</div>`) +
+    g('Rating factors', `<div class="fields">${fld('φc condition', 'rating.phiC', { step: 0.05 })}${fld('φs system', 'rating.phiS', { step: 0.05 })}${fld('γDW', 'rating.gDW', { step: 0.05 })}</div>`);
+  $('#rail').querySelectorAll('details.grp').forEach(d => d.addEventListener('toggle', () => { if (d.open) openGroups.add(d.dataset.g); else openGroups.delete(d.dataset.g); }));
+}
+$('#rail').addEventListener('input', e => {
+  const t = e.target;
+  if (t.id === 'spans') { const a = t.value.split(/[,\s]+/).filter(Boolean).map(Number); model.spans = a; }
+  else if (t.dataset.p) { const p = t.dataset.p; let v = t.value; if (t.tagName === 'SELECT') { v = v === 'true' ? true : v === 'false' ? false : v; } else v = v.trim() === '' ? null : +v; setP(model, p, v); }
+  else if (t.dataset.z) { const [face, i, k] = t.dataset.z.split('.'); model.reinf[face][+i][k] = k === 'bar' ? t.value : (t.value.trim() === '' ? null : Number(t.value)); }
+  else if (t.dataset.t) { const [k, q] = t.dataset.t.split('.'); model.trans = model.trans || {}; model.trans[k] = model.trans[k] || {}; model.trans[k][q] = q === 'bar' ? t.value : (t.value.trim() === '' ? null : Number(t.value)); if (q === 'bar' && !t.value) delete model.trans[k]; }
+  else return;
+  schedule();
+});
+$('#rail').addEventListener('change', e => { if (e.target.dataset.p === 'continuous') renderRail(); });
+$('#rail').addEventListener('click', e => {
+  const a = e.target.dataset.add, d = e.target.dataset.del;
+  if (a) { const zs = model.reinf[a]; const L = model.spans.reduce((s, v) => s + v, 0); zs.push(zs.length ? Object.assign({}, zs[zs.length - 1]) : { bar: '#9', s: 6, from: 0, to: L }); renderRail(); schedule(); }
+  if (d) { const [face, i] = d.split('.'); model.reinf[face].splice(+i, 1); renderRail(); schedule(); }
+});
+function schedule() { clearTimeout(timer); timer = setTimeout(runNow, 250); }
+function runNow() {
+  clearTimeout(timer); save();
+  try {
+    const snap = clone(model); delete snap.report;
+    R = SlabCheck.run(snap); Rmodel = snap; Rkey = keyOf(snap);
+    $('#errBox').hidden = true;
+  } catch (e) { R = null; Rmodel = null; Rkey = null; $('#errBox').hidden = false; $('#errBox').textContent = e.message; }
+  renderAll();
+}
+const rc = r => (r > 1 + 1e-9 ? 'r-bad' : r > 0.95 ? 'r-warn' : 'r-ok');
+const barHTML = r => `<span class="bar"><i style="width:${Math.min(100, (isFinite(r) ? r : 1) * 100)}%;background:var(${r > 1 + 1e-9 ? '--bad' : r > 0.95 ? '--warn' : '--ok'})"></i></span>`;
+function renderVerdict() {
+  const c = $('#c-verdict'); if (!R) { c.innerHTML = '<p class="hint">Results appear when the input runs.</p>'; return; }
+  const over = R.gov.filter(g => g.ratio > 1 + 1e-9), worst = R.gov.reduce((a, g) => Math.max(a, g.ratio), 0);
+  const st = R.strip;
+  c.innerHTML = `<div class="card-h"><h2>Design checks</h2><div class="verdict"><span class="pill ${over.length ? 'bad' : 'ok'}">${over.length ? over.length + ' of ' + R.gov.length + ' checks exceed 1.0' : 'All checks satisfied'}</span><span class="status">highest ratio ${worst === Infinity ? '∞' : f(worst, 3)}</span></div></div>
+  <div class="tiles" style="margin-bottom:12px"><div class="tile"><small>Interior strip, multi-lane</small><b class="n">${f(st.Em, 1)} in.</b><small>g = r/E = ${f(st.gM, 4)} lanes/ft · r = ${f(R.r, 3)}</small></div><div class="tile"><small>Single lane</small><b class="n">${f(st.Es1, 1)} in.</b><small>g = ${f(st.gS, 4)} · fatigue ${f(st.gF, 4)}</small></div><div class="tile"><small>Edge beam width</small><b class="n">${f(st.Eedge, 1)} in.</b><small>lane fraction ${f(st.frac, 3)}</small></div><div class="tile"><small>Modular ratio</small><b class="n">${f(R.n, 2)}</b><small>Ec = ${f(R.Ec, 0)} ksi · NL = ${R.NL}</small></div></div>
+  <div class="tw"><table class="t"><thead><tr><th>Check</th><th>Governing</th><th>Location</th><th class="n">Demand</th><th class="n">Capacity</th><th class="n">Ratio</th><th>Article</th></tr></thead><tbody>
+  ${R.gov.map(g => `<tr ${g.x != null ? 'data-x="' + g.x + '"' : ''}><td class="wr">${esc(g.name)}</td><td class="wr">${esc(g.what)}</td><td class="n">${g.x != null ? f(g.x, 2) + ' ft' : '—'}</td><td class="n">${f(g.demand)} ${esc(g.unit)}</td><td class="n">${f(g.cap)} ${esc(g.unit)}</td><td class="n ${rc(g.ratio)}">${g.ratio === Infinity ? '∞' : f(g.ratio, 3)}${barHTML(g.ratio)}</td><td>${esc(g.art)}</td></tr>`).join('')}</tbody></table></div>
+  ${R.warn.map(w => `<div class="warnbox" style="margin-top:8px">${esc(w)}</div>`).join('')}`;
+}
+function renderRating() {
+  const c = $('#c-rating'); if (!R) { c.innerHTML = ''; return; }
+  const RT = R.rating;
+  c.innerHTML = `<div class="card-h"><h2>HL-93 design load rating (MBE LRFR)</h2><span class="status">φc ${f(RT.phiC)} · φs ${f(RT.phiS)} (φcφs ≥ 0.85; φs = 1.0 for shear) · γDW ${f(RT.gDW)}</span></div>
+  <div class="tiles" style="margin-bottom:10px"><div class="tile"><small>Inventory</small><b class="n ${RT.inventory.inv < 1 ? 'r-bad' : ''}">${f(RT.inventory.inv)}</b><small>${esc(RT.inventory.lim)} at ${f(RT.inventory.x)} ft</small></div><div class="tile"><small>Operating</small><b class="n ${RT.operating.op < 1 ? 'r-bad' : ''}">${f(RT.operating.op)}</b><small>${esc(RT.operating.lim)} at ${f(RT.operating.x)} ft</small></div></div>
+  <div class="tw"><table class="t"><thead><tr><th>Limit state</th><th class="n">Inventory</th><th class="n">at x, ft</th><th class="n">Operating</th><th class="n">at x, ft</th></tr></thead><tbody>${RT.summary.map(s => `<tr data-x="${s.inv.x}"><td>${esc(s.lim)}</td><td class="n ${s.inv.inv < 1 ? 'r-bad' : ''}">${f(s.inv.inv)}</td><td class="n">${f(s.inv.x)}</td><td class="n">${f(s.op.op)}</td><td class="n">${f(s.op.x)}</td></tr>`).join('')}</tbody></table></div>
+  <p class="hint" style="margin-top:6px">Interior strips designed by the equivalent strip method are not rated for shear (5.12.2.1). RF = (φcφsφR<sub>n</sub> − γ<sub>DC</sub>DC − γ<sub>DW</sub>DW) / (γ<sub>LL</sub>(LL+IM)), γ<sub>LL</sub> 1.75 inventory, 1.35 operating.</p>`;
+}
+function renderChart() {
+  const c = $('#c-chart'); if (!R) { c.innerHTML = ''; return; }
+  const P = R.pts, L = R.Ltot, Wd = 820, H = 300, pl = 52, pr = 12, pt = 14, pb = 30;
+  const series = [
+    { k: 'mu+', name: 'Mu+ (governing strip)', col: 'var(--pos)', v: p => Math.max(p.MuP_int, p.MuP_edge, 0) },
+    { k: 'mu-', name: 'Mu− (governing strip)', col: 'var(--neg)', v: p => Math.min(p.MuN_int, p.MuN_edge, 0) },
+    { k: 'mr+', name: 'φMn+', col: 'var(--cap)', v: p => p.flexP.Mr, dash: '5 4' },
+    { k: 'mr-', name: '−φMn−', col: 'var(--cap)', v: p => -p.flexN.Mr, dash: '5 4' },
+    { k: 'dl', name: 'DC + DW', col: 'var(--dl)', v: p => p.Mperm },
+  ];
+  const all = P.flatMap(p => series.map(s => s.v(p))).filter(isFinite);
+  const yMax = Math.max(...all, 1), yMin = Math.min(...all, -1);
+  const X = x => pl + (Wd - pl - pr) * x / L, Y = v => pt + (H - pt - pb) * (yMax - v) / (yMax - yMin);
+  const step = (() => { const r = (yMax - yMin) / 6, p = Math.pow(10, Math.floor(Math.log10(r))); return [1, 2, 2.5, 5, 10].map(m => m * p).find(s => s >= r); })();
+  let svg = `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="Moment envelopes and resistance along the slab, k-ft per ft">`;
+  for (let v = Math.ceil(yMin / step) * step; v <= yMax + 1e-9; v += step) svg += `<line x1="${pl}" x2="${Wd - pr}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)"/><text x="${pl - 6}" y="${Y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">${+v.toFixed(1)}</text>`;
+  R.supX.forEach(s => { svg += `<line x1="${X(s)}" x2="${X(s)}" y1="${pt}" y2="${H - pb}" stroke="var(--line)" stroke-dasharray="2 3"/><text x="${X(s)}" y="${H - 10}" text-anchor="middle" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">${+s.toFixed(2)}</text>`; });
+  svg += `<line x1="${pl}" x2="${Wd - pr}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)"/>`;
+  series.forEach(s => { const d = P.map((p, i) => (i ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(s.v(p)).toFixed(1)).join(' '); svg += `<path d="${d}" fill="none" stroke="${s.col}" stroke-width="2" ${s.dash ? 'stroke-dasharray="' + s.dash + '"' : ''}/>`; });
+  if (selX != null) svg += `<line x1="${X(selX)}" x2="${X(selX)}" y1="${pt}" y2="${H - pb}" stroke="var(--accent)" stroke-width="1.5"/>`;
+  P.forEach(p => { svg += `<rect x="${X(p.x) - 4}" y="${pt}" width="8" height="${H - pt - pb}" fill="transparent" data-x="${p.x}" style="cursor:pointer"><title>x = ${f(p.x)} ft: Mu+ ${f(Math.max(p.MuP_int, p.MuP_edge, 0), 1)}, Mu− ${f(Math.min(p.MuN_int, p.MuN_edge, 0), 1)}, φMn+ ${f(p.flexP.Mr, 1)}, φMn− ${f(p.flexN.Mr, 1)} k-ft/ft</title></rect>`; });
+  svg += '</svg>';
+  c.innerHTML = `<div class="card-h"><h2>Moment envelopes and resistance</h2><span class="status">k-ft per ft of width · select a point</span></div><div class="legend">${series.map(s => `<span><i style="background:${s.col}"></i>${s.name}</span>`).join('')}</div><div class="chart">${svg}</div>`;
+}
+function renderPoints() {
+  const c = $('#c-points'); if (!R) { c.innerHTML = ''; return; }
+  const mx = (p, id) => { const cs = p.ck.filter(q => q.id === id); return cs.length ? Math.max(...cs.map(q => q.ratio)) : null; };
+  const td = v => (v == null ? '<td class="n">—</td>' : `<td class="n ${rc(v)}">${v === Infinity ? '∞' : f(v, 3)}</td>`);
+  c.innerHTML = `<div class="card-h"><h2>Results by point</h2><span class="status">ratios; per ft of width</span></div><div class="tw" style="max-height:420px;overflow:auto"><table class="t"><thead><tr><th>Point</th><th class="n">x, ft</th><th class="n">As bot / top</th><th class="n">Mu+</th><th class="n">Mu−</th><th class="n">φMn+ / φMn−</th><th class="n">Flexure</th><th class="n">Crack</th><th class="n">fss</th><th class="n">Fatigue</th><th>Notes</th></tr></thead><tbody>
+  ${R.pts.map(p => `<tr data-x="${p.x}" class="${selX != null && Math.abs(selX - p.x) < 1e-6 ? 'sel' : ''}"><td>${esc(p.label)}</td><td class="n">${f(p.x)}</td><td class="n">${f(p.bot.As)} / ${f(p.top.As)}</td><td class="n">${f(Math.max(p.MuP_int, p.MuP_edge, 0), 1)}</td><td class="n">${f(Math.min(p.MuN_int, p.MuN_edge, 0), 1)}</td><td class="n">${f(p.flexP.Mr, 1)} / ${f(p.flexN.Mr, 1)}</td>${td(mx(p, 'flex'))}${td(mx(p, 'crack'))}${td(mx(p, 'fss'))}${td(mx(p, 'fatigue'))}<td>${esc(p.tags.join(', '))}</td></tr>`).join('')}</tbody></table></div>`;
+}
+function mathHTML(s) {
+  if (s == null) return ''; let out = '', i = 0; s = String(s);
+  const grab = () => { let d = 0, j = i; for (; j < s.length; j++) { if (s[j] === '{') d++; else if (s[j] === '}') { d--; if (d === 0) break; } } const t = s.slice(i + 1, j); i = j + 1; return t; };
+  while (i < s.length) { if (s.startsWith('\\f{', i)) { i += 2; const a = grab(), b = grab(); out += '<span class="frac"><span>' + mathHTML(a) + '</span><span>' + mathHTML(b) + '</span></span>'; continue; } if ((s[i] === '_' || s[i] === '^') && s[i + 1] === '{') { const t = s[i] === '_' ? 'sub' : 'sup'; i++; out += '<' + t + '>' + mathHTML(grab()) + '</' + t + '>'; continue; } out += esc(s[i]); i++; }
+  return out;
+}
+function renderWS() {
+  const c = $('#c-ws'); if (!R) { c.innerHTML = ''; return; }
+  const x = selX != null ? selX : (R.gov[0] && R.gov[0].x != null ? R.gov[0].x : R.pts[0].x);
+  const p = R.pts.find(q => Math.abs(q.x - x) < 1e-6), sq = R.shear.find(q => Math.abs(q.x - x) < 1e-6);
+  const blocks = [];
+  if (p) p.ck.filter(q => ['flex', 'crack', 'fatigue'].includes(q.id)).forEach(q => { const w = SlabReport.worksheet(R, q); if (w) blocks.push([q.what + ' — ' + q.lim, w]); });
+  if (sq) { const q = R.checks.find(k => k.id === 'shear' && Math.abs(k.x - x) < 1e-6); const w = q && SlabReport.worksheet(R, q); if (w) blocks.push([q.what, w]); }
+  c.innerHTML = `<div class="card-h"><h2>Worksheets at x = ${f(x)} ft</h2><span class="status">select a point in the table or chart</span></div>` + (blocks.length ? blocks.map(([t, L]) => `<h3 style="margin:12px 0 4px">${esc(t)}</h3><div class="ws">${L.map(l => l.note ? `<div class="note">${mathHTML(l.note)}</div>` : `<div class="row"><div class="eq"><b>${mathHTML(l.lhs)}</b> = ${l.expr ? mathHTML(l.expr) + ' ' : ''}${l.sub ? '= ' + mathHTML(l.sub) + ' ' : ''}= <b>${esc(l.res)}${l.unit ? ' ' + esc(l.unit) : ''}</b></div><div class="ref">${esc(l.ref || '')}</div></div>`).join('')}</div>`).join('') : '<p class="hint">No checks at this point.</p>');
+}
+function renderDist() {
+  const c = $('#c-dist'); if (!R) { c.innerHTML = ''; return; }
+  const D = R.dist;
+  c.innerHTML = `<div class="card-h"><h2>Distribution and shrinkage-temperature reinforcement</h2><span class="status">ABD 15.8, 5.10.6 · span L = ${f(D.span, 1)} ft</span></div><div class="tw"><table class="t"><thead><tr><th>Reinforcement</th><th class="n">β base</th><th class="n">skew</th><th class="n">length</th><th class="n">width</th><th class="n">β total</th><th>× As</th><th class="n">Required, in.²/ft</th><th>Provided</th><th class="n">Ratio</th></tr></thead><tbody>
+  ${D.items.map(it => { const req = Math.max(it.req, D.AsST), r = it.prov ? req / it.prov : null; return `<tr><td>${esc(it.name)}</td><td class="n">${it.parts ? f(it.parts.base, 3) : '—'}</td><td class="n">${it.parts ? f(it.parts.skew, 3) : '—'}</td><td class="n">${it.parts ? f(it.parts.length, 3) : '—'}</td><td class="n">${it.parts ? f(it.parts.width, 3) : '—'}</td><td class="n">${f(it.beta, 3)}</td><td>${esc(it.base)} = ${f(it.AsLong)}</td><td class="n">${f(req)}</td><td>${it.provTxt ? esc(it.provTxt) + ' = ' + f(it.prov) : '—'}</td><td class="n ${r != null ? rc(r) : ''}">${r != null ? f(r, 3) : '—'}</td></tr>`; }).join('')}</tbody></table></div>
+  <p class="hint" style="margin-top:6px">Shrinkage and temperature: A<sub>s</sub> ≥ 1.30bh/[2(b + h)f<sub>y</sub>] = ${f(D.AsST, 3)} in.²/ft (0.11 to 0.60), spacing ≤ ${f(D.sMaxST, 1)} in.</p>`;
+}
+function renderMethod() {
+  const n = R ? R.notes : [];
+  $('#methodNotes').innerHTML = [
+    '<b>Analysis.</b> Continuous slab of constant stiffness (or simple spans), influence lines by Müller-Breslau; HL-93 design truck (14–30 ft rear axle) or tandem with IM 33% plus lane load, axles that relieve the effect neglected; 90% of two trucks plus lane for negative moment between the points of contraflexure. Fatigue truck with 30 ft rear axle spacing and IM 15%.',
+    '<b>Live load distribution.</b> Equivalent strips (4.6.2.3): E = 84 + 1.44√(L₁W₁) ≤ 12W/N<sub>L</sub> for multiple lanes, 10 + 5√(L₁W₁) for one lane; skew factor r = 1.05 − 0.25 tan θ ≤ 1.0; multiple presence is embedded; fatigue uses the single-lane strip divided by 1.2. At negative moment points the strip uses the average of the adjacent spans.',
+    '<b>Edge beam (4.6.2.1.4b, DG 3.2.11).</b> Width = parapet base + 12 in. + ¼ single-lane strip ≤ ½ strip or 72 in.; live load = 0.5(1 + IM) × vehicle + lane × (width − parapet base)/120 in. over the edge beam width. Dead load per foot as for the interior strip (parapets spread across the width, DG 3.2.11).',
+    '<b>Flexure (5.6.3.2).</b> Rectangular stress block, f<sub>s</sub> = f<sub>y</sub> checked by c/d<sub>s</sub> ≤ 0.6, φ from ε<sub>t</sub> (5.5.4.2). Minimum reinforcement: φM<sub>n</sub> ≥ min(M<sub>cr</sub>, 1.33M<sub>u</sub>), M<sub>cr</sub> = γ<sub>3</sub>γ<sub>1</sub>f<sub>r</sub>S with γ<sub>1</sub> = 1.6.',
+    '<b>Service (5.6.7) and fatigue (5.5.3).</b> Cracked transformed section with n = E<sub>s</sub>/E<sub>c</sub>, E<sub>c</sub> by Eq. 5.4.2.4-1; f<sub>ss</sub> = M<sub>s</sub>/(A<sub>s</sub>jd<sub>s</sub>) ≤ 0.6f<sub>y</sub>; s ≤ 700γ<sub>e</sub>/(β<sub>s</sub>f<sub>ss</sub>) − 2d<sub>c</sub>. Fatigue I: 1.75 × fatigue truck range ≤ 26 − 22f<sub>min</sub>/f<sub>y</sub>, f<sub>min</sub> from permanent load plus the Fatigue I minimum, interior strip.',
+    '<b>Edge beam shear (5.7.3).</b> General procedure with ε<sub>s</sub> = (|M<sub>u</sub>|/d<sub>v</sub> + V<sub>u</sub>)/(E<sub>s</sub>A<sub>s</sub>), |M<sub>u</sub>| ≥ V<sub>u</sub>d<sub>v</sub>; β by Eq. 5.7.3.4.2-1 where A<sub>v</sub> ≥ A<sub>v,min</sub>, otherwise Eq. 5.7.3.4.2-2 with s<sub>xe</sub>. Checked from the critical section d<sub>v</sub> from the support face toward midspan. Longitudinal reinforcement by 5.7.3.5.',
+    '<b>Distribution reinforcement.</b> IDOT ABD 15.8 percentages of the main reinforcement (simple or continuous spans), not less than shrinkage and temperature reinforcement (5.10.6).',
+    '<b>Rating.</b> MBE 6A HL-93 design load rating, Strength I flexure for both strips and edge beam shear; a rating factor above 10 where γ<sub>LL</sub>(LL+IM) is under 0.1% of the capacity is shown as N/A.',
+    '<b>Not covered.</b> Variable-depth slabs, haunches, voided slabs, longitudinal joints and stage lines (check each portion with its own edge beams), deflection, and legal or permit vehicles.',
+  ].concat(n.map(t => esc(t))).map(s => '<li>' + s + '</li>').join('');
+}
+function renderAll() { renderVerdict(); renderRating(); renderChart(); renderPoints(); renderWS(); renderDist(); renderMethod(); bindPick(); }
+function bindPick() { document.querySelectorAll('[data-x]').forEach(el => { if (el.closest('#rail')) return; el.addEventListener('click', () => { selX = +el.dataset.x; renderChart(); renderPoints(); renderWS(); bindPick(); }); }); }
+// examples, save and load
+Object.entries(SLAB_EXAMPLES).forEach(([k, e]) => { const o = document.createElement('option'); o.value = k; o.textContent = e.label; $('#exsel').appendChild(o); });
+$('#exsel').addEventListener('change', e => { const k = e.target.value; if (!k) return; const rep = model.report; model = clone(SLAB_EXAMPLES[k].model); if (rep) model.report = rep; selX = null; renderRail(); runNow(); fillReport(); e.target.value = ''; });
+$('#saveJson').addEventListener('click', async () => { const bytes = new TextEncoder().encode(JSON.stringify(model, null, 1)); await saveFile((model.name || 'slab').replace(/[^\w.-]+/g, '_') + '.json', bytes, 'application/json'); });
+$('#loadJson').addEventListener('change', e => { const fl = e.target.files[0]; if (!fl) return; fl.text().then(t => { try { const m = JSON.parse(t); if (!m.spans) throw new Error('not a slab input'); model = m; selX = null; renderRail(); runNow(); fillReport(); } catch (err) { $('#errBox').hidden = false; $('#errBox').textContent = 'Could not load the file: ' + err.message; } }); e.target.value = ''; });
+// report
+const APP_VERSION = '2026.11';
+function fillReport() { const r = model.report || {}; let ini = ''; try { ini = localStorage.getItem('slab-initials') || ''; } catch (e) { /* ignore */ } document.querySelectorAll('#c-report [data-rep]').forEach(el => { const k = el.dataset.rep; el.value = r[k] != null ? r[k] : (k === 'designedBy' ? ini : k === 'date' ? new Date().toISOString().slice(0, 10) : ''); }); }
+$('#c-report').addEventListener('input', e => { const k = e.target.dataset.rep; if (!k) return; model.report = Object.assign({}, model.report, { [k]: e.target.value }); if (k === 'designedBy') { try { localStorage.setItem('slab-initials', e.target.value); } catch (_) { /* ignore */ } } save(); });
+let dlCap = null; if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dlCap = d; }).catch(() => {});
+async function saveFile(name, bytes, type) {
+  type = type || 'application/pdf';
+  if (dlCap) { try { await dlCap.save({ filename: name, data: new Blob([bytes], { type }) }); return 'saved'; } catch (e) { if (e && e.code === 'declined') return 'declined'; } }
+  const url = URL.createObjectURL(new Blob([bytes], { type })); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); return 'saved';
+}
+$('#c-report').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-mode]'); if (!b) return;
+  clearTimeout(timer); const cur = clone(model); delete cur.report; if (!R || Rkey !== keyOf(cur)) runNow();
+  if (!R || Rkey !== keyOf(cur)) { $('#repStatus').textContent = 'No report: the current input does not run. Correct the input error first.'; return; }
+  const runModel = Rmodel, runRes = R, mode = b.dataset.mode;
+  b.setAttribute('aria-busy', 'true'); $('#repStatus').textContent = 'Building the PDF…'; await new Promise(r => setTimeout(r, 30));
+  try {
+    const meta = Object.assign({}, model.report); document.querySelectorAll('#c-report [data-rep]').forEach(el => { meta[el.dataset.rep] = el.value.trim(); });
+    const notes = [...document.querySelectorAll('#methodNotes li')].map(li => li.innerText.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const bytes = await SlabReport.build(runModel, runRes, { mode, meta, appVersion: APP_VERSION, methodNotes: notes });
+    const base = (meta.structure || runModel.name || 'slab').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'slab';
+    const st = await saveFile(base + '_' + ({ summary: 'summary', tenth: 'calc-tenth', all: 'calc-all' })[mode] + '.pdf', bytes);
+    $('#repStatus').textContent = st === 'declined' ? 'Download declined.' : 'PDF ready · ' + (bytes.length / 1024).toFixed(0) + ' KB';
+  } catch (err) { $('#repStatus').textContent = 'Could not build the PDF: ' + err.message; console.error(err); }
+  b.removeAttribute('aria-busy');
+});
+renderRail(); fillReport(); runNow();
+</script>
+
+<script id="bridge-se-theme-control">
+(() => {
+  const root = document.documentElement;
+  const button = document.getElementById('themeSwitch');
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  const key = 'opendot-bridge-se-theme';
+  function dark() { return root.dataset.theme ? root.dataset.theme === 'dark' : media.matches; }
+  function label() {
+    button.textContent = dark() ? 'Light mode' : 'Dark mode';
+    button.setAttribute('aria-label', dark() ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  button.addEventListener('click', () => {
+    const next = dark() ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem(key, next); } catch (e) { /* private storage unavailable */ }
+    label();
+  });
+  if (media.addEventListener) media.addEventListener('change', label);
+  else if (media.addListener) media.addListener(label);
+  addEventListener('storage', e => {
+    if (e.key !== key) return;
+    if (e.newValue === 'light' || e.newValue === 'dark') root.dataset.theme = e.newValue;
+    else delete root.dataset.theme;
+    label();
+  });
+  label();
+})();
+</script>
+</body></html>

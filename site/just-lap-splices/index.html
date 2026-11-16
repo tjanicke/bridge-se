@@ -1,0 +1,1041 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="description" content="Compare AASHTO LRFD reinforcing-bar development and lap splice lengths by edition.">
+<link rel="canonical" href="https://bridge-se.open-dot.org/just-lap-splices/">
+<link rel="icon" type="image/png" href="/assets/bridge-se-logo.png">
+<script defer src="https://collect.open-dot.org/script.js" data-website-id="d095389c-d46e-4589-88fa-12d03c0df856" data-host-url="https://collect.open-dot.org" data-domains="open-dot.org,bridge-se.open-dot.org" data-exclude-search="true"></script>
+<style>.bridge-nav{max-width:1500px;margin:0 auto 14px;font:500 13px/1.5 system-ui,sans-serif}.bridge-nav a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}.bridge-nav a:focus-visible{outline:2px solid currentColor;outline-offset:3px}.bridge-nav span{margin:0 8px;color:var(--muted)}</style>
+<style id="bridge-se-theme-style">.bridge-theme-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}</style>
+<script id="bridge-se-theme-init">try{const t=localStorage.getItem("opendot-bridge-se-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
+</head><body>
+<nav class="bridge-nav" aria-label="Breadcrumb"><a href="https://open-dot.org/">Open DOT</a><span>›</span><a href="https://bridge-se.open-dot.org/">Bridge SE</a><span>›</span>Just Lap Splices</nav>
+<title>Rebar Lap Splice Lengths</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  --bg:#eef1ef; --surface:#fbfcfb; --sunk:#e3e8e5; --ink:#17201d; --muted:#56655f; --line:#cdd6d2;
+  --accent:#0b6e4f; --accent-ink:#ffffff; --warn:#a86a0c; --bad:#b42318; --ok:#1f7a45;
+  --e10:#0b6e4f; --e9:#2557a4; --e8:#7a3fa8; --e7:#a86a0c;
+  --f-display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --warn:#e3a63c; --bad:#f07060; --ok:#4cc27e;
+  --e10:#3fb68b; --e9:#7ea7e8; --e8:#b48ae0; --e7:#e3a63c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --warn:#e3a63c; --bad:#f07060; --ok:#4cc27e;
+  --e10:#3fb68b; --e9:#7ea7e8; --e8:#b48ae0; --e7:#e3a63c; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:1.75rem;line-height:1.1}
+h2{font-size:1.15rem}
+h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600}
+.n,td.n{font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;max-width:1400px;margin:0 auto 16px}
+header p{margin:4px 0 0;color:var(--muted);max-width:76ch}
+button{font:500 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 12px;cursor:pointer}
+button:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.wrap{display:grid;grid-template-columns:minmax(0,360px) minmax(0,1fr);gap:18px;max-width:1400px;margin:0 auto}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}}
+.rail{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sheet{display:flex;flex-direction:column;gap:16px;min-width:0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:14px 16px;min-width:0}
+.card-h{display:flex;flex-wrap:wrap;gap:8px 16px;align-items:baseline;justify-content:space-between;margin-bottom:10px}
+.grp{display:flex;flex-direction:column;gap:8px}
+.grp+.grp{border-top:1px solid var(--line);padding-top:12px;margin-top:4px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+label.f{display:flex;flex-direction:column;justify-content:flex-end;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f input,label.f select{font:14px var(--f-mono);padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);width:100%;min-width:0}
+label.f select{font-family:var(--f-body)}
+label.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px;color:var(--ink)}
+label.chk input{margin-top:3px}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.tabs{display:flex;flex-wrap:wrap;gap:0;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);width:max-content;max-width:100%}
+.tabs button{border:0;border-radius:0;padding:8px 14px;display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;background:transparent}
+.tabs button+button{border-left:1px solid var(--line)}
+.tabs button b{font-family:var(--f-display);font-size:15px;font-weight:600}
+.tabs button small{font-size:11px;color:var(--muted)}
+.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+.tabs button[aria-selected="true"] small{color:var(--accent-ink);opacity:.85}
+.tw{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 8px;border-bottom:1px solid var(--line);text-align:left;white-space:nowrap}
+th{font-weight:600;font-size:12px;color:var(--muted);background:var(--sunk);position:sticky;top:0}
+td.n,th.n{text-align:right}
+tbody tr{cursor:pointer}
+tbody tr:hover{background:var(--sunk)}
+tbody tr[aria-selected="true"]{background:color-mix(in srgb,var(--accent) 14%,transparent)}
+td.req{font-weight:600}
+.dim{color:var(--muted)}
+.note{border-left:3px solid var(--warn);padding:6px 10px;background:color-mix(in srgb,var(--warn) 9%,transparent);font-size:13px;border-radius:0 6px 6px 0}
+.notes{display:flex;flex-direction:column;gap:6px}
+/* worksheet */
+.ws{display:flex;flex-direction:column;gap:6px;font-size:14px}
+.ws .row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 16px;align-items:baseline;padding:4px 0;border-bottom:1px dotted var(--line)}
+.ws .eq{font-family:var(--f-mono);font-size:13px;min-width:0;overflow-wrap:anywhere}
+.ws .eq b{font-family:var(--f-body);font-weight:600}
+.ws .ref{font-size:11.5px;color:var(--muted);white-space:nowrap}
+.ws .res{font-weight:600}
+.frac{display:inline-flex;flex-direction:column;vertical-align:middle;text-align:center;font-size:.92em;margin:0 2px}
+.frac>span:first-child{border-bottom:1px solid currentColor;padding:0 3px}
+.frac>span:last-child{padding:0 3px}
+.fac{display:grid;grid-template-columns:auto auto minmax(0,1fr);gap:3px 14px;font-size:13px;margin:6px 0 4px}
+.fac .k{font-family:var(--f-mono)}
+.fac .v{font-family:var(--f-mono);text-align:right}
+.fac .h{color:var(--muted)}
+.chart svg{width:100%;height:auto;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-bottom:6px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.repf{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px;margin-bottom:10px}
+.repf label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.repf input{font:14px var(--f-body);padding:6px 8px;border:1px solid var(--line);border-radius:5px;background:var(--bg);color:var(--ink);min-width:0}
+.status{font-size:12px;color:var(--muted)}
+footer{max-width:1400px;margin:24px auto 0;color:var(--muted);font-size:12px}
+[hidden]{display:none!important}
+</style>
+
+<header>
+  <div>
+    <h1>Rebar Lap Splice Lengths</h1>
+    <p>Tension development length and tension and compression lap splices of deformed bars by AASHTO LRFD 10th (2024), 9th (2020) and 8th (2017) Editions, with the 7th Edition (2014) method for existing structures. Units: in., ksi.</p>
+  </div>
+  <div class="bridge-theme-actions"><button id="themeSwitch" type="button" aria-label="Switch to dark mode">Dark mode</button><button id="reset" type="button">Reset inputs</button></div>
+</header>
+
+<div class="wrap">
+  <aside class="rail">
+    <section class="card">
+      <div class="grp">
+        <h3>Materials</h3>
+        <div class="fields">
+          <label class="f"><span>f′c, ksi</span><input class="n" data-k="fc" type="number" step="0.5" min="2.4"></label>
+          <label class="f"><span>fy, ksi</span><input class="n" data-k="fy" type="number" step="5" min="40"></label>
+          <label class="f"><span>Concrete</span><select data-k="concrete"><option value="normal">Normal weight</option><option value="sand">Sand-lightweight</option><option value="all">All-lightweight</option></select></label>
+          <label class="f"><span>wc, kcf</span><input class="n" data-k="wc" type="number" step="0.005"></label>
+          <label class="f"><span>fct, ksi (if specified)</span><input class="n" data-k="fct" type="number" step="0.01" placeholder="—"></label>
+          <label class="f"><span>K1</span><input class="n" data-k="K1" type="number" step="0.05"></label>
+        </div>
+      </div>
+      <div class="grp">
+        <h3>Bar placement</h3>
+        <div class="fields">
+          <label class="f"><span>Clear cover to bar, in.</span><input class="n" data-k="clearCover" type="number" step="0.25"></label>
+          <label class="f"><span>Bar spacing, c–c, in.</span><input class="n" data-k="spacing" type="number" step="0.5"></label>
+          <label class="f"><span>Coating</span><select data-k="coating"><option value="none">Uncoated</option><option value="galv">Zinc-coated (galvanized)</option><option value="epoxy">Epoxy or zinc–epoxy dual coated</option></select></label>
+        </div>
+        <label class="chk"><input type="checkbox" data-k="topBar"><span>Top bar: more than 12 in. of fresh concrete cast below</span></label>
+        <label class="chk"><input type="checkbox" data-k="spiral"><span>Enclosed in a spiral (7th Edition factor 0.75)</span></label>
+        <p class="hint">c<sub>b</sub> is taken per bar as the smaller of clear cover + d<sub>b</sub>/2 and half the spacing. The epoxy factor (1.5 or 1.2) is chosen per bar from cover &lt; 3d<sub>b</sub> or clear spacing &lt; 6d<sub>b</sub>.</p>
+      </div>
+      <div class="grp">
+        <h3>Confinement</h3>
+        <label class="chk"><input type="checkbox" data-k="useConfinement"><span>Apply the reinforcement confinement factor λ<sub>rc</sub> (8th–10th)</span></label>
+        <div class="fields">
+          <label class="f"><span>A<sub>tr</sub>, in.² (0 to ignore)</span><input class="n" data-k="Atr" type="number" step="0.01"></label>
+          <label class="f"><span>s, transverse spacing, in.</span><input class="n" data-k="sTr" type="number" step="0.5"></label>
+          <label class="f"><span>n, bars developed along the splitting plane</span><input class="n" data-k="nDev" type="number" step="1" min="1"></label>
+          <label class="f"><span>β<sub>t</sub> (10th; −1 to 0)</span><input class="n" data-k="betaT" type="number" step="0.1" max="0" min="-1"></label>
+        </div>
+      </div>
+      <div class="grp">
+        <h3>Splice conditions</h3>
+        <div class="fields">
+          <label class="f"><span>A<sub>s</sub> provided / A<sub>s</sub> required</span><input class="n" data-k="asRatio" type="number" step="0.1" min="1"></label>
+          <label class="f"><span>Percent of A<sub>s</sub> spliced within the lap</span><input class="n" data-k="pctSpliced" type="number" step="25" min="0" max="100"></label>
+          <label class="f"><span>Compression lap, m</span><select data-k="compM"><option value="other">All other cases (1.0)</option><option value="ties">Ties or hoops ≥ 0.15% (0.83)</option><option value="spiral">Spirals or closed hoops (0.75)</option></select></label>
+        </div>
+        <label class="chk"><input type="checkbox" data-k="erOnDev"><span>Apply λ<sub>er</sub> = A<sub>s</sub> required / A<sub>s</sub> provided to the development length</span></label>
+        <label class="chk"><input type="checkbox" data-k="erOnLaps"><span>Apply λ<sub>er</sub> to lap splice lengths</span></label>
+        <p class="hint">λ<sub>er</sub> is the inverse of the ratio above, <span id="erVal"></span>, so the two cannot disagree. It is not applied unless checked. Lap classes already account for excess reinforcement, and ACI 318 does not permit the reduction for laps.</p>
+      </div>
+      <div class="grp">
+        <h3>Rounding</h3>
+        <label class="chk"><input type="checkbox" data-k="roundUp"><span>Round lengths up to the next whole inch</span></label>
+        <label class="chk"><input type="checkbox" data-k="roundLdFirst"><span>Round ℓ<sub>d</sub> before applying the lap class factor (Iowa DOT workbook convention)</span></label>
+      </div>
+    </section>
+  </aside>
+
+  <main class="sheet">
+    <div id="migBox" hidden></div>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <section class="card" id="tableCard"></section>
+    <section class="card" id="cmpCard"></section>
+    <section class="card" id="wsCard"></section>
+    <section class="card" id="repCard">
+      <div class="card-h"><h2>Calculation sheet</h2><span class="status" id="repStatus">PDF, letter size</span></div>
+      <div class="repf">
+        <label>Project / structure<input data-rep="structure" autocomplete="off"></label>
+        <label>Element<input data-rep="element" autocomplete="off" placeholder="e.g. pier cap top bars"></label>
+        <label>Designed by (initials)<input data-rep="designedBy" autocomplete="off" maxlength="12"></label>
+        <label>Date<input data-rep="date" type="date"></label>
+      </div>
+      <button type="button" class="primary" id="pdfBtn">Download PDF: all bars, all editions, worksheets for the selected bar</button>
+      <p class="hint" style="margin-top:8px">The sheet carries a blank “Checked by” field. If this preview does not allow downloads, open the tool from the Bridge SE site.</p>
+    </section>
+    <section class="card">
+      <h2 style="margin-bottom:8px">How the editions differ</h2>
+      <ul id="diffs" style="margin:0;padding-left:18px;display:flex;flex-direction:column;gap:6px;font-size:13.5px"></ul>
+    </section>
+  </main>
+</div>
+<footer>Bridge SE · Rebar Lap Splice Lengths · verified against the Iowa DOT “LRFD Tension Rebar Development and Lap Splice Lengths” workbook (7th and 8th Editions) and hand calculations. Engineering judgment and the governing specification remain the user’s responsibility.</footer>
+
+<script>/* AASHTO LRFD tension development length and lap splices of deformed bars — edition comparison engine.
+ * Editions: '10' (10th, 2024), '9' (9th, 2020), '8' (8th, 2017), '7' (7th, 2014 and earlier, before the 2015 interims).
+ * Units: kip, in., ksi. Pure functions; no DOM.
+ */
+(function (root) {
+  'use strict';
+  const BARS = [
+    { id: '#3', db: 0.375, Ab: 0.11, w: 0.376 }, { id: '#4', db: 0.5, Ab: 0.2, w: 0.668 }, { id: '#5', db: 0.625, Ab: 0.31, w: 1.043 },
+    { id: '#6', db: 0.75, Ab: 0.44, w: 1.502 }, { id: '#7', db: 0.875, Ab: 0.6, w: 2.044 }, { id: '#8', db: 1.0, Ab: 0.79, w: 2.67 },
+    { id: '#9', db: 1.128, Ab: 1.0, w: 3.4 }, { id: '#10', db: 1.27, Ab: 1.27, w: 4.303 }, { id: '#11', db: 1.41, Ab: 1.56, w: 5.313 },
+    { id: '#14', db: 1.693, Ab: 2.25, w: 7.65 }, { id: '#18', db: 2.257, Ab: 4.0, w: 13.6 },
+  ];
+  const EDITIONS = {
+    '10': { name: '10th Edition (2024)', short: '10th (2024)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '9': { name: '9th Edition (2020)', short: '9th (2020)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '8': { name: '8th Edition (2017)', short: '8th (2017)', art: { dev: '5.10.8.2.1', lap: '5.10.8.4.3a', comp: '5.10.8.4.5a' } },
+    '7': { name: '7th Edition (2014) and earlier', short: '7th (2014)', art: { dev: '5.11.2.1', lap: '5.11.5.3.1', comp: '5.11.5.5.1' } },
+  };
+  const ES = 29000;
+  const big = b => b.id === '#14' || b.id === '#18';
+  const r4 = v => Math.round(v * 1e4) / 1e4;
+
+  function defaults() {
+    return {
+      fc: 4.0, fy: 60, concrete: 'normal', wc: 0.145, fct: null, K1: 1.0,
+      topBar: false, coating: 'none', clearCover: 2.0, spacing: 12.0, spiral: false,
+      useConfinement: true, Atr: 0, sTr: 0, nDev: 1, betaT: 0,
+      erOnDev: false, erOnLaps: false,
+      asRatio: 1.0, pctSpliced: 100,
+      compM: 'other',
+      roundUp: true, roundLdFirst: false,
+    };
+  }
+
+  // concrete density modification factor (8th–10th) or lightweight factor (7th)
+  function lambdaOf(ed, I) {
+    if (I.concrete === 'normal') return { v: 1.0, how: 'normal weight concrete' };
+    if (ed === '7') {
+      if (I.fct > 0) { const v = Math.max(1.0, 0.22 * Math.sqrt(I.fc) / I.fct); return { v, how: '0.22√f′c / fct ≥ 1.0', inc: true }; }
+      return I.concrete === 'sand' ? { v: 1.2, how: 'sand-lightweight concrete', inc: true } : { v: 1.3, how: 'all-lightweight concrete', inc: true };
+    }
+    if (I.fct > 0) return { v: Math.min(1.0, 4.7 * I.fct / Math.sqrt(I.fc)), how: '4.7 fct / √f′c ≤ 1.0 (5.4.2.8-1)' };
+    return { v: Math.min(1.0, Math.max(0.75, 7.5 * I.wc)), how: '0.75 ≤ 7.5 wc ≤ 1.0 (5.4.2.8-2)' };
+  }
+  function epoxySevere(b, I) { // cover less than 3db or clear spacing less than 6db
+    return I.clearCover < 3 * b.db || (I.spacing - b.db) < 6 * b.db;
+  }
+  function coatingFactor(ed, b, I) {
+    if (I.coating === 'epoxy') return epoxySevere(b, I) ? { v: 1.5, how: 'epoxy-coated, cover < 3db or clear spacing < 6db' } : { v: 1.2, how: 'epoxy-coated, cover ≥ 3db and clear spacing ≥ 6db' };
+    return { v: 1.0, how: I.coating === 'galv' ? 'zinc-coated (galvanized)' : 'uncoated' };
+  }
+  function cbOf(b, I) { return I.cbOverride != null ? I.cbOverride : Math.min(I.clearCover + b.db / 2, I.spacing / 2); }
+  function Ec(I) { return 120000 * I.K1 * Math.pow(I.wc, 2) * Math.pow(I.fc, 0.33); }
+
+  // ---------- input validation: blank, non-numeric or contradictory input is an error, never a silent default ----------
+  const NUM = [['fc', "f′c"], ['fy', 'fy'], ['wc', 'wc'], ['K1', 'K1'], ['clearCover', 'Clear cover'], ['spacing', 'Bar spacing'], ['Atr', 'Atr'], ['sTr', 'Transverse spacing s'], ['nDev', 'Number of bars developed n'], ['betaT', 'βt'], ['asRatio', 'As provided / As required'], ['pctSpliced', 'Percent spliced']];
+  const isNum = v => typeof v === 'number' && Number.isFinite(v);
+  /** Version 1 inputs carried a separate λer that acted on ℓd, and on laps when erOnLaps was set.
+   *  Translate it only where the Version 1 result is reproduced exactly (λer identical to 1/ratio, bit for bit); otherwise report a conflict and change nothing.
+   *  Returns { I, changed, notice, conflict }. */
+  function migrate(inp) {
+    const o = Object.assign({}, inp || {});
+    if (!('lamEr' in o)) return { I: o, changed: false };
+    const le = o.lamEr, r = o.asRatio === undefined ? 1 : o.asRatio, laps = !!o.erOnLaps;
+    if ('erOnDev' in o) return { I: o, conflict: 'The input has both the earlier separate λer (' + le + ') and the current setting for applying λer; remove one.' };
+    if (le === 1 || le === null || le === undefined) {
+      const I = Object.assign({}, o); delete I.lamEr; I.erOnDev = false; I.erOnLaps = false;
+      return { I, changed: true, notice: 'Saved input from an earlier version had λer = 1.0 (no excess-reinforcement reduction)' + (laps && r !== 1 ? ', with "apply λer to laps" checked, which had no effect at λer = 1.0' : '') + '. It is kept as: λer not applied to the development length or to laps. Lengths are unchanged.' };
+    }
+    if (isNum(le) && isNum(r) && r >= 1 && le > 0 && le < 1 && le === 1 / r) {
+      const I = Object.assign({}, o); delete I.lamEr; I.erOnDev = true;
+      return { I, changed: true, notice: 'Saved input from an earlier version had λer = ' + le + ' = 1/' + r + '. It is kept as: λer applied to the development length' + (laps ? ' and to laps' : ' only') + '. Lengths are unchanged.' };
+    }
+    return { I: o, conflict: 'Saved input from an earlier version has λer = ' + le + ' with As provided / As required = ' + r + (isNum(r) && r > 0 ? ' (1/ratio = ' + (1 / r).toFixed(3) + ')' : '') + '. The current version derives λer from the ratio, so this cannot be carried over unchanged. Choose how to continue; no lengths are shown until you do.' };
+  }
+  function normalize(inp) {
+    const m = migrate(inp), I = Object.assign(defaults(), m.I);
+    if (m.conflict) I._conflict = m.conflict;
+    delete I.lamEr;
+    return I;
+  }
+  function check(inp) {
+    const I = inp && inp._norm ? inp : normalize(inp), e = [];
+    NUM.forEach(([k, n]) => { if (!isNum(I[k])) e.push(n + ' is blank or not a number.'); });
+    if (e.length) return e;
+    if (!(I.fc > 0)) e.push("f′c must be greater than zero.");
+    if (!(I.fy > 0)) e.push('fy must be greater than zero.');
+    if (!(I.wc > 0)) e.push('wc must be greater than zero.');
+    if (!(I.K1 > 0)) e.push('K1 must be greater than zero (5.4.2.4); it is not replaced by 1.0.');
+    if (!(I.clearCover >= 0)) e.push('Clear cover must be zero or more.');
+    if (!(I.spacing > 0)) e.push('Bar spacing must be greater than zero.');
+    if (I.Atr < 0) e.push('Atr must be zero or more.');
+    if (I.sTr < 0) e.push('Transverse spacing s must be zero or more.');
+    if (I.Atr > 0 && !(I.sTr > 0)) e.push('Atr is entered but the transverse spacing s is zero: enter s, or set Atr = 0 to ignore transverse reinforcement.');
+    if (!(I.nDev >= 1) || !Number.isInteger(I.nDev)) e.push('The number of bars developed n must be a whole number of at least 1.');
+    if (I.betaT < -1 || I.betaT > 0) e.push('βt must be between −1 and 0.');
+    if (!(I.asRatio >= 1)) e.push('As provided / As required must be at least 1.0 (less than 1.0 means the reinforcement is inadequate).');
+    if (!(I.pctSpliced >= 0 && I.pctSpliced <= 100)) e.push('Percent spliced must be between 0 and 100.');
+    if (I.fct != null && !(isNum(I.fct) && I.fct > 0)) e.push('fct must be greater than zero, or left blank.');
+    if (!['normal', 'sand', 'all'].includes(I.concrete)) e.push('Unknown concrete type.');
+    if (!['none', 'galv', 'epoxy'].includes(I.coating)) e.push('Unknown bar coating.');
+    if (I._conflict) e.push(I._conflict.replace('Saved input from an earlier version has', 'λer contradicts the ratio:'));
+    return e;
+  }
+  // hard applicability limits of each edition: outside them no lengths are produced
+  function scope(ed, I) {
+    const e = [];
+    if (I.fc < 2.4) e.push("f′c below 2.4 ksi is below the minimum for structural concrete (5.4.2.1).");
+    if (ed === '7') {
+      if (I.fc > 10) e.push("f′c above 10.0 ksi is outside the 7th Edition development length provisions.");
+      if (I.fy > 75) e.push('fy above 75 ksi is outside the 7th Edition (5.4.3.1).');
+    } else {
+      if (I.fc > 15) e.push("f′c above 15.0 ksi is outside the provisions of Article 5.10.8.2.1.");
+      if (I.fy > 100) e.push('fy above 100 ksi is not permitted (5.4.3.1).');
+      if (I.concrete !== 'normal' && I.fc > 10 && ed !== '10') e.push('Lightweight concrete above 10.0 ksi is outside the provisions of this edition.');
+    }
+    return e;
+  }
+  function blockedResult(ed, b, why) {
+    const out = { ld: null, lapA: null, lapB: null, lapC: null, lapReq: null, lc: null };
+    return { ed, bar: b.id, db: b.db, Ab: b.Ab, blocked: true, scope: why, ldb: null, ld: null, factors: [], steps: [], lap: {}, lapReq: null, lapClass: null, comp: { lc: null }, out, warnings: why.slice(), devOK: false, lapOK: false, classWhy: 'Outside the scope of this edition: ' + why.join(' '), lapBasisNote: '' };
+  }
+
+  function classOf(ed, I) {
+    const r = I.asRatio, p = I.pctSpliced;
+    if (ed === '7') {
+      if (r >= 2) return p <= 75 ? 'A' : 'B';
+      return p <= 50 ? 'B' : 'C';
+    }
+    return r >= 2 && p <= 50 ? 'A' : 'B';
+  }
+  function compM(I) {
+    if (I.fc < 3.0) return { v: 1.33, how: "f′c < 3.0 ksi" };
+    return { ties: { v: 0.83, how: 'ties or hoops with effective area ≥ 0.15% of thickness × spacing' }, spiral: { v: 0.75, how: 'spirals or welded/mechanically closed hoops' }, other: { v: 1.0, how: 'all other cases' } }[I.compM] || { v: 1.0, how: 'all other cases' };
+  }
+
+  /** Development and splice lengths of one bar under one edition. Returns values and the worksheet steps. */
+  function compute(ed, barId, inp) {
+    const I = normalize(inp), b = BARS.find(x => x.id === barId);
+    if (!b) throw new Error('Unknown bar ' + barId);
+    const E = EDITIONS[ed]; if (!E) throw new Error('Unknown edition ' + ed);
+    const errs = check(Object.assign({ _norm: true }, I)); if (errs.length) { const er = new Error(errs.join(' ')); er.code = 'input'; er.errors = errs; throw er; }
+    const sc = scope(ed, I); if (I.spacing <= b.db) sc.push('Bar spacing ' + I.spacing + ' in. is not more than the bar diameter (' + b.db + ' in.).');
+    if (sc.length) return blockedResult(ed, b, sc);
+    const erV = 1 / I.asRatio, erDev = I.erOnDev ? erV : 1, erLap = I.erOnLaps ? erV : 1;
+    const S = [], W = [], R = { ed, bar: b.id, db: b.db, Ab: b.Ab };
+    const fc = I.fc, fy = I.fy, sq = Math.sqrt(fc);
+    const lam = lambdaOf(ed, I), cf = coatingFactor(ed, b, I);
+    let ldb, ld, factors = [];
+    let devOK = true, lapOK = !big(b);
+
+    // applicability
+    if (ed !== '7') {
+      if (ed !== '10' && big(b)) { devOK = false; W.push(b.id + ' bars are outside Article 5.10.8.2.1 (No. 11 and smaller) in this edition.'); }
+      if (fc > 10) W.push('f′c > 10.0 ksi: transverse reinforcement of at least #3 bars at 12.0 in. is required along the development and splice length.');
+      if (fy > 75) W.push('fy > 75.0 ksi: transverse reinforcement per Article 5.7.2.5 (beams) or 5.10.4.3 (columns) is required over the development and splice length.');
+    }
+    if (big(b)) W.push(b.id + ' bars may not be lap spliced in tension.');
+
+    if (ed === '7') {
+      // ---- 7th edition and earlier: Article 5.11.2.1
+      if (big(b)) {
+        const k = b.id === '#14' ? 2.7 : 3.5;
+        ldb = k * fy / sq;
+        S.push({ lhs: 'ℓ_{db}', expr: k + '\\f{f_{y}}{√(f′_{c})}', sub: k + ' × \\f{' + fy + '}{√' + fc + '}', val: ldb, unit: 'in.', ref: '5.11.2.1.1' });
+      } else {
+        const a = 1.25 * b.Ab * fy / sq, m = 0.4 * b.db * fy;
+        ldb = Math.max(a, m);
+        S.push({ lhs: 'ℓ_{db}', expr: '\\f{1.25A_{b}f_{y}}{√(f′_{c})} ≥ 0.4d_{b}f_{y}', sub: 'max(\\f{1.25 × ' + b.Ab + ' × ' + fy + '}{√' + fc + '}, 0.4 × ' + b.db + ' × ' + fy + ') = max(' + a.toFixed(2) + ', ' + m.toFixed(2) + ')', val: ldb, unit: 'in.', ref: '5.11.2.1.1' });
+      }
+      const top = I.topBar ? 1.4 : 1.0, tc = Math.min(top * cf.v, 1.7);
+      const lw = lam.v;
+      const sp = (I.spacing >= 6 && I.clearCover >= 3) ? 0.8 : 1.0;
+      const spi = I.spiral ? 0.75 : 1.0, er = erDev;
+      factors = [
+        { k: 'top', sym: 'top bar', v: top, how: I.topBar ? 'more than 12.0 in. of fresh concrete below' : 'not a top bar' },
+        { k: 'cf', sym: 'epoxy', v: cf.v, how: cf.how },
+        { k: 'tc', sym: 'top × epoxy ≤ 1.7', v: tc, how: 'product limited to 1.7' },
+        { k: 'lw', sym: 'lightweight', v: lw, how: lam.how },
+        { k: 'sp', sym: 'spacing', v: sp, how: sp < 1 ? 'c–c spacing ≥ 6.0 in. and clear cover ≥ 3.0 in.' : 'c–c spacing < 6.0 in. or clear cover < 3.0 in.' },
+        { k: 'spi', sym: 'spiral', v: spi, how: I.spiral ? 'enclosed in a spiral (≥ 0.25 in. at ≤ 4.0 in. pitch)' : 'no spiral' },
+        { k: 'er', sym: 'excess As', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio : 'not applied' },
+      ];
+      const prod = tc * lw * sp * spi;
+      const ldRaw = ldb * prod * er, ldLapRaw = ldb * prod * erLap;
+      S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × (top × epoxy) × lightweight × spacing × spiral × excess', sub: ldb.toFixed(2) + ' × ' + tc.toFixed(2) + ' × ' + lw.toFixed(2) + ' × ' + sp.toFixed(2) + ' × ' + spi.toFixed(2) + ' × ' + er.toFixed(3), val: ldRaw, unit: 'in.', ref: '5.11.2.1.2, .3' });
+      ld = Math.max(ldRaw, 12);
+      S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{d} ≥ 12.0 in.', val: ld, unit: 'in.', ref: '5.11.2.1.1' });
+      R.ldLapBasis = ldLapRaw; // 7th: the 12-in. minimum on ℓd does not apply to lap splices (5.11.2.1.1); 12 in. applies to the lap
+      R.lapBasisNote = 'Lap based on ℓd before its 12.0-in. minimum, which does not apply to lap splices (5.11.2.1.1); the lap itself is not less than 12.0 in.';
+    } else {
+      // ---- 8th, 9th, 10th: Article 5.10.8.2.1
+      const rl = (I.topBar || (ed !== '10' && fc > 10)) ? 1.3 : 1.0;
+      const rlHow = I.topBar ? 'more than 12.0 in. of fresh concrete cast below' : (ed !== '10' && fc > 10) ? 'f′c > 10.0 ksi' : 'not a top bar' + (ed !== '10' ? ', f′c ≤ 10.0 ksi' : '');
+      const rlcf = Math.min(rl * cf.v, 1.7);
+      const cb = cbOf(b, I);
+      let rc = 1.0, rcHow = 'not applied', ktr = 0;
+      if (ed === '10') {
+        ktr = I.Atr > 0 && I.sTr > 0 && I.nDev > 0 ? I.Atr / (I.sTr * I.nDev) : 0;
+        const ns = ES / Ec(I), bt = Math.max(-1, Math.min(0, I.betaT || 0));
+        if (I.useConfinement) {
+          const raw = b.db * cb / Math.pow(cb * (1 - bt) + 1.67 * ns * ktr, 2);
+          rc = Math.min(1.0, Math.max(0.3, raw));
+          rcHow = '0.3 ≤ λrc ≤ 1.0';
+          R.rcCalc = { cb, bt, ns, ktr, raw, Ec: Ec(I) };
+        }
+        const er = erDev, lerLap = erLap;
+        const base = (f) => 0.17 * b.db * Math.pow(f / (1.97 * lam.v * Math.pow(fc, 0.25)), 2);
+        ldb = base(er * fy);
+        S.push({ lhs: 'ℓ_{db}', expr: '0.17d_{b}(\\f{λ_{er}f_{y} − F_{h}/A_{b}}{1.97λf′_{c}^{0.25}})^{2}', sub: '0.17 × ' + b.db + ' × (\\f{' + er.toFixed(3) + ' × ' + fy + ' − 0}{1.97 × ' + lam.v.toFixed(3) + ' × ' + fc + '^{0.25}})^{2}', val: ldb, unit: 'in.', ref: '5.10.8.2.1a-2' });
+        factors = [
+          { k: 'rl', sym: 'λrl', v: rl, how: rlHow }, { k: 'cf', sym: 'λcf', v: cf.v, how: cf.how }, { k: 'rlcf', sym: 'λrl × λcf ≤ 1.7', v: rlcf, how: 'product limited to 1.7' },
+          { k: 'rc', sym: 'λrc', v: rc, how: rcHow }, { k: 'er', sym: 'λer', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio + ', applied to fy inside ℓdb' : 'not applied' }, { k: 'lam', sym: 'λ', v: lam.v, how: lam.how + ', inside ℓdb' },
+        ];
+        if (I.useConfinement) {
+          if (ktr > 0) S.push({ lhs: 'k_{tr}', expr: '\\f{A_{tr}}{sn}', sub: '\\f{' + I.Atr + '}{' + I.sTr + ' × ' + I.nDev + '}', val: ktr, unit: 'in.', ref: '5.10.8.2.1c-3' });
+          S.push({ lhs: 'λ_{rc}', expr: '\\f{d_{b}c_{b}}{(c_{b}(1 − β_{t}) + 1.67n_{s}k_{tr})^{2}}, 0.3 ≤ λ_{rc} ≤ 1.0', sub: '\\f{' + b.db + ' × ' + cb.toFixed(3) + '}{(' + cb.toFixed(3) + '(1 − (' + bt + ')) + 1.67 × ' + ns.toFixed(3) + ' × ' + ktr.toFixed(4) + ')^{2}} = ' + R.rcCalc.raw.toFixed(4), val: rc, unit: '', ref: '5.10.8.2.1c-2' });
+        }
+        const ldRaw = ldb * rlcf * rc;
+        S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × λ_{rl} × λ_{cf} × λ_{rc}', sub: ldb.toFixed(2) + ' × ' + rlcf.toFixed(2) + ' × ' + rc.toFixed(3), val: ldRaw, unit: 'in.', ref: '5.10.8.2.1a-1' });
+        ld = Math.max(ldRaw, 12);
+        const ldLap = Math.max(base(lerLap * fy) * rlcf * rc, 12);
+        R.ldLapBasis = ldLap;
+      } else {
+        ktr = I.Atr > 0 && I.sTr > 0 && I.nDev > 0 ? 40 * I.Atr / (I.sTr * I.nDev) : 0;
+        if (I.useConfinement) { rc = Math.min(1.0, Math.max(0.4, b.db / (cb + ktr))); rcHow = '0.4 ≤ λrc ≤ 1.0'; R.rcCalc = { cb, ktr, raw: b.db / (cb + ktr) }; }
+        ldb = 2.4 * b.db * fy / sq;
+        S.push({ lhs: 'ℓ_{db}', expr: '2.4d_{b}\\f{f_{y}}{√(f′_{c})}', sub: '2.4 × ' + b.db + ' × \\f{' + fy + '}{√' + fc + '}', val: ldb, unit: 'in.', ref: '5.10.8.2.1a-2' });
+        const er = erDev;
+        factors = [
+          { k: 'rl', sym: 'λrl', v: rl, how: rlHow }, { k: 'cf', sym: 'λcf', v: cf.v, how: cf.how }, { k: 'rlcf', sym: 'λrl × λcf ≤ 1.7', v: rlcf, how: 'product limited to 1.7' },
+          { k: 'rc', sym: 'λrc', v: rc, how: rcHow }, { k: 'er', sym: 'λer', v: er, how: I.erOnDev ? 'As required / As provided = 1/' + I.asRatio : 'not applied' }, { k: 'lam', sym: 'λ', v: lam.v, how: lam.how },
+        ];
+        if (I.useConfinement) {
+          if (ktr > 0) S.push({ lhs: 'k_{tr}', expr: '\\f{40A_{tr}}{sn}', sub: '\\f{40 × ' + I.Atr + '}{' + I.sTr + ' × ' + I.nDev + '}', val: ktr, unit: 'in.', ref: '5.10.8.2.1c-3' });
+          S.push({ lhs: 'λ_{rc}', expr: '\\f{d_{b}}{c_{b} + k_{tr}}, 0.4 ≤ λ_{rc} ≤ 1.0', sub: '\\f{' + b.db + '}{' + cb.toFixed(3) + ' + ' + ktr.toFixed(3) + '} = ' + R.rcCalc.raw.toFixed(4), val: rc, unit: '', ref: '5.10.8.2.1c-2' });
+        }
+        const ldRaw = ldb * rlcf * rc * er / lam.v;
+        S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{db} × \\f{λ_{rl} × λ_{cf} × λ_{rc} × λ_{er}}{λ}', sub: ldb.toFixed(2) + ' × \\f{' + rlcf.toFixed(2) + ' × ' + rc.toFixed(3) + ' × ' + er.toFixed(3) + '}{' + lam.v.toFixed(3) + '}', val: ldRaw, unit: 'in.', ref: '5.10.8.2.1a-1' });
+        ld = Math.max(ldRaw, 12);
+        R.ldLapBasis = Math.max(ldb * rlcf * rc * erLap / lam.v, 12);
+      }
+      if (ld > S[S.length - 1].val + 1e-9) S.push({ lhs: 'ℓ_{d}', expr: 'ℓ_{d} ≥ 12.0 in.', val: ld, unit: 'in.', ref: '5.10.8.2.1a' });
+      R.cb = cb; R.ktr = ktr;
+      R.lapBasisNote = 'Lap based on ℓd including its 12.0-in. minimum' + (I.erOnLaps ? '' : ' and λer = 1.0') + '.';
+    }
+    if (ed === '7' && !I.erOnLaps) R.lapBasisNote += ' Excess reinforcement factor not applied to the lap.';
+    R.er = { dev: erDev, lap: erLap };
+    R.ldb = ldb; R.ld = devOK ? ld : null; R.factors = factors; R.lambda = lam; R.coating = cf;
+    // ---- tension lap splices
+    const cls = classOf(ed, I);
+    const fac = { A: 1.0, B: 1.3, C: 1.7 };
+    R.lap = {};
+    const basis = R.ldLapBasis;
+    (ed === '7' ? ['A', 'B', 'C'] : ['A', 'B']).forEach(c => { R.lap[c] = devOK && lapOK ? Math.max(fac[c] * basis, 12) : null; });
+    R.lapClass = cls; R.lapReq = R.lap[cls];
+    // ---- compression lap splice (unchanged across these editions, ksi form)
+    const m = compM(I);
+    let lc = fy <= 60 ? 0.5 * m.v * fy * b.db : m.v * (0.9 * fy - 24) * b.db;
+    lc = Math.max(lc, 12);
+    R.comp = { m: m.v, mHow: m.how, lc: big(b) ? null : lc };
+    // rounding
+    const rd = v => (v == null ? null : I.roundUp ? Math.ceil(v - 1e-9) : v);
+    if (I.roundUp && I.roundLdFirst && devOK && lapOK) { const lb = Math.ceil(basis - 1e-9); Object.keys(R.lap).forEach(c => { R.lap[c] = Math.max(fac[c] * lb, 12); }); R.lapReq = R.lap[cls]; }
+    R.out = { ld: rd(R.ld), lapA: rd(R.lap.A), lapB: rd(R.lap.B), lapC: rd(R.lap.C), lapReq: rd(R.lapReq), lc: rd(R.comp.lc) };
+    R.steps = S; R.warnings = W; R.devOK = devOK; R.lapOK = lapOK;
+    R.classWhy = ed === '7' ? 'Table 5.11.5.3.1-1: As provided / As required ' + (I.asRatio >= 2 ? '≥ 2' : '< 2') + ', ' + I.pctSpliced + '% spliced → Class ' + cls
+      : (cls === 'A' ? 'As provided ≥ 2 × As required and ≤ 50% spliced → Class A' : 'Class B (Class A requires As provided ≥ 2 × As required and ≤ 50% spliced)');
+    return R;
+  }
+  function table(ed, inp) { return BARS.map(b => compute(ed, b.id, inp)); }
+  const api = { BARS, EDITIONS, defaults, compute, table, check, scope, normalize, migrate, r4 };
+  if (typeof module !== 'undefined') module.exports = api; else root.LapCheck = api;
+})(this);
+</script>
+<script>/* Standard 14 font metrics (Adobe AFM via ReportLab): widths per 1000 em, WinAnsi codes; Symbol map unicode -> [code, width] */
+var PDF_METRICS = {"w":{"Helvetica":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Helvetica-Bold":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,350,556,350,278,556,500,1000,556,556,333,1000,667,333,1000,350,611,350,350,278,278,500,500,350,556,1000,333,1000,556,333,944,350,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,333,400,584,333,333,333,611,556,278,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,584,611,611,611,611,611,556,611,556],"Helvetica-Oblique":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Courier":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600]},"win":{"32":32,"33":33,"34":34,"35":35,"36":36,"37":37,"38":38,"39":39,"40":40,"41":41,"42":42,"43":43,"44":44,"45":45,"46":46,"47":47,"48":48,"49":49,"50":50,"51":51,"52":52,"53":53,"54":54,"55":55,"56":56,"57":57,"58":58,"59":59,"60":60,"61":61,"62":62,"63":63,"64":64,"65":65,"66":66,"67":67,"68":68,"69":69,"70":70,"71":71,"72":72,"73":73,"74":74,"75":75,"76":76,"77":77,"78":78,"79":79,"80":80,"81":81,"82":82,"83":83,"84":84,"85":85,"86":86,"87":87,"88":88,"89":89,"90":90,"91":91,"92":92,"93":93,"94":94,"95":95,"96":96,"97":97,"98":98,"99":99,"100":100,"101":101,"102":102,"103":103,"104":104,"105":105,"106":106,"107":107,"108":108,"109":109,"110":110,"111":111,"112":112,"113":113,"114":114,"115":115,"116":116,"117":117,"118":118,"119":119,"120":120,"121":121,"122":122,"123":123,"124":124,"125":125,"126":126,"127":127,"8364":128,"8218":130,"402":131,"8222":132,"8230":133,"8224":134,"8225":135,"710":136,"8240":137,"352":138,"8249":139,"338":140,"381":142,"8216":145,"8217":146,"8220":147,"8221":148,"8226":149,"8211":150,"8212":151,"732":152,"8482":153,"353":154,"8250":155,"339":156,"382":158,"376":159,"160":160,"161":161,"162":162,"163":163,"164":164,"165":165,"166":166,"167":167,"168":168,"169":169,"170":170,"171":171,"172":172,"173":173,"174":174,"175":175,"176":176,"177":177,"178":178,"179":179,"180":180,"181":181,"182":182,"183":183,"184":184,"185":185,"186":186,"187":187,"188":188,"189":189,"190":190,"191":191,"192":192,"193":193,"194":194,"195":195,"196":196,"197":197,"198":198,"199":199,"200":200,"201":201,"202":202,"203":203,"204":204,"205":205,"206":206,"207":207,"208":208,"209":209,"210":210,"211":211,"212":212,"213":213,"214":214,"215":215,"216":216,"217":217,"218":218,"219":219,"220":220,"221":221,"222":222,"223":223,"224":224,"225":225,"226":226,"227":227,"228":228,"229":229,"230":230,"231":231,"232":232,"233":233,"234":234,"235":235,"236":236,"237":237,"238":238,"239":239,"240":240,"241":241,"242":242,"243":243,"244":244,"245":245,"246":246,"247":247,"248":248,"249":249,"250":250,"251":251,"252":252,"253":253,"254":254,"255":255},"sym":{"8704":[34,713],"8707":[36,549],"8715":[39,439],"8727":[42,500],"8722":[45,549],"8773":[64,549],"913":[65,722],"914":[66,667],"935":[67,722],"8710":[68,612],"917":[69,611],"934":[70,763],"915":[71,603],"919":[72,722],"921":[73,333],"977":[74,631],"922":[75,722],"923":[76,686],"924":[77,889],"925":[78,722],"927":[79,722],"928":[80,768],"920":[81,741],"929":[82,556],"931":[83,592],"932":[84,611],"933":[85,690],"962":[86,439],"8486":[87,768],"926":[88,645],"936":[89,795],"918":[90,611],"8756":[92,863],"8869":[94,658],"63717":[96,500],"945":[97,631],"946":[98,549],"967":[99,549],"948":[100,494],"949":[101,439],"966":[102,521],"947":[103,411],"951":[104,603],"953":[105,329],"981":[106,603],"954":[107,549],"955":[108,549],"957":[110,521],"959":[111,549],"960":[112,549],"952":[113,521],"961":[114,549],"963":[115,603],"964":[116,439],"965":[117,576],"982":[118,713],"969":[119,686],"958":[120,493],"968":[121,686],"950":[122,494],"8764":[126,549],"8364":[160,750],"978":[161,620],"8242":[162,247],"8804":[163,549],"8260":[164,167],"8734":[165,713],"9827":[167,753],"9830":[168,753],"9829":[169,753],"9824":[170,753],"8596":[171,1042],"8592":[172,987],"8593":[173,603],"8594":[174,987],"8595":[175,603],"8243":[178,411],"8805":[179,549],"8733":[181,713],"8706":[182,494],"8226":[183,460],"8800":[185,549],"8801":[186,549],"8776":[187,549],"8230":[188,1000],"63718":[189,603],"63719":[190,1000],"8629":[191,658],"8501":[192,823],"8465":[193,686],"8476":[194,795],"8472":[195,987],"8855":[196,768],"8853":[197,768],"8709":[198,823],"8745":[199,768],"8746":[200,768],"8835":[201,713],"8839":[202,713],"8836":[203,713],"8834":[204,713],"8838":[205,713],"8712":[206,713],"8713":[207,713],"8736":[208,768],"8711":[209,713],"63194":[210,790],"63193":[211,790],"63195":[212,890],"8719":[213,823],"8730":[214,549],"8901":[215,250],"8743":[217,603],"8744":[218,603],"8660":[219,1042],"8656":[220,987],"8657":[221,603],"8658":[222,987],"8659":[223,603],"9674":[224,494],"9001":[225,329],"63720":[226,790],"63721":[227,790],"63722":[228,786],"8721":[229,713],"63723":[230,384],"63724":[231,384],"63725":[232,384],"63726":[233,384],"63727":[234,384],"63728":[235,384],"63729":[236,494],"63730":[237,494],"63731":[238,494],"63732":[239,494],"9002":[241,329],"8747":[242,274],"8992":[243,686],"63733":[244,686],"8993":[245,686],"63734":[246,384],"63735":[247,384],"63736":[248,384],"63737":[249,384],"63738":[250,384],"63739":[251,384],"63740":[252,494],"63741":[253,494],"63742":[254,494]}};
+if (typeof module !== 'undefined') module.exports = PDF_METRICS;
+
+/* Minimal dependency-free PDF writer and flow layout for calculation reports.
+ * Standard-14 fonts (Helvetica family, Courier, Symbol for Greek and math signs) — nothing embedded.
+ * Coordinates: points, origin top-left, y downward (converted on output).
+ */
+(function (root) {
+  'use strict';
+  const MET = (typeof module !== 'undefined') ? require('./metrics.js') : root.PDF_METRICS;
+  const FONTS = { R: 'Helvetica', B: 'Helvetica-Bold', I: 'Helvetica-Oblique', M: 'Courier', S: 'Symbol' };
+  const FKEY = { R: 'F1', B: 'F2', I: 'F3', M: 'F4', S: 'F5' };
+  const ALIAS = { 0x394: 0x2206, 0x3A9: 0x2126, 0x2032: 0x27, 0x2033: 0x22, 0x2264: 0x2264, 0x2265: 0x2265, 0x2009: 0x20, 0x202F: 0x20, 0xA0: 0x20, 0x2011: 0x2D, 0x2010: 0x2D, 0x2212: 0x2212, 0x2113: 0x6C, 0x2074: 0x34, 0x2075: 0x35, 0x2076: 0x36, 0x2192: 0x2192, 0x2713: 0x221A, 0x2248: 0x2248 };
+  if (MET.sym[0x3BC] == null) MET.sym[0x3BC] = [109, 576];
+  // split a string into font segments: Latin in the requested font, Greek/math from Symbol
+  function segs(str, f) {
+    const out = []; let cur = null;
+    for (const ch of String(str)) {
+      let u = ch.codePointAt(0); if (ALIAS[u] != null) u = ALIAS[u];
+      let font = f, code;
+      if (u === 0x2212) { code = 0x2D; } // minus sign drawn as hyphen-minus in the text font
+      else if (u === 0x2206) { font = 'D'; code = 0; } // capital delta drawn as a vector triangle: viewers' Symbol substitutes often lack it
+      else if (MET.win[u] != null) code = MET.win[u];
+      else if (MET.sym[u] != null) { font = 'S'; code = MET.sym[u][0]; }
+      else code = 0x3F;
+      if (!cur || cur.f !== font) { cur = { f: font, codes: [] }; out.push(cur); }
+      cur.codes.push(code);
+    }
+    return out;
+  }
+  function segWidth(sg, size) {
+    let w = 0;
+    if (sg.f === 'D') w += 612 * sg.codes.length;
+    else if (sg.f === 'S') { sg.codes.forEach(c => { const e = Object.values(MET.sym).find(v => v[0] === c); w += e ? e[1] : 500; }); }
+    else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); }
+    return w * size / 1000;
+  }
+  const symW = {}; Object.values(MET.sym).forEach(v => { symW[v[0]] = v[1]; });
+  function textWidth(str, f, size) {
+    let w = 0;
+    segs(str, f).forEach(sg => { if (sg.f === 'D') w += 612 * sg.codes.length; else if (sg.f === 'S') sg.codes.forEach(c => { w += symW[c] || 500; }); else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); } });
+    return w * size / 1000;
+  }
+  const esc = codes => codes.map(c => (c === 0x28 || c === 0x29 || c === 0x5C ? '\\' + String.fromCharCode(c) : c < 32 || c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c))).join('');
+  const n2 = v => (Math.round(v * 100) / 100).toString();
+  const col = c => (c || [0, 0, 0]).map(v => n2(v)).join(' ');
+
+  class Doc {
+    constructor(o = {}) {
+      this.W = o.W || 612; this.H = o.H || 792; this.pages = []; this.info = o.info || {};
+      this.page = null;
+    }
+    addPage() { this.page = { ops: [] }; this.pages.push(this.page); return this.page; }
+    Y(y) { return this.H - y; }
+    text(x, y, str, o = {}) { // y = baseline
+      const f = o.font || 'R', size = o.size || 9, color = o.color;
+      const ops = this.page.ops; let cx = x;
+      ops.push('BT ' + col(color) + ' rg');
+      segs(str, f).forEach(sg => {
+        if (sg.f === 'D') {
+          const by = this.Y(y) + (o.rise || 0), lw = size * (f === 'B' ? 0.085 : 0.065), wd = 0.612 * size;
+          sg.codes.forEach(() => { const a = cx + 0.06 * size, b = cx + wd - 0.06 * size, h = 0.674 * size;
+            ops.push('ET q ' + col(color) + ' RG ' + n2(lw) + ' w [] 0 d 0 j ' + n2(a + lw / 2) + ' ' + n2(by + lw / 2) + ' m ' + n2(b - lw / 2) + ' ' + n2(by + lw / 2) + ' l ' + n2((a + b) / 2) + ' ' + n2(by + h - lw / 2) + ' l h S Q BT ' + col(color) + ' rg');
+            cx += wd; });
+          return;
+        }
+        ops.push('/' + FKEY[sg.f] + ' ' + n2(size) + ' Tf 1 0 0 1 ' + n2(cx) + ' ' + n2(this.Y(y) + (o.rise || 0)) + ' Tm (' + esc(sg.codes) + ') Tj');
+        cx += sg.f === 'S' ? sg.codes.reduce((a, c) => a + (symW[c] || 500), 0) * size / 1000 : sg.codes.reduce((a, c) => a + (MET.w[FONTS[sg.f]][c] || 556), 0) * size / 1000;
+      });
+      ops.push('ET');
+      return cx - x;
+    }
+    line(x1, y1, x2, y2, o = {}) { this.page.ops.push((o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ' + col(o.color) + ' RG ' + n2(x1) + ' ' + n2(this.Y(y1)) + ' m ' + n2(x2) + ' ' + n2(this.Y(y2)) + ' l S'); }
+    rect(x, y, w, h, o = {}) {
+      const p = n2(x) + ' ' + n2(this.Y(y + h)) + ' ' + n2(w) + ' ' + n2(h) + ' re ';
+      const dsh = o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ';
+      if (o.fill && o.stroke) this.page.ops.push(col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' + dsh + p + 'B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + p + 'f');
+      else this.page.ops.push(col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w [] 0 d ' + p + 'S');
+    }
+    poly(pts, o = {}) {
+      if (pts.length < 2) return;
+      let s = n2(pts[0][0]) + ' ' + n2(this.Y(pts[0][1])) + ' m ' + pts.slice(1).map(p => n2(p[0]) + ' ' + n2(this.Y(p[1])) + ' l').join(' ');
+      if (o.close) s += ' h';
+      const st = (o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ';
+      if (o.fill && o.stroke) this.page.ops.push(st + col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + s + ' B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + s + ' f');
+      else this.page.ops.push(st + col(o.stroke || o.color) + ' RG ' + s + ' S');
+    }
+    circle(cx, cy, r, o = {}) {
+      const k = 0.5523 * r, Y = this.Y(cy);
+      const s = n2(cx + r) + ' ' + n2(Y) + ' m ' + [[cx + r, Y + k, cx + k, Y + r, cx, Y + r], [cx - k, Y + r, cx - r, Y + k, cx - r, Y], [cx - r, Y - k, cx - k, Y - r, cx, Y - r], [cx + k, Y - r, cx + r, Y - k, cx + r, Y]].map(a => a.map(n2).join(' ') + ' c').join(' ');
+      this.page.ops.push((o.fill ? col(o.fill) + ' rg ' : '') + (o.stroke ? col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' : '') + s + (o.fill && o.stroke ? ' B' : o.fill ? ' f' : ' S'));
+    }
+    async save() {
+      const enc = s => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+      const deflate = async bytes => {
+        if (typeof CompressionStream === 'undefined') return null;
+        try { const cs = new CompressionStream('deflate'); const w = cs.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return new Uint8Array(buf); } catch (e) { return null; }
+      };
+      const objs = []; // [string or Uint8Array parts]
+      const add = parts => { objs.push(parts); return objs.length; };
+      const fontIds = {};
+      Object.keys(FONTS).forEach(k => {
+        fontIds[k] = add(['<< /Type /Font /Subtype /Type1 /BaseFont /' + FONTS[k] + (k === 'S' ? '' : ' /Encoding /WinAnsiEncoding') + ' >>']);
+      });
+      const fontRes = '<< ' + Object.keys(FONTS).map(k => '/' + FKEY[k] + ' ' + fontIds[k] + ' 0 R').join(' ') + ' >>';
+      const pagesId = add(null); // placeholder
+      const kids = [];
+      for (const pg of this.pages) {
+        const raw = enc(pg.ops.join('\n'));
+        const z = await deflate(raw);
+        const cid = add(z ? ['<< /Length ' + z.length + ' /Filter /FlateDecode >>\nstream\n', z, '\nendstream'] : ['<< /Length ' + raw.length + ' >>\nstream\n', raw, '\nendstream']);
+        kids.push(add(['<< /Type /Page /Parent ' + pagesId + ' 0 R /MediaBox [0 0 ' + this.W + ' ' + this.H + '] /Resources << /Font ' + fontRes + ' >> /Contents ' + cid + ' 0 R >>']));
+      }
+      objs[pagesId - 1] = ['<< /Type /Pages /Kids [' + kids.map(k => k + ' 0 R').join(' ') + '] /Count ' + kids.length + ' >>'];
+      const pdfStr = s => '(' + esc([...String(s)].map(ch => { const u = ch.codePointAt(0); return MET.win[u] != null ? MET.win[u] : 0x3F; })) + ')';
+      const d = new Date(), pad = v => String(v).padStart(2, '0');
+      const date = 'D:' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+      const infoId = add(['<< /Title ' + pdfStr(this.info.title || '') + ' /Subject ' + pdfStr(this.info.subject || '') + ' /Creator ' + pdfStr(this.info.creator || '') + ' /Producer (Bridge SE report writer) /CreationDate (' + date + ') >>']);
+      const catId = add(['<< /Type /Catalog /Pages ' + pagesId + ' 0 R >>']);
+      // assemble
+      const chunks = []; let len = 0; const offs = [];
+      const push = x => { const b = typeof x === 'string' ? enc(x) : x; chunks.push(b); len += b.length; };
+      push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+      objs.forEach((parts, i) => { offs.push(len); push((i + 1) + ' 0 obj\n'); parts.forEach(push); push('\nendobj\n'); });
+      const xref = len;
+      push('xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join(''));
+      push('trailer\n<< /Size ' + (objs.length + 1) + ' /Root ' + catId + ' 0 R /Info ' + infoId + ' 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+      const out = new Uint8Array(len); let o = 0; chunks.forEach(c => { out.set(c, o); o += c.length; });
+      return out;
+    }
+  }
+
+  // ---------- inline rich text: markup _x or _{xy} subscript, ^x or ^{xy} superscript, *bold* not supported (use runs) ----------
+  function parseRich(s, font) {
+    const runs = []; let i = 0, buf = '';
+    const flush = () => { if (buf) { runs.push({ t: buf, f: font, v: 0 }); buf = ''; } };
+    while (i < s.length) {
+      const ch = s[i];
+      if ((ch === '_' || ch === '^') && i + 1 < s.length) {
+        flush();
+        let t;
+        if (s[i + 1] === '{') { const j = s.indexOf('}', i + 2); t = s.slice(i + 2, j < 0 ? s.length : j); i = j < 0 ? s.length : j + 1; }
+        else { t = [...s.slice(i + 1)][0]; i += 1 + t.length; }
+        runs.push({ t, f: font, v: ch === '_' ? -1 : 1 });
+      } else { buf += ch; i++; }
+    }
+    flush();
+    return runs;
+  }
+  function richWidth(runs, size) { return runs.reduce((a, r) => a + textWidth(r.t, r.f, r.v ? size * 0.72 : size), 0); }
+  function drawRich(doc, x, y, runs, size, color) {
+    let cx = x;
+    runs.forEach(r => { const sz = r.v ? size * 0.72 : size; cx += doc.text(cx, y, r.t, { font: r.f, size: sz, color, rise: r.v < 0 ? -size * 0.22 : r.v > 0 ? size * 0.38 : 0 }); });
+    return cx - x;
+  }
+  // math expression with \f{num}{den} stacked fractions (and rich markup inside)
+  function parseMath(s, font) {
+    const out = []; let i = 0, buf = '';
+    while (i < s.length) {
+      if (s.startsWith('\\f{', i)) {
+        if (buf) { out.push({ k: 'r', runs: parseRich(buf, font) }); buf = ''; }
+        const grab = st => { let depth = 0, j = st; for (; j < s.length; j++) { if (s[j] === '{') depth++; else if (s[j] === '}') { depth--; if (depth === 0) break; } } return [s.slice(st + 1, j), j + 1]; };
+        const [num, a] = grab(i + 2), [den, b] = grab(a);
+        out.push({ k: 'f', num: parseRich(num, font), den: parseRich(den, font) }); i = b;
+      } else { buf += s[i]; i++; }
+    }
+    if (buf) out.push({ k: 'r', runs: parseRich(buf, font) });
+    return out;
+  }
+  function mathMetrics(parts, size) {
+    let w = 0, frac = false;
+    parts.forEach(p => { if (p.k === 'r') w += richWidth(p.runs, size); else { frac = true; w += Math.max(richWidth(p.num, size * 0.9), richWidth(p.den, size * 0.9)) + size * 0.3; } });
+    return { w, up: frac ? size * 1.15 : size * 0.85, down: frac ? size * 0.95 : size * 0.3 };
+  }
+  function drawMath(doc, x, y, parts, size, color) {
+    let cx = x;
+    parts.forEach(p => {
+      if (p.k === 'r') cx += drawRich(doc, cx, y, p.runs, size, color);
+      else {
+        const s2 = size * 0.9, wn = richWidth(p.num, s2), wd = richWidth(p.den, s2), w = Math.max(wn, wd) + size * 0.3;
+        const mid = y - size * 0.3;
+        drawRich(doc, cx + (w - wn) / 2, mid - size * 0.25, p.num, s2, color);
+        doc.line(cx + size * 0.08, mid, cx + w - size * 0.08, mid, { w: 0.5, color });
+        drawRich(doc, cx + (w - wd) / 2, mid + size * 0.85, p.den, s2, color);
+        cx += w;
+      }
+    });
+    return cx - x;
+  }
+  function wrapWords(str, f, size, width) {
+    const words = String(str).split(/(\s+)/); const lines = []; let cur = '';
+    words.forEach(w => {
+      if (/^\s+$/.test(w)) { cur += ' '; return; }
+      const t = cur + w;
+      if (textWidth(t.trim(), f, size) > width && cur.trim()) { lines.push(cur.trim()); cur = w; } else cur = t;
+    });
+    if (cur.trim()) lines.push(cur.trim());
+    return lines.length ? lines : [''];
+  }
+
+  // ---------- flow layout ----------
+  class Flow {
+    constructor(o) {
+      this.doc = new Doc({ info: o.info });
+      this.m = Object.assign({ l: 54, r: 54, t: 64, b: 56 }, o.margins || {});
+      this.header = o.header; this.footer = o.footer;
+      this.pal = Object.assign({ ink: [0.09, 0.11, 0.13], mute: [0.36, 0.40, 0.44], rule: [0.75, 0.78, 0.80], head: [0.92, 0.94, 0.95], accent: [0.12, 0.37, 0.55], bad: [0.70, 0.14, 0.09], ok: [0.12, 0.48, 0.27], zebra: [0.97, 0.975, 0.98] }, o.palette || {});
+      this.newPage();
+    }
+    get W() { return this.doc.W - this.m.l - this.m.r; }
+    newPage() { this.doc.addPage(); this.y = this.m.t; }
+    need(h) { if (this.y + h > this.doc.H - this.m.b) { this.newPage(); return true; } return false; }
+    space(h) { this.y += h; }
+    h1(t) { this.need(40); this.y += 6; this.doc.text(this.m.l, this.y + 14, t, { font: 'B', size: 15, color: this.pal.ink }); this.y += 22; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 1.2, color: this.pal.accent }); this.y += 10; }
+    h2(t) { this.need(34); this.y += 8; this.doc.text(this.m.l, this.y + 11, t, { font: 'B', size: 11.5, color: this.pal.accent }); this.y += 15; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 0.5, color: this.pal.rule }); this.y += 7; }
+    h3(t) { this.need(26); this.y += 4; this.doc.text(this.m.l, this.y + 9, t, { font: 'B', size: 9.5, color: this.pal.ink }); this.y += 14; }
+    para(t, o = {}) {
+      const size = o.size || 9, f = o.font || 'R', lh = size * 1.35, x = this.m.l + (o.indent || 0), w = (o.width || this.W) - (o.indent || 0);
+      wrapWords(t, f, size, w).forEach(ln => { this.need(lh); this.doc.text(x, this.y + size, ln, { font: f, size, color: o.color || this.pal.ink }); this.y += lh; });
+      this.y += o.after != null ? o.after : 3;
+    }
+    bullets(items, o = {}) { const size = o.size || 8.6; items.forEach(t => { const lines = wrapWords(t, 'R', size, this.W - 12); lines.forEach((ln, k) => { this.need(size * 1.35); if (!k) this.doc.text(this.m.l + 2, this.y + size, '•', { size, color: this.pal.mute }); this.doc.text(this.m.l + 12, this.y + size, ln, { size, color: o.color || this.pal.ink }); this.y += size * 1.35; }); this.y += 1.5; }); this.y += 2; }
+    // key/value grid: rows [[k, v], ...] in n column pairs
+    kv(rows, o = {}) {
+      const cols = o.cols || 2, size = o.size || 8.6, lh = size * 1.5, cw = this.W / cols, kw = o.kw || cw * 0.48;
+      const n = Math.ceil(rows.length / cols);
+      for (let r = 0; r < n; r++) {
+        // wrap values
+        let hmax = lh; const cells = [];
+        for (let c = 0; c < cols; c++) {
+          const it = rows[c * n + r]; if (!it) { cells.push(null); continue; }
+          const vl = wrapWords(String(it[1]), 'R', size, cw - kw - 8); cells.push({ k: it[0], vl }); hmax = Math.max(hmax, vl.length * size * 1.25 + size * 0.5);
+        }
+        this.need(hmax);
+        cells.forEach((cl, c) => { if (!cl) return; const x = this.m.l + c * cw; this.doc.text(x, this.y + size, cl.k, { size, color: this.pal.mute }); cl.vl.forEach((ln, k) => this.doc.text(x + kw, this.y + size + k * size * 1.25, ln, { size, font: 'R', color: this.pal.ink })); });
+        this.y += hmax;
+      }
+      this.y += 4;
+    }
+    // table: cols [{h, w (fraction), a: 'l'|'r'|'c'}], rows [[cells]]; cell may be {t, f, color}
+    table(cols, rows, o = {}) {
+      const size = o.size || 7.6, pad = 3, lh = size * 1.25, W = this.W, ws = cols.map(c => c.w * W / cols.reduce((a, q) => a + q.w, 0));
+      const head = () => {
+        const hl = cols.map((c, i) => wrapWords(c.h, 'B', size, ws[i] - 2 * pad));
+        const hh = Math.max(...hl.map(l => l.length)) * lh + 2 * pad;
+        this.need(hh + lh + 2 * pad);
+        this.doc.rect(this.m.l, this.y, W, hh, { fill: this.pal.head });
+        let x = this.m.l;
+        hl.forEach((ls, i) => { ls.forEach((ln, k) => { const tw = textWidth(ln, 'B', size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size + k * lh, ln, { font: 'B', size, color: this.pal.ink }); }); x += ws[i]; });
+        this.y += hh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.6, color: this.pal.mute });
+      };
+      head();
+      rows.forEach((row, ri) => {
+        const cells = row.map((c, i) => { const cc = c && typeof c === 'object' ? c : { t: c == null ? '' : String(c) }; cc.lines = wrapWords(cc.t, cc.f || 'R', size, ws[i] - 2 * pad); return cc; });
+        const rh = Math.max(...cells.map(c => c.lines.length)) * lh + 2 * pad - 1;
+        if (this.need(rh)) head();
+        if (o.zebra !== false && ri % 2) this.doc.rect(this.m.l, this.y, W, rh, { fill: this.pal.zebra });
+        if (o.hl && o.hl(ri)) this.doc.rect(this.m.l, this.y, W, rh, { fill: [1, 0.96, 0.85] });
+        let x = this.m.l;
+        cells.forEach((c, i) => { c.lines.forEach((ln, k) => { const f = c.f || (cols[i].mono ? 'R' : 'R'); const tw = textWidth(ln, f, size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size - 1 + k * lh, ln, { font: f, size, color: c.color || this.pal.ink }); }); x += ws[i]; });
+        this.y += rh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.25, color: this.pal.rule });
+      });
+      this.y += o.after != null ? o.after : 8;
+    }
+    // MathCAD-style worksheet lines: [{lhs, expr, sub, res, unit, ref, note}]
+    math(lines, o = {}) {
+      const size = o.size || 9, x0 = this.m.l + 8, refW = 92, avail = this.W - 8 - refW;
+      lines.forEach(L => {
+        if (L.note) { this.need(size * 1.6); wrapWords(L.note, 'I', size * 0.92, this.W - 16).forEach(ln => { this.need(size * 1.3); this.doc.text(x0, this.y + size, ln, { font: 'I', size: size * 0.92, color: this.pal.mute }); this.y += size * 1.3; }); this.y += 2; return; }
+        const pieces = [];
+        if (L.lhs) pieces.push(parseMath(L.lhs + (L.expr ? ' := ' : ' = '), 'I'));
+        const tail = [];
+        if (L.expr) tail.push(parseMath(L.expr, 'R'));
+        if (L.sub) tail.push(parseMath((L.expr ? ' = ' : '') + L.sub, 'R'));
+        if (L.res != null) tail.push(parseMath(' = ' + L.res + (L.unit ? ' ' + L.unit : ''), 'B'));
+        // lay out on one line if it fits, else wrap at the '=' pieces with an indent
+        const all = pieces.concat(tail), mets = all.map(p => mathMetrics(p, size));
+        const total = mets.reduce((a, q) => a + q.w, 0);
+        const rowsOut = [];
+        if (total <= avail) rowsOut.push(all.map((p, i) => [p, mets[i]]));
+        else { let cur = [], cw = 0; all.forEach((p, i) => { if (cur.length && cw + mets[i].w > avail) { rowsOut.push(cur); cur = []; cw = 24; } cur.push([p, mets[i]]); cw += mets[i].w; }); if (cur.length) rowsOut.push(cur); }
+        rowsOut.forEach((row, ri) => {
+          const up = Math.max(...row.map(q => q[1].up)), down = Math.max(...row.map(q => q[1].down));
+          this.need(up + down + 4);
+          const base = this.y + up + 1;
+          let cx = x0 + (ri ? 24 : 0);
+          row.forEach(([p, mt]) => { cx += drawMath(this.doc, cx, base, p, size, L.color || this.pal.ink); });
+          if (!ri && L.ref) { const tw = textWidth(L.ref, 'R', size * 0.85); this.doc.text(this.m.l + this.W - tw, base, L.ref, { size: size * 0.85, color: this.pal.mute }); }
+          this.y = base + down + 3;
+        });
+      });
+      this.y += 4;
+    }
+    box(h, draw) { this.need(h); draw(this.doc, this.m.l, this.y, this.W, h); this.y += h; }
+    async finish() {
+      const n = this.doc.pages.length;
+      this.doc.pages.forEach((pg, i) => { this.doc.page = pg; if (this.header) this.header(this.doc, i + 1, n, this.m); if (this.footer) this.footer(this.doc, i + 1, n, this.m); });
+      return this.doc.save();
+    }
+  }
+  const api = { Doc, Flow, textWidth, wrapWords, parseRich, parseMath };
+  if (typeof module !== 'undefined') module.exports = api; else root.PDFW = api;
+})(this);
+
+/* Rebar Lap Splice Lengths — PDF calculation sheet (all bars, all editions, worksheets for one bar). Uses PDFW and LapCheck. */
+(function (root) {
+  'use strict';
+  const W = typeof module !== 'undefined' ? require('../report/pdfw.js') : root.PDFW;
+  const L = typeof module !== 'undefined' ? require('./lapcheck.js') : root.LapCheck;
+  const EDS = ['10', '9', '8', '7'];
+  const f1 = v => (v == null ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(1));
+  const hash = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+  async function build(I, sel, opts) {
+    const meta = (opts && opts.meta) || {}, id = hash(JSON.stringify(I));
+    const now = new Date(), stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const title = 'Development and lap splice lengths';
+    const F = new W.Flow({
+      info: { title: title + ' — ' + (meta.structure || ''), subject: 'AASHTO LRFD 10th, 9th, 8th and 7th Editions', creator: 'Bridge SE Rebar Lap Splice Lengths ' + ((opts && opts.appVersion) || '') },
+      header: (d, i, n, m) => { if (i === 1) return; d.text(m.l, 34, 'Rebar Lap Splice Lengths · ' + (meta.structure || ''), { font: 'B', size: 8, color: F.pal.ink }); d.line(m.l, 40, d.W - m.r, 40, { w: 0.4, color: F.pal.rule }); },
+      footer: (d, i, n, m) => { const y = d.H - 30; d.line(m.l, y - 9, d.W - m.r, y - 9, { w: 0.4, color: F.pal.rule }); d.text(m.l, y, 'Bridge SE Rebar Lap Splice Lengths ' + ((opts && opts.appVersion) || '') + ' · AASHTO LRFD 10th (2024), 9th (2020), 8th (2017), 7th (2014)', { size: 6.6, color: F.pal.mute }); d.text(m.l, y + 8.5, 'Generated ' + stamp + ' · input ID ' + id, { size: 6.6, color: F.pal.mute }); const s = 'Designed by ' + (meta.designedBy || '______') + '    Checked by ______'; d.text(d.W - m.r - W.textWidth(s, 'R', 6.8), y, s, { size: 6.8, color: F.pal.mute }); const t = 'Sheet ' + i + ' of ' + n; d.text(d.W - m.r - W.textWidth(t, 'B', 6.8), y + 8.5, t, { font: 'B', size: 6.8, color: F.pal.ink }); },
+    });
+    F.doc.text(F.m.l, 50, 'REBAR LAP SPLICE LENGTHS', { font: 'B', size: 9, color: F.pal.accent });
+    F.y = 58; F.doc.text(F.m.l, F.y + 18, title, { font: 'B', size: 17, color: F.pal.ink }); F.y += 34;
+    const tb = [['Project / structure', meta.structure || ''], ['Element', meta.element || '']];
+    F.box(2 * 20 + 46, (d, x0, y0, w) => {
+      tb.forEach((r, k) => { const y = y0 + k * 20; d.rect(x0, y, w, 20, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, 120, 20, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); d.text(x0 + 128, y + 13.5, String(r[1]), { font: 'B', size: 9.5, color: F.pal.ink }); });
+      const y = y0 + 46, half = w / 2 - 4;
+      [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
+        d.rect(x, y, half, 36, { stroke: F.pal.mute, w: 0.6 }); d.text(x + 6, y + 12, k, { size: 7.5, color: F.pal.mute }); d.text(x + half - 92, y + 12, 'Date', { size: 7.5, color: F.pal.mute });
+        d.text(x + 6, y + 29, v, { font: 'B', size: 11, color: F.pal.ink }); d.text(x + half - 92, y + 29, dt, { size: 9.5, color: F.pal.ink });
+        if (!v) { d.line(x + 6, y + 31, x + half - 100, y + 31, { w: 0.4, color: F.pal.rule }); d.line(x + half - 92, y + 31, x + half - 8, y + 31, { w: 0.4, color: F.pal.rule }); }
+      });
+    });
+    F.space(8);
+    F.h2('Input');
+    const conc = { normal: 'normal weight', sand: 'sand-lightweight', all: 'all-lightweight' }[I.concrete];
+    F.kv([
+      ["f′c", I.fc + ' ksi'], ['fy', I.fy + ' ksi'], ['Concrete', conc + ', wc ' + I.wc + ' kcf' + (I.fct ? ', fct ' + I.fct + ' ksi' : '') + ', K1 ' + I.K1],
+      ['Clear cover', I.clearCover + ' in.'], ['Bar spacing', I.spacing + ' in. c–c'], ['Coating', { none: 'uncoated', galv: 'zinc-coated', epoxy: 'epoxy or dual coated' }[I.coating]],
+      ['Top bar', I.topBar ? 'yes (> 12 in. of concrete below)' : 'no'], ['Spiral', I.spiral ? 'yes' : 'no'], ['Confinement λrc', I.useConfinement ? 'applied' : 'not applied'],
+      ['Atr, s, n', I.Atr + ' in.², ' + I.sTr + ' in., ' + I.nDev], ['βt (10th)', String(I.betaT)], ['As prov. / As req.', String(I.asRatio)],
+      ['Percent spliced', I.pctSpliced + '%'], ['λer', (I.erOnDev || I.erOnLaps ? (1 / I.asRatio).toFixed(3) + ' = As req. / As prov.' : '1.0 (not applied)') + (I.erOnDev && I.erOnLaps ? ', development and laps' : I.erOnDev ? ', development length only' : I.erOnLaps ? ', laps only' : '')], ['Compression m case', I.compM],
+      ['Rounding', I.roundUp ? 'up to whole inch' + (I.roundLdFirst ? ', ℓd before class factor' : '') : 'none'],
+    ], { cols: 2, kw: 100 });
+    F.h2('Required lengths by edition, in.');
+    const T = {}; EDS.forEach(e => { T[e] = L.table(e, I); });
+    if (EDS.every(e => T[e].every(r => r.blocked))) throw new Error('the input is outside the scope of every edition: ' + T['10'][0].scope.join(' '));
+    const outE = EDS.filter(e => T[e].some(r => r.blocked));
+    F.table([{ h: 'Bar', w: 0.6 }].concat(EDS.flatMap(e => [{ h: L.EDITIONS[e].short + ' ℓd', w: 1, a: 'r' }, { h: 'Lap', w: 0.9, a: 'r' }])).concat([{ h: 'Comp. lap', w: 0.9, a: 'r' }]),
+      L.BARS.map(b => [b.id].concat(EDS.flatMap(e => { const r = T[e].find(q => q.bar === b.id); return [f1(r.out.ld), r.out.lapReq == null ? '—' : f1(r.out.lapReq) + ' ' + r.lapClass]; })).concat([f1(T['10'].find(q => q.bar === b.id).out.lc)])), { size: 7.6, hl: k => L.BARS[k].id === sel });
+    outE.forEach(e => { const why = [...new Set(T[e].filter(r => r.blocked).flatMap(r => r.scope))]; F.para(L.EDITIONS[e].short + ': ' + (T[e].every(r => r.blocked) ? 'no lengths, ' : 'some bars without lengths, ') + 'outside the scope of the edition — ' + why.join(' '), { size: 8, font: 'B', color: [0.70, 0.14, 0.09] }); });
+    F.para((T['10'][0].blocked ? '' : T['10'][0].classWhy + '. ') + 'Lap class shown after each lap length; “—”: not permitted or outside the edition’s provisions.', { size: 7.6, color: F.pal.mute });
+    EDS.forEach(e => {
+      const rows = T[e], seven = e === '7';
+      F.h3('AASHTO LRFD ' + L.EDITIONS[e].name);
+      if (rows.every(r => r.blocked)) { F.para('Outside the scope of this edition; no lengths: ' + rows[0].scope.join(' '), { size: 8, color: [0.70, 0.14, 0.09] }); return; }
+      const fc = seven ? [['tc', 'Top×epoxy'], ['lw', 'LW'], ['sp', 'Spacing'], ['spi', 'Spiral']] : [['rlcf', 'λrl·λcf'], ['rc', 'λrc'], ['lam', 'λ']];
+      F.table([{ h: 'Bar', w: 0.6 }, { h: 'ℓdb', w: 0.8, a: 'r' }].concat(fc.map(([, h]) => ({ h, w: 0.8, a: 'r' }))).concat([{ h: 'λer', w: 0.6, a: 'r' }, { h: 'ℓd', w: 0.7, a: 'r' }, { h: 'Class A', w: 0.8, a: 'r' }, { h: 'Class B', w: 0.8, a: 'r' }]).concat(seven ? [{ h: 'Class C', w: 0.8, a: 'r' }] : []),
+        rows.map(r => r.blocked ? [r.bar, 'outside scope'].concat(fc.map(() => '')).concat(['', '', '', '']).concat(seven ? [''] : []) : [r.bar, r.ldb.toFixed(1)].concat(fc.map(([k]) => { const x = r.factors.find(q => q.k === k); return x ? x.v.toFixed(2) : '—'; })).concat([r.er.dev.toFixed(2), f1(r.out.ld), f1(r.out.lapA), f1(r.out.lapB)]).concat(seven ? [f1(r.out.lapC)] : [])), { size: 7.2, hl: k => rows[k].bar === sel });
+    });
+    F.newPage();
+    F.h1('Worksheets: ' + sel + ' bar');
+    EDS.forEach(e => {
+      const r = L.compute(e, sel, I), E = L.EDITIONS[e];
+      F.need(160); F.h2('AASHTO LRFD ' + E.name);
+      if (r.blocked) { F.para('Outside the scope of this edition; no lengths: ' + r.scope.join(' '), { size: 8.4, color: [0.70, 0.14, 0.09] }); return; }
+      F.kv(r.factors.map(f => [f.sym, f.v.toFixed(3) + ' — ' + f.how]), { cols: 1, kw: 110, size: 7.6 });
+      const M = r.steps.map(s => ({ lhs: s.lhs, expr: s.expr, sub: s.sub, res: s.unit === '' ? s.val.toFixed(3) : s.val.toFixed(2), unit: s.unit, ref: s.ref }));
+      Object.keys(r.lap).forEach(c => M.push({ lhs: 'Class ' + c, expr: ({ A: '1.0', B: '1.3', C: '1.7' })[c] + 'ℓ_{d} ≥ 12.0', sub: ({ A: '1.0', B: '1.3', C: '1.7' })[c] + ' × ' + r.ldLapBasis.toFixed(2), res: r.lap[c] == null ? 'not permitted' : r.lap[c].toFixed(2), unit: r.lap[c] == null ? '' : 'in.', ref: E.art.lap }));
+      if (r.comp.lc != null) M.push({ lhs: 'ℓ_{c}', expr: I.fy <= 60 ? '0.5mf_{y}d_{b} ≥ 12.0' : 'm(0.9f_{y} − 24)d_{b} ≥ 12.0', sub: I.fy <= 60 ? '0.5 × ' + r.comp.m + ' × ' + I.fy + ' × ' + r.db : r.comp.m + '(0.9 × ' + I.fy + ' − 24) × ' + r.db, res: r.comp.lc.toFixed(2), unit: 'in.', ref: E.art.comp });
+      F.math(M);
+      F.para(r.lapBasisNote + ' ' + r.classWhy + '. Required: ' + (r.out.lapReq == null ? 'not permitted' : f1(r.out.lapReq) + ' in. (Class ' + r.lapClass + ')') + (I.roundUp ? ', rounded up.' : '.'), { size: 8 });
+      if (r.warnings.length) F.bullets(r.warnings, { size: 7.6, color: [0.62, 0.40, 0.04] });
+    });
+    return F.finish();
+  }
+  const api = { build };
+  if (typeof module !== 'undefined') module.exports = api; else root.LapReport = api;
+})(this);
+</script>
+<script>
+'use strict';
+const $ = s => document.querySelector(s);
+const EDS = ['10', '9', '8', '7'];
+const COL = { '10': 'var(--e10)', '9': 'var(--e9)', '8': 'var(--e8)', '7': 'var(--e7)' };
+const KEY = 'lapsplice-v1';
+let I = LapCheck.defaults(), tab = '10', sel = '#6', meta = {};
+let mig = null; // saved input from Version 1: translated only where its lengths are reproduced exactly, otherwise held for review
+try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s) { const m = LapCheck.migrate(s.I || {}); if (m.notice || m.conflict) mig = m; Object.assign(I, m.I); if (m.conflict && !('erOnDev' in m.I)) delete I.erOnDev; if (s.tab) tab = s.tab; if (s.sel) sel = s.sel; meta = s.meta || {}; } } catch (e) { /* ignore */ }
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify({ I, tab, sel, meta })); } catch (e) { /* ignore */ } };
+const f1 = v => (v == null ? '—' : Number.isInteger(v) ? String(v) : v.toFixed(1));
+const f2 = v => (v == null ? '—' : v.toFixed(2));
+const f3 = v => (v == null ? '—' : v.toFixed(3));
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// minimal renderer for the engine's equation markup: _{sub}, ^{sup}, \f{num}{den}
+function mathHTML(s) {
+  if (s == null) return '';
+  let out = '', i = 0;
+  const grab = () => { let d = 0, j = i; for (; j < s.length; j++) { if (s[j] === '{') d++; else if (s[j] === '}') { d--; if (d === 0) break; } } const t = s.slice(i + 1, j); i = j + 1; return t; };
+  while (i < s.length) {
+    if (s.startsWith('\\f{', i)) { i += 2; const a = grab(), b = grab(); out += '<span class="frac"><span>' + mathHTML(a) + '</span><span>' + mathHTML(b) + '</span></span>'; continue; }
+    if ((s[i] === '_' || s[i] === '^') && s[i + 1] === '{') { const t = s[i] === '_' ? 'sub' : 'sup'; i++; out += '<' + t + '>' + mathHTML(grab()) + '</' + t + '>'; continue; }
+    out += esc(s[i]); i++;
+  }
+  return out;
+}
+function bindInputs() {
+  document.querySelectorAll('[data-k]').forEach(el => {
+    const k = el.dataset.k;
+    if (el.type === 'checkbox') el.checked = !!I[k]; else el.value = I[k] == null ? '' : I[k];
+    el.addEventListener(el.type === 'checkbox' || el.tagName === 'SELECT' ? 'change' : 'input', () => {
+      if (el.type === 'checkbox') I[k] = el.checked;
+      else if (el.tagName === 'SELECT') I[k] = el.value;
+      else { const v = el.value.trim(); I[k] = v === '' ? null : Number(v); } // blank → null (an error, except fct); never keeps the old value
+      save(); render();
+    });
+  });
+}
+function renderMig() {
+  const box = $('#migBox'); box.hidden = !mig; if (!mig) return;
+  if (mig.conflict) {
+    const r = I.asRatio, er = r > 0 ? (1 / r).toFixed(3) : '—';
+    box.innerHTML = `<div class="card" style="border-color:var(--warn);margin-bottom:12px"><h2 style="margin-bottom:6px">Review a saved assumption</h2><p style="margin:0 0 10px">${esc(mig.conflict)}</p>
+      <div style="display:flex;flex-wrap:wrap;gap:8px"><button type="button" id="migDerive" class="primary">Use λer = 1/${esc(r)} = ${er} for the development length${I.erOnLaps ? ' and laps' : ''}</button><button type="button" id="migNone">Do not apply λer</button></div></div>`;
+    $('#migDerive').onclick = () => { delete I.lamEr; I.erOnDev = true; mig = null; afterMig(); };
+    $('#migNone').onclick = () => { delete I.lamEr; I.erOnDev = false; I.erOnLaps = false; mig = null; afterMig(); };
+  } else {
+    box.innerHTML = `<div class="notes" style="margin-bottom:12px"><div class="note">${esc(mig.notice)} <button type="button" id="migOk" style="margin-left:8px">OK</button></div></div>`;
+    $('#migOk').onclick = () => { mig = null; save(); renderMig(); }; // accepting the notice stores the translated input
+  }
+}
+function afterMig() { save(); document.querySelectorAll('[data-k]').forEach(el => { const k = el.dataset.k; if (el.type === 'checkbox') el.checked = !!I[k]; }); render(); }
+function valid() { const e = LapCheck.check(I); const ev = document.getElementById('erVal'); if (ev) ev.textContent = I.asRatio >= 1 ? '1/' + I.asRatio + ' = ' + (1 / I.asRatio).toFixed(3) : ''; return e; }
+const scopeBox = (ed, rows) => { const why = [...new Set(rows.filter(r => r.blocked).flatMap(r => r.scope))]; return why.length ? `<div class="notes"><div class="note"><b>${rows.every(r => r.blocked) ? 'No lengths' : 'Some bars without lengths'}: outside the scope of the ${LapCheck.EDITIONS[ed].short} provisions.</b> ${why.map(esc).join(' ')}</div></div>` : ''; };
+function renderTabs() {
+  const t = $('#tabs');
+  t.innerHTML = EDS.map(e => `<button role="tab" aria-selected="${tab === e}" data-ed="${e}"><b>${LapCheck.EDITIONS[e].short}</b><small>${e === '10' ? 'current' : e === '7' ? 'existing structures' : e === '8' ? 'IDOT design guides' : 'previous'}</small></button>`).join('')
+    + `<button role="tab" aria-selected="${tab === 'cmp'}" data-ed="cmp"><b>Compare</b><small>all editions</small></button>`;
+  t.querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.ed; save(); render(); });
+}
+function renderTable(errs) {
+  const c = $('#tableCard');
+  if (errs.length) { c.innerHTML = '<div class="notes">' + errs.map(e => `<div class="note">${esc(e)}</div>`).join('') + '</div>'; return; }
+  const ed = tab === 'cmp' ? '10' : tab, E = LapCheck.EDITIONS[ed];
+  const rows = LapCheck.table(ed, I);
+  const seven = ed === '7';
+  if (rows.every(r => r.blocked)) { c.hidden = tab === 'cmp'; c.innerHTML = `<div class="card-h"><h2>AASHTO LRFD ${E.name}</h2></div>` + scopeBox(ed, rows); return; }
+  const facCols = seven ? [['tc', 'Top × epoxy'], ['lw', 'LW'], ['sp', 'Spacing'], ['spi', 'Spiral']] : [['rlcf', 'λrl·λcf'], ['rc', 'λrc'], ['lam', 'λ']];
+  c.hidden = tab === 'cmp';
+  c.innerHTML = `<div class="card-h"><h2>AASHTO LRFD ${E.name}</h2><span class="status">Articles ${E.art.dev}, ${E.art.lap}, ${E.art.comp}</span></div>
+  <div class="tw"><table><thead><tr><th>Bar</th><th class="n">d<sub>b</sub></th><th class="n">ℓ<sub>db</sub></th>${facCols.map(([, h]) => `<th class="n">${h}</th>`).join('')}<th class="n">λ<sub>er</sub></th><th class="n">ℓ<sub>d</sub></th><th class="n">Class A</th><th class="n">Class B</th>${seven ? '<th class="n">Class C</th>' : ''}<th class="n">Required lap</th><th class="n">Comp. lap</th></tr></thead><tbody>
+  ${rows.map(r => r.blocked ? `<tr data-bar="${r.bar}" aria-selected="${r.bar === sel}"><td><b>${r.bar}</b></td><td class="n">${r.db.toFixed(3)}</td><td colspan="${facCols.length + (seven ? 8 : 7)}" class="dim">outside scope</td></tr>` : `<tr data-bar="${r.bar}" aria-selected="${r.bar === sel}"><td><b>${r.bar}</b></td><td class="n">${r.db.toFixed(3)}</td><td class="n">${f1(r.ldb)}</td>${facCols.map(([k]) => { const x = r.factors.find(q => q.k === k); return `<td class="n">${x ? f2(x.v) : '—'}</td>`; }).join('')}<td class="n">${f2(r.er.dev)}</td><td class="n">${f1(r.out.ld)}</td><td class="n">${f1(r.out.lapA)}</td><td class="n">${f1(r.out.lapB)}</td>${seven ? `<td class="n">${f1(r.out.lapC)}</td>` : ''}<td class="n req">${r.out.lapReq == null ? '<span class="dim">not permitted</span>' : f1(r.out.lapReq) + ' <span class="dim">(' + r.lapClass + ')</span>'}</td><td class="n">${f1(r.out.lc)}</td></tr>`).join('')}
+  </tbody></table></div>
+  ${scopeBox(ed, rows)}<p class="hint" style="margin-top:8px">Lengths in inches${I.roundUp ? ', rounded up' : ''}. ${esc(rows.find(r => !r.blocked).classWhy)}. Select a bar for its worksheet.</p>`;
+  c.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => { sel = tr.dataset.bar; save(); render(); });
+}
+function wsHTML(r) {
+  const E = LapCheck.EDITIONS[r.ed];
+  if (r.blocked) return scopeBox(r.ed, [r]);
+  const fac = r.factors.map(f => `<span class="k">${esc(f.sym)}</span><span class="v">${f.v.toFixed(3)}</span><span class="h">${esc(f.how)}</span>`).join('');
+  const steps = r.steps.map(s => `<div class="row"><div class="eq"><b>${mathHTML(s.lhs)}</b> = ${s.expr ? mathHTML(s.expr) + ' ' : ''}${s.sub ? '= ' + mathHTML(s.sub) + ' ' : ''}= <span class="res">${s.unit === '' ? s.val.toFixed(3) : s.val.toFixed(2) + ' ' + s.unit}</span></div><div class="ref">${s.ref || ''}</div></div>`).join('');
+  const lapRows = Object.keys(r.lap).map(c => `<div class="row"><div class="eq"><b>Class ${c}</b> = ${({ A: '1.0', B: '1.3', C: '1.7' })[c]} × ${r.ldLapBasis.toFixed(2)} ≥ 12.0 = <span class="res">${r.lap[c] == null ? 'not permitted' : r.lap[c].toFixed(2) + ' in.'}</span>${r.lapClass === c ? ' ← required' : ''}</div><div class="ref">${E.art.lap}</div></div>`).join('');
+  const comp = r.comp.lc == null ? '' : `<div class="row"><div class="eq"><b>ℓ<sub>c</sub></b> = ${I.fy <= 60 ? '0.5mf<sub>y</sub>d<sub>b</sub> = 0.5 × ' + r.comp.m + ' × ' + I.fy + ' × ' + r.db : 'm(0.9f<sub>y</sub> − 24)d<sub>b</sub> = ' + r.comp.m + '(0.9 × ' + I.fy + ' − 24) × ' + r.db} ≥ 12.0 = <span class="res">${r.comp.lc.toFixed(2)} in.</span> <span class="dim">(m: ${esc(r.comp.mHow)})</span></div><div class="ref">${E.art.comp}</div></div>`;
+  return `<div class="fac">${fac}</div><div class="ws">${steps}<h3 style="margin-top:8px">Tension lap splice</h3>${lapRows}<p class="hint">${esc(r.lapBasisNote)} ${esc(r.classWhy)}.</p><h3 style="margin-top:8px">Compression lap splice</h3>${comp || '<p class="hint">#14 and #18 bars may be lap spliced in compression only to #11 and smaller bars.</p>'}</div>`
+    + (r.warnings.length ? '<div class="notes" style="margin-top:10px">' + r.warnings.map(w => `<div class="note">${esc(w)}</div>`).join('') + '</div>' : '');
+}
+function renderWS(errs) {
+  const c = $('#wsCard'); c.hidden = !!errs.length;
+  if (errs.length) return;
+  const eds = tab === 'cmp' ? EDS : [tab];
+  c.innerHTML = `<div class="card-h"><h2>Worksheet: ${sel} bar</h2><label class="f" style="flex-direction:row;align-items:center;gap:8px">Bar <select id="barSel">${LapCheck.BARS.map(b => `<option${b.id === sel ? ' selected' : ''}>${b.id}</option>`).join('')}</select></label></div>`
+    + eds.map(e => { const r = LapCheck.compute(e, sel, I); return (eds.length > 1 ? `<h2 style="margin:14px 0 6px;color:${COL[e]}">${LapCheck.EDITIONS[e].name}</h2>` : '') + wsHTML(r); }).join('');
+  $('#barSel').onchange = e => { sel = e.target.value; save(); render(); };
+}
+function renderCmp(errs) {
+  const c = $('#cmpCard'); c.hidden = !!errs.length;
+  if (errs.length) return;
+  const T = {}; EDS.forEach(e => { T[e] = LapCheck.table(e, I); });
+  const bars = LapCheck.BARS.filter(b => b.id !== '#14' && b.id !== '#18');
+  const maxV = Math.max(...EDS.flatMap(e => T[e].filter(r => r.out.lapReq != null).map(r => r.out.lapReq)), 12);
+  const W = 720, H = 240, pl = 40, pb = 26, pt = 10, gw = (W - pl - 8) / bars.length, bw = Math.min(14, (gw - 8) / 4);
+  const y = v => pt + (H - pt - pb) * (1 - v / maxV);
+  const step = maxV > 120 ? 24 : maxV > 60 ? 12 : 6;
+  let svg = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Required tension lap splice length by bar size and edition">`;
+  for (let v = 0; v <= maxV; v += step) svg += `<line x1="${pl}" x2="${W - 8}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)" stroke-width="1"/><text x="${pl - 6}" y="${y(v) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">${v}</text>`;
+  bars.forEach((b, i) => {
+    const x0 = pl + i * gw + (gw - 4 * bw - 6) / 2;
+    EDS.forEach((e, k) => { const r = T[e].find(q => q.bar === b.id); if (r.blocked || r.out.lapReq == null) return; const yy = y(r.out.lapReq); svg += `<rect x="${x0 + k * (bw + 2)}" y="${yy}" width="${bw}" height="${Math.max(H - pb - yy, 0)}" rx="2" fill="${COL[e]}"><title>${b.id}, ${LapCheck.EDITIONS[e].short}: ${f1(r.out.lapReq)} in. (Class ${r.lapClass})</title></rect>`; });
+    svg += `<text x="${pl + i * gw + gw / 2}" y="${H - 8}" text-anchor="middle" font-size="12" fill="var(--muted)">${b.id}</text>`;
+  });
+  svg += '</svg>';
+  const head = EDS.map(e => `<th class="n" colspan="2" style="color:${COL[e]}">${LapCheck.EDITIONS[e].short}</th>`).join('');
+  const sub = EDS.map(() => '<th class="n">ℓ<sub>d</sub></th><th class="n">Lap</th>').join('');
+  const body = LapCheck.BARS.map(b => '<tr data-bar="' + b.id + '" aria-selected="' + (b.id === sel) + '"><td><b>' + b.id + '</b></td>' + EDS.map(e => { const r = T[e].find(q => q.bar === b.id); if (r.blocked) return '<td class="n dim" colspan="2">outside scope</td>'; return `<td class="n">${f1(r.out.ld)}</td><td class="n req">${r.out.lapReq == null ? '<span class="dim">—</span>' : f1(r.out.lapReq) + '<span class="dim"> ' + r.lapClass + '</span>'}</td>`; }).join('') + '</tr>').join('');
+  c.innerHTML = `<div class="card-h"><h2>Required tension lap splice by edition</h2><span class="status">in.${I.roundUp ? ', rounded up' : ''}</span></div>
+  <div class="legend">${EDS.map(e => `<span><i style="background:${COL[e]}"></i>${LapCheck.EDITIONS[e].short}</span>`).join('')}</div>
+  <div class="chart">${svg}</div>
+  <div class="tw" style="margin-top:12px"><table><thead><tr><th rowspan="2">Bar</th>${head}</tr><tr>${sub}</tr></thead><tbody>${body}</tbody></table></div>
+  ${EDS.map(e => scopeBox(e, T[e])).join('')}<p class="hint" style="margin-top:8px">“—”: not permitted (#14 and #18 laps) or outside the edition's development length provisions (#14 and #18 in the 8th and 9th Editions).</p>`;
+  c.querySelectorAll('tbody tr').forEach(tr => tr.onclick = () => { sel = tr.dataset.bar; save(); render(); });
+}
+function renderDiffs() {
+  $('#diffs').innerHTML = [
+    '<b>10th (2024):</b> new basic length ℓ<sub>db</sub> = 0.17d<sub>b</sub>[(λ<sub>er</sub>f<sub>y</sub> − F<sub>h</sub>/A<sub>b</sub>)/(1.97λf′<sub>c</sub><sup>0.25</sup>)]², a fourth-root dependence on concrete strength with λ<sub>er</sub> acting on f<sub>y</sub> inside the square. λ<sub>rc</sub> = d<sub>b</sub>c<sub>b</sub>/(c<sub>b</sub>(1 − β<sub>t</sub>) + 1.67n<sub>s</sub>k<sub>tr</sub>)² with a lower limit of 0.3, and k<sub>tr</sub> = A<sub>tr</sub>/(sn). The f′c &gt; 10 ksi location factor is removed. Development covers #18 and smaller; laps #11 and smaller.',
+    '<b>9th (2020):</b> ℓ<sub>db</sub> = 2.4d<sub>b</sub>f<sub>y</sub>/√f′<sub>c</sub>, ℓ<sub>d</sub> = ℓ<sub>db</sub>(λ<sub>rl</sub>λ<sub>cf</sub>λ<sub>rc</sub>λ<sub>er</sub>)/λ, λ<sub>rc</sub> = d<sub>b</sub>/(c<sub>b</sub> + k<sub>tr</sub>) between 0.4 and 1.0, k<sub>tr</sub> = 40A<sub>tr</sub>/(sn); λ<sub>rl</sub> = 1.3 also for f′c &gt; 10 ksi. #11 and smaller.',
+    '<b>8th (2017):</b> the same equations as the 9th Edition (first introduced in the 2015 interims, with the concrete density factor λ from the 2016 interims), so the two give identical lengths. IDOT design guides are based on this edition.',
+    '<b>7th (2014) and earlier:</b> ℓ<sub>db</sub> = 1.25A<sub>b</sub>f<sub>y</sub>/√f′<sub>c</sub> ≥ 0.4d<sub>b</sub>f<sub>y</sub>, top bar 1.4, spacing factor 0.8, Class A, B and C laps chosen from Table 5.11.5.3.1-1, and the 12-in. minimum on ℓ<sub>d</sub> not applied to laps.',
+    '<b>Benchmarks:</b> every Class A and Class B lap in the IDOT Bridge Manual A3.4 tables is reproduced exactly: Jan. 2025 (10th Edition, 14 tables, f′<sub>c</sub> 3.5 to 8.5 ksi, epoxy and uncoated; 3,248 values) and Jan. 2023 (9th and 8th Editions, 4 tables; 736 values each), with A<sub>tr</sub> = 0 and s = 6 in. for the “s ≥ 6 in.” columns. The Iowa DOT workbook (7th and 8th Editions) is reproduced to its rounding convention.',
+    '<b>All editions:</b> Class B unless A<sub>s</sub> provided ≥ 2A<sub>s</sub> required and ≤ 50% spliced (Class A); laps not less than 12 in.; compression laps 0.5mf<sub>y</sub>d<sub>b</sub> (f<sub>y</sub> ≤ 60 ksi) or m(0.9f<sub>y</sub> − 24)d<sub>b</sub>, not less than 12 in.',
+  ].map(s => '<li>' + s + '</li>').join('');
+}
+function render() {
+  renderMig();
+  const errs = valid();
+  renderTabs(); renderTable(errs); renderWS(errs); renderCmp(errs);
+  if (tab !== 'cmp') $('#cmpCard').hidden = true;
+}
+// ---------- PDF calculation sheet ----------
+document.querySelectorAll('[data-rep]').forEach(el => { const k = el.dataset.rep; el.value = meta[k] != null ? meta[k] : (k === 'date' ? new Date().toISOString().slice(0, 10) : ''); el.addEventListener('input', () => { meta[k] = el.value; save(); }); });
+let dlCap = null; if (window.claude && window.claude.use) window.claude.use('downloads').then(d => { dlCap = d; }).catch(() => {});
+async function saveFile(name, bytes) {
+  if (dlCap) { try { await dlCap.save({ filename: name, data: new Blob([bytes], { type: 'application/pdf' }) }); return 'saved'; } catch (e) { if (e && e.code === 'declined') return 'declined'; } }
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' })); const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 60000); return 'saved';
+}
+$('#pdfBtn').onclick = async () => {
+  const errs = valid(); if (errs.length) { $('#repStatus').textContent = 'No PDF: correct the input first — ' + errs.join(' '); return; }
+  if (['10', '9', '8', '7'].every(e => LapCheck.table(e, I).every(r => r.blocked))) { $('#repStatus').textContent = 'No PDF: the input is outside the scope of every edition.'; return; }
+  $('#repStatus').textContent = 'Building the PDF…'; await new Promise(r => setTimeout(r, 20));
+  try {
+    const snap = JSON.parse(JSON.stringify(I));
+    const bytes = await LapReport.build(snap, sel, { meta: Object.assign({}, meta), appVersion: '2026.11' });
+    const base = (meta.structure || 'lap-splices').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 50) || 'lap-splices';
+    const st = await saveFile(base + '_' + sel.replace('#', 'No') + '_laps.pdf', bytes);
+    $('#repStatus').textContent = st === 'declined' ? 'Download declined.' : 'PDF ready · ' + (bytes.length / 1024).toFixed(0) + ' KB';
+  } catch (e) { $('#repStatus').textContent = 'Could not build the PDF: ' + e.message; console.error(e); }
+};
+$('#reset').onclick = () => { mig = null; I = LapCheck.defaults(); save(); document.querySelectorAll('[data-k]').forEach(el => { const k = el.dataset.k; if (el.type === 'checkbox') el.checked = !!I[k]; else el.value = I[k] == null ? '' : I[k]; }); render(); };
+bindInputs(); renderDiffs(); render();
+</script>
+
+<script id="bridge-se-theme-control">
+(() => {
+  const root = document.documentElement;
+  const button = document.getElementById('themeSwitch');
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  const key = 'opendot-bridge-se-theme';
+  function dark() { return root.dataset.theme ? root.dataset.theme === 'dark' : media.matches; }
+  function label() {
+    button.textContent = dark() ? 'Light mode' : 'Dark mode';
+    button.setAttribute('aria-label', dark() ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  button.addEventListener('click', () => {
+    const next = dark() ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem(key, next); } catch (e) { /* private storage unavailable */ }
+    label();
+  });
+  if (media.addEventListener) media.addEventListener('change', label);
+  else if (media.addListener) media.addListener(label);
+  addEventListener('storage', e => {
+    if (e.key !== key) return;
+    if (e.newValue === 'light' || e.newValue === 'dark') root.dataset.theme = e.newValue;
+    else delete root.dataset.theme;
+    label();
+  });
+  label();
+})();
+</script>
+</body></html>

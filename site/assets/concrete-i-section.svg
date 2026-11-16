@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 108" role="img" aria-labelledby="title">
+  <title id="title">Prestressed concrete I-girder cross section with strands</title>
+  <rect width="96" height="108" rx="9" fill="#19252e"/>
+  <path d="M9 12h78v6L57 28v47l24 14v7H15v-7l24-14V28L9 18z" fill="#71828b" stroke="#b0bbc0" stroke-width="1.8" stroke-linejoin="round"/>
+  <path d="M13 16h70M43 29v47L20 92h56L53 76V29" fill="none" stroke="#41525c" stroke-width="1.7"/>
+  <g fill="#e6a661"><circle cx="29" cy="89" r="2"/><circle cx="38" cy="89" r="2"/><circle cx="48" cy="89" r="2"/><circle cx="58" cy="89" r="2"/><circle cx="67" cy="89" r="2"/><circle cx="34" cy="94" r="1.7"/><circle cx="43" cy="94" r="1.7"/><circle cx="53" cy="94" r="1.7"/><circle cx="62" cy="94" r="1.7"/></g>
+</svg>
