@@ -160,7 +160,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
 <header>
   <div>
     <h1>Steel Line Girder Check</h1>
-    <p>Design check of continuous composite steel plate girders and rolled beams, with performance ratios for every limit state and a load rating: AASHTO LRFD (9th or 10th edition, HL-93) with MBE LRFR, or the AASHTO Standard Specifications 17th edition Load Factor Design (HS loading) with MBE LFR. Edit any input and results update. An MDX input file can be imported to fill the inputs.</p>
+    <p>Design check of continuous composite steel plate girders and rolled beams, with performance ratios for every limit state and a load rating: AASHTO LRFD (9th or 10th edition, HL-93) with MBE LRFR, or the AASHTO Standard Specifications 17th edition Load Factor Design (HS loading) with MBE LFR. Edit any input and results update. A line girder rating output file can be imported with Import other file to fill the inputs.</p>
   </div>
   <div class="actions">
     <div>
@@ -183,7 +183,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <option value="rb2">2-span rolled beam W36x150, 70-70</option>
       <option value="a1">MBE Example A1, 65 ft cover-plated W33x130</option>
     </select>
-    <label class="btn" for="mdxFile">Import MDX file</label>
+    <label class="btn" for="mdxFile" title="Read a line girder rating output (.out or .txt text file): geometry, sections, loads, bracing and stiffeners">Import other file</label>
     <input type="file" id="mdxFile" accept=".out,.OUT,.txt" hidden>
     <button id="btnJson">Input JSON</button>
     <button class="primary" id="btnRun">Run check</button>
@@ -3284,8 +3284,8 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
 
 </script>
 <script>
-/* MDX R1.OUT parser — LRFD composite girder, Rate Mode, line girder.
-   Builds an app model from the echoed input + case data, and pulls MDX results for point-by-point comparison. */
+/* Line girder rating output parser: LRFD composite girder, rate mode, single girder.
+   Builds an app model from the echoed input and case data, and reads the file's results for point-by-point comparison. */
 (function (root) {
   'use strict';
   const NUM = /^-?\d*\.?\d+(?:[eE][-+]?\d+)?\.?$/;
@@ -3314,7 +3314,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
 
     // ---- header
     const hdr = L.slice(0, 12).join(' ');
-    if (!/MDX/i.test(hdr)) warn.push('This does not look like an MDX output file.');
+    if (!/MDX/i.test(hdr)) warn.push('This does not look like a supported line girder rating output file.');
     const version = (hdr.match(/Version\s+([\d.]+)/) || [])[1] || '';
     const dateLine = (L[9] || '').trim();
     const idLine = (L.find(s => /^\s+ID:/.test(s)) || '').replace(/^\s+ID:\s*/, '');
@@ -3343,14 +3343,14 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     if (!isLRFD) warn.push('Not an LRFD run. The app rates by LRFD/LRFR only.');
     if (!isRate) warn.push('Not a Rate Mode run.');
     if (system) warn.push('Girder system run (more than one girder). Out of scope for the line girder app; only girder 1 was read.');
-    if (exterior) warn.push('Exterior girder. The app formulas are for interior girders; MDX lane fractions are used instead.');
+    if (exterior) warn.push('Exterior girder. The app formulas are for interior girders; the lane fractions in the file are used instead.');
     if (/CURVED|CURVATURE/i.test(conds.join(' ')) || find(/^\s+Radius/) >= 0) warn.push('Curved girder. Curvature effects are not modeled.');
     if (find(/Interior hinge at/i) >= 0) warn.push('Interior hinges are not modeled.');
 
     // ---- run status / scope
     const filesLine = (L.find(s => /^\s+Files:/.test(s)) || '');
     if (/run terminated/.test(L.slice(-12).join(' ')) && find(/^\s*Lrfd Ratings\s*$/) < 0)
-      throw new Error('This MDX run terminated before producing ratings' + (has('HS20 LOADING') ? ' (HS20 loading run)' : '') + '. Rerun it in MDX, then import the new R1.OUT.');
+      throw new Error('This run terminated before producing ratings' + (has('HS20 LOADING') ? ' (HS20 loading run)' : '') + '. Rerun the analysis, then import the new output file.');
     if (/system analysis/i.test(filesLine) || /GIRDER SYSTEM/i.test(idLine))
       throw new Error('This is a girder system analysis (' + idLine.trim() + '). The app handles line girder runs only.');
 
@@ -3480,9 +3480,9 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         const xm = (B[i] + B[i + 1]) / 2, wi = idx(webSegs, xm), ti = idx(tS, xm), bi = idx(bS, xm), f = fyAt(xm);
         addRange(B[i], B[i + 1], { tfw: pick(data.SPLTFW, ti), tft: pick(data.SPLTFT, ti), wd: pick(data.SPLWD, wi), wt: pick(data.SPLWT, wi), bfw: pick(data.SPLBFW, bi), bft: pick(data.SPLBFT, bi), Fyt: f && f.t, Fyw: f && f.w, Fyb: f && f.b });
       }
-      // cross-check against MDX's Dimensions table
+      // cross-check against the file's Dimensions table
       const bad = dims.filter(d => { const xx = d.tp != null ? tpX[d.tp] : d.x; const r = ranges.find(q => xx > q.from + 0.02 && xx < q.to - 0.02); if (!r) return false; const s = sections.find(q => q.id === r.sec); return Math.abs(s.bt - d.tfw) > 0.01 || Math.abs(s.tt - d.tft) > 0.01 || Math.abs(s.D - d.wd) > 0.01 || Math.abs(s.tw - d.wt) > 0.002 || Math.abs(s.bb - d.bfw) > 0.01 || Math.abs(s.tb - d.bft) > 0.01; });
-      if (bad.length) warn.push('Plate layout from the input does not match MDX\'s Dimensions table at ' + bad.length + ' point(s), first at x = ' + (bad[0].tp != null ? tpX[bad[0].tp] : bad[0].x).toFixed(2) + ' ft. Check the sections.');
+      if (bad.length) warn.push('Plate layout from the input does not match the file\'s Dimensions table at ' + bad.length + ' point(s), first at x = ' + (bad[0].tp != null ? tpX[bad[0].tp] : bad[0].x).toFixed(2) + ' ft. Check the sections.');
     } else {
       // from the Dimensions table: exact at SpL/SpR rows, otherwise midway between tenth points
       const rows = dims.map(d => ({ ...d, xx: d.tp != null ? tpX[d.tp] : d.x }));
@@ -3498,7 +3498,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         const from = ranges.length ? ranges[ranges.length - 1].to : 0;
         if (to > from + 1e-6) addRange(from, to, dd);
       }
-      if (approx) notes.push('Some plate changes are placed midway between the tenth points where MDX reports them. Enter exact splice locations to match MDX more closely.');
+      if (approx) notes.push('Some plate changes are placed midway between the tenth points where the file reports them. Enter exact splice locations to match the original analysis more closely.');
     }
     // ---- stiffeners
     const stiffeners = [];
@@ -3511,7 +3511,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     if (!stiffeners.length && has('INTERMEDIATE TRANSVERSE STIFFENERS BOTH SIDES OF WEB') && find(/Stiffener transitions/) >= 0) warn.push('Transverse stiffeners are listed but their spacing table was not found; webs are treated as unstiffened.');
     if (find(/Cover plate at/) >= 0) warn.push('Cover plates found; not modeled.');
     if (find(/Web haunch(es)? at|Haunch length/) >= 0) warn.push('Web haunches found; not modeled.');
-    if (has('PARTIAL COMPOSITE ACTION DURING POUR SEQUENCE') || /POUR/i.test(conds.join(' ')) && find(/Pour sequence|Pouring sequence/) >= 0) notes.push('MDX run includes a deck pour sequence. The app applies all DC1 to the steel section, so DC1 stresses can differ from MDX.');
+    if (has('PARTIAL COMPOSITE ACTION DURING POUR SEQUENCE') || /POUR/i.test(conds.join(' ')) && find(/Pour sequence|Pouring sequence/) >= 0) notes.push('The run includes a deck pour sequence. The app applies all DC1 to the steel section, so DC1 stresses can differ from the original analysis.');
 
     // ---- dead loads (per girder, k/ft)
     const dlList = re => { const k = find(re); return k < 0 ? [] : listAfter(k, 'k/ft'); };
@@ -3530,11 +3530,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const dc1Var = dc1L.length && Math.max(...dc1L) - Math.min(...dc1L) > 0.0015;
     const tpA = {}; dims.forEach(d => { if (d.tp != null) tpA[d.tp] = d.A; });
     if (dc1Var && dc1L.length === tpX.length && tpX.every((_, i) => tpA[i])) {
-      // MDX tenth-point DC1 = constant (deck, haunch, extras) + steel area x 490 pcf x steel factor
+      // tenth-point DC1 in the file = constant (deck, haunch, extras) + steel area x 490 pcf x steel factor
       const conc = dc1L.map((w, i) => w - tpA[i] / 144 * 0.49 * SF);
       if (Math.max(...conc) - Math.min(...conc) > 0.004) warn.push('DC1 not explained by steel weight alone (' + Math.min(...conc).toFixed(3) + ' to ' + Math.max(...conc).toFixed(3) + ' k/ft after removing steel); the app uses the average.');
       loads = { dc1: +avg(conc).toFixed(4), misc: +((SF - 1) * 100).toFixed(2), steelAdd: 0, selfWeight: true };
-      notes.push('DC1 split into ' + avg(conc).toFixed(3) + ' k/ft of deck and haunch plus steel self weight from each section × ' + SF + ' (MDX steel factor).');
+      notes.push('DC1 split into ' + avg(conc).toFixed(3) + ' k/ft of deck and haunch plus steel self weight from each section × ' + SF + ' (steel factor from the file).');
     } else loads = { dc1: +uniform(dc1L, 'DC1').toFixed(4), misc: 0, steelAdd: 0, selfWeight: false };
     loads.dc2 = +uniform(sdlL, 'DC2').toFixed(4);
     loads.dw = +uniform(wsL, 'DW').toFixed(4);
@@ -3543,7 +3543,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     // ---- model
     const opLL = lrfrCond ? 1.35 : 1.0, opSvc = 1.0;
     const model = {
-      name: (idLine || 'MDX import') + (version ? ' (MDX ' + version + ')' : ''),
+      name: (idLine || 'Imported girder') + (version ? ' (version ' + version + ')' : ''),
       spans: spans.map(v => +v.toFixed(4)),
       sections, ranges, stiffeners,
       deck: { ts, haunch: has('ASSUME SLAB ON FLANGE FOR SECTION PROPERTIES') ? 0 : fillet, beff, n: +n.toFixed(3), fc, Ar, yr: +(ts - yrBot).toFixed(3), fyr },
@@ -3556,12 +3556,12 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       options: { limit13My: true, serviceUncracked: find(/Slab used for negative moment properties/) >= 0, appendixA6: true },
       mesh: 0
     };
-    if (dfTab) notes.push('Lane fractions taken from MDX' + (data.NL ? ' (' + data.NL[0] + ' lanes' : ' (') + ', girder spacing ' + model.df.S + ' ft).');
-    if (has('ASSUME SLAB ON FLANGE FOR SECTION PROPERTIES')) notes.push('MDX condition ASSUME SLAB ON FLANGE FOR SECTION PROPERTIES: haunch set to 0 for section properties (its weight stays in DC1).');
-    notes.push(model.options.serviceUncracked ? 'MDX used the uncracked composite section for Service II in negative flexure ("Slab used for negative moment properties").' : 'MDX used the steel + rebar section for Service II in negative flexure.');
+    if (dfTab) notes.push('Lane fractions taken from the file' + (data.NL ? ' (' + data.NL[0] + ' lanes' : ' (') + ', girder spacing ' + model.df.S + ' ft).');
+    if (has('ASSUME SLAB ON FLANGE FOR SECTION PROPERTIES')) notes.push('File condition ASSUME SLAB ON FLANGE FOR SECTION PROPERTIES: haunch set to 0 for section properties (its weight stays in DC1).');
+    notes.push(model.options.serviceUncracked ? 'The original analysis used the uncracked composite section for Service II in negative flexure ("Slab used for negative moment properties").' : 'The original analysis used the steel + rebar section for Service II in negative flexure.');
     if (eta !== 1) notes.push('Load modifier η = ' + eta.toFixed(3) + ' read from the file; it applies to the Strength I design checks.');
 
-    // ---- MDX results
+    // ---- results reported in the file
     const res = { moment: [], shear: [], strength: [], ratings: { strength: [], service: [] }, minRating: null };
     {
       const k = find(/Service Moment - k-ft/);
@@ -3636,7 +3636,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       const sh = minRF(p, c => c.type === 'Shear');
       const sv = minRF(p, c => c.ls === 'Service II');
       const mdxMn = st.length ? Math.min(...st.map(r => r.Mn)) : (rs.length ? Math.min(...rs.map(r => r.cap)) : null);
-      // our moment resistance: the moment-based check closest to the one MDX reports (same sign)
+      // our moment resistance: the moment-based check closest to the one the file reports (same sign)
       const caps = []; p.rating.forEach(r => r.checks.forEach(c => { if (c.ls === 'Strength I' && c.capU === 'k-ft') caps.push(c.cap); }));
       let capC = caps.length ? caps.reduce((a, c) => (mdxMn != null && Math.abs(c - mdxMn) < Math.abs(a - mdxMn) ? c : a)) : null;
       if (mdxMn != null && capC != null && Math.abs(capC - mdxMn) / mdxMn > 0.5) capC = null;
