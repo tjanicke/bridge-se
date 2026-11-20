@@ -77,6 +77,7 @@ label.f span.u{font-family:var(--f-mono);font-size:11px}
 input,select{font:13px var(--f-body);color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:6px 7px;width:100%;min-width:0}
 label.chk{display:flex;gap:8px;align-items:flex-start;font-size:13px}
 label.chk input{width:auto;margin-top:3px}
+input.n[aria-invalid="true"]{border-color:var(--bad);outline:1px solid var(--bad)}
 textarea.braces{min-height:64px;font:12px var(--f-mono)}
 .btn{display:inline-flex;align-items:center}
 .hint{font-size:12px;color:var(--muted);margin:0}
@@ -84,6 +85,7 @@ textarea.braces{min-height:64px;font:12px var(--f-mono)}
 .minitable th{text-align:left;font-weight:500;color:var(--muted);padding:2px 3px;font-size:11px}
 .minitable td{padding:2px 3px}
 .minitable input,.minitable select{padding:4px 5px;font-size:12px}
+.sectbl{table-layout:fixed}.sectbl td.hint{font-size:11.5px;line-height:1.25;padding-right:6px}.sectbl th{font-size:10.5px;white-space:nowrap}
 .xbtn{padding:3px 7px;font-size:12px;line-height:1}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
 .card-h{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:baseline;margin-bottom:10px}
@@ -3821,7 +3823,7 @@ const CATS=[
 // ---------- input rail ----------
 function field(path,label,unit,attrs=''){
   const v=get(path);
-  return `<label class="f">${label} <span class="u">${unit||''}</span><input class="n" id="in-${path}" data-path="${path}" type="number" step="any" value="${v??''}" ${attrs}></label>`;
+  return `<label class="f">${label} <span class="u">${unit||''}</span><input class="n" id="in-${path}" data-path="${path}" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" value="${v??''}" ${attrs}></label>`;
 }
 function check(path,label){ return `<label class="chk"><input type="checkbox" id="in-${path}" data-path="${path}" data-kind="bool" ${get(path)?'checked':''}> ${label}</label>`; }
 function sel(path,label,opts){ const v=String(get(path)??''); return `<label class="f">${label}<select id="in-${path}" data-path="${path}" data-kind="text">${opts.map(([o,t])=>`<option value="${o}" ${String(o)===v?'selected':''}>${t}</option>`).join('')}</select></label>`; }
@@ -3855,30 +3857,33 @@ function renderRail(){
   const secOpts=id=>model.sections.map(s=>`<option value="${s.id}" ${s.id===id?'selected':''}>${s.id}</option>`).join('');
   const shapeOpts=sel=>Object.keys(W_SHAPES).map(k=>`<option ${k===sel?'selected':''}>${k}</option>`).join('');
   const secRows=model.sections.map((s,i)=>{
-    const head=`<tr><td colspan="7" style="padding-top:8px"><div style="display:flex;gap:6px;align-items:center">
-      <input style="width:56px" data-sec="${i}" data-k="id" value="${esc(s.id)}" aria-label="Section id">
+    const head=`<tr><td colspan="4" style="padding-top:10px"><div style="display:flex;gap:6px;align-items:center">
+      <input style="width:64px;flex:none" data-sec="${i}" data-k="id" value="${esc(s.id)}" aria-label="Section id">
       <input data-sec="${i}" data-k="name" value="${esc(s.name||'')}" aria-label="Section name">
-      <select style="width:96px" data-sec="${i}" data-k="type" aria-label="Section type"><option value="plate" ${s.type==='plate'?'selected':''}>Plate</option><option value="rolled" ${s.type==='rolled'?'selected':''}>Rolled</option></select>
+      <select style="width:84px;flex:none" data-sec="${i}" data-k="type" aria-label="Section type"><option value="plate" ${s.type==='plate'?'selected':''}>Plate</option><option value="rolled" ${s.type==='rolled'?'selected':''}>Rolled</option></select>
       <button class="xbtn" data-delsec="${i}" aria-label="Delete section">×</button></div></td></tr>`;
-    const num=(k)=>`<input class="n" type="number" step="any" data-sec="${i}" data-k="${k}" value="${s[k]??''}" aria-label="${k}">`;
-    const cover=`<tr><td colspan="2" class="hint">Cover plates b × t, in</td><td class="hint">Top</td><td>${num('cptB')}</td><td>${num('cptT')}</td><td></td></tr>
-      <tr><td colspan="2"></td><td class="hint">Bottom</td><td>${num('cpbB')}</td><td>${num('cpbT')}</td><td></td></tr>`;
-    if(s.type==='rolled') return head+`<tr><th>Shape</th><th>d</th><th>bf</th><th>tf</th><th>tw</th><th>do</th></tr>
-      <tr><td><select data-sec="${i}" data-k="shape">${shapeOpts(s.shape)}${s.shape&&!W_SHAPES[s.shape]?`<option selected>${esc(s.shape)}</option>`:''}</select></td><td>${num('d')}</td><td>${num('bf')}</td><td>${num('tf')}</td><td>${num('tw')}</td><td>${num('do')}</td></tr>
-      <tr><td colspan="3" class="hint">Tabulated A, Ix, J (blank = from plates)</td><td>${num('A')}</td><td>${num('Ix')}</td><td>${num('J')}</td></tr>
-      <tr><td colspan="3" class="hint">Fy top / web / bottom, ksi (blank = global)</td><td>${num('Fyt')}</td><td>${num('Fyw')}</td><td>${num('Fyb')}</td></tr>
-      <tr><td colspan="4" class="hint">Haunch above top flange, in (blank = deck value)</td><td colspan="2">${num('haunch')}</td></tr>${cover}`;
-    return head+`<tr><th>Top b×t</th><th></th><th>Web D×t</th><th></th><th>Bot b×t</th><th></th></tr>
-      <tr><td>${num('bt')}</td><td>${num('tt')}</td><td>${num('D')}</td><td>${num('tw')}</td><td>${num('bb')}</td><td>${num('tb')}</td></tr>
-      <tr><td colspan="3" class="hint">Fy top / web / bottom, ksi (blank = global)</td><td>${num('Fyt')}</td><td>${num('Fyw')}</td><td>${num('Fyb')}</td></tr>
-      <tr><td colspan="3" class="hint">Stiffener spacing do, in (0 = none; the stiffener table overrides)</td><td colspan="3">${num('do')}</td></tr>
-      <tr><td colspan="4" class="hint">Haunch above top flange, in (blank = deck value)</td><td colspan="2">${num('haunch')}</td></tr>${cover}`;
+    const num=(k,lab)=>`<input class="n" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-sec="${i}" data-k="${k}" value="${s[k]??''}"${/^Fy[twb]$/.test(k)?` placeholder="${esc(model.Fy)}"`:k==='haunch'?` placeholder="${esc(model.deck.haunch)}"`:''} aria-label="${esc(s.id)} ${lab||k}">`;
+    const row=(lab,a,b,c)=>`<tr><td class="hint">${lab}</td><td>${a}</td><td>${b}</td><td>${c}</td></tr>`;
+    const one=(lab,k,what)=>`<tr><td class="hint" colspan="2">${lab}</td><td colspan="2">${num(k,what)}</td></tr>`;
+    const cover=row('Top cover plate',num('cptB','top cover plate width'),num('cptT','top cover plate thickness'),'')+row('Bottom cover plate',num('cpbB','bottom cover plate width'),num('cpbT','bottom cover plate thickness'),'');
+    const tail=one('Stiffener spacing do, in (0 = none)','do','stiffener spacing')+one('Haunch above top flange, in (blank = deck)','haunch','haunch')+cover;
+    if(s.type==='rolled') return head+`<tr><td colspan="4"><select data-sec="${i}" data-k="shape" aria-label="${esc(s.id)} shape">${s.shape?'':'<option value="" selected>Custom shape (dimensions below)</option>'}${shapeOpts(s.shape)}${s.shape&&!W_SHAPES[s.shape]?`<option selected>${esc(s.shape)}</option>`:''}</select></td></tr>
+      <tr><th></th><th>b or d, in</th><th>t, in</th><th>Fy, ksi</th></tr>`+
+      row('Top flange',num('bf','flange width bf'),num('tf','flange thickness tf'),num('Fyt','top flange Fy'))+
+      row('Web, depth d',num('d','depth d'),num('tw','web thickness tw'),num('Fyw','web Fy'))+
+      row('Bottom flange','<span class="hint">same as top</span>','',num('Fyb','bottom flange Fy'))+
+      `<tr><th></th><th>A, in²</th><th>Ix, in⁴</th><th>J, in⁴</th></tr>`+
+      row('Tabulated (blank = from plates)',num('A','tabulated A'),num('Ix','tabulated Ix'),num('J','tabulated J'))+tail;
+    return head+`<tr><th></th><th>b or D, in</th><th>t, in</th><th>Fy, ksi</th></tr>`+
+      row('Top flange',num('bt','top flange width'),num('tt','top flange thickness'),num('Fyt','top flange Fy'))+
+      row('Web',num('D','web depth D'),num('tw','web thickness'),num('Fyw','web Fy'))+
+      row('Bottom flange',num('bb','bottom flange width'),num('tb','bottom flange thickness'),num('Fyb','bottom flange Fy'))+tail;
   }).join('');
-  const rngRows=model.ranges.map((r,i)=>`<tr><td><input class="n" type="number" step="any" data-rng="${i}" data-k="from" value="${r.from}" aria-label="From"></td>
-    <td><input class="n" type="number" step="any" data-rng="${i}" data-k="to" value="${r.to}" aria-label="To"></td>
+  const rngRows=model.ranges.map((r,i)=>`<tr><td><input class="n" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-rng="${i}" data-k="from" value="${r.from}" aria-label="From"></td>
+    <td><input class="n" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-rng="${i}" data-k="to" value="${r.to}" aria-label="To"></td>
     <td><select data-rng="${i}" data-k="sec" aria-label="Section">${secOpts(r.sec)}</select></td>
     <td><button class="xbtn" data-delrng="${i}" aria-label="Delete range">×</button></td></tr>`).join('');
-  const spanRows=model.spans.map((L,i)=>`<label class="f">Span ${i+1} <span class="u">ft</span><div style="display:flex;gap:4px"><input class="n" type="number" step="any" data-span="${i}" value="${L}" id="span-${i}">${model.spans.length>1?`<button class="xbtn" data-delspan="${i}" aria-label="Delete span">×</button>`:''}</div></label>`).join('');
+  const spanRows=model.spans.map((L,i)=>`<label class="f">Span ${i+1} <span class="u">ft</span><div style="display:flex;gap:4px"><input class="n" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-span="${i}" value="${L}" id="span-${i}">${model.spans.length>1?`<button class="xbtn" data-delspan="${i}" aria-label="Delete span">×</button>`:''}</div></label>`).join('');
   const fat=model.fatigue, LFD=isLFD();
   const wasOpen=[...$('rail').querySelectorAll('details.grp')].map(d=>[d.querySelector('summary').textContent,d.open]);
   $('rail').innerHTML=`
@@ -3903,8 +3908,8 @@ function renderRail(){
     <div class="toolbar"><button id="addSpan">Add span</button><span class="status">Total ${fmt(model.spans.reduce((a,b)=>a+ +b,0),1)} ft</span></div>
   </div></details>
   <details class="grp" open><summary>Sections</summary><div class="gbody">
-    <p class="hint">Plate dimensions in inches. Rolled shapes fill from the list; check dimensions against AISC.</p>
-    <table class="minitable">${secRows}</table>
+    <p class="hint">Dimensions in inches; type decimals or fractions (11/16, 1 3/4). Blank Fy uses the global Fy; a stiffener table overrides do. Rolled shapes fill from the list; check dimensions against AISC.</p>
+    <table class="minitable sectbl"><colgroup><col style="width:31%"><col><col><col></colgroup>${secRows}</table>
     <div class="toolbar"><button id="addPlate">Add plate girder</button><button id="addRolled">Add rolled beam</button></div>
   </div></details>
   <details class="grp"><summary>Section ranges</summary><div class="gbody">
@@ -4029,8 +4034,24 @@ function renderRail(){
   if(wasOpen.length){ const m=new Map(wasOpen); $('rail').querySelectorAll('details.grp').forEach(d=>{ const k=d.querySelector('summary').textContent; if(m.has(k)) d.open=m.get(k); }); }
 }
 
+// typed numbers: decimals, or fractions such as 11/16 and 1 3/4 (also 1-3/4); NaN if not a number
+function parseNum(str){
+  const v=String(str).trim().replace(/,/g,'');
+  if(v==='') return NaN;
+  if(/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(v)) return +v;
+  const f=v.match(/^([-+]?)(?:(\d+)[\s-]+)?(\d+)\/(\d+)$/);
+  if(f&&+f[4]>0){ const x=(f[2]?+f[2]:0)+ +f[3]/ +f[4]; return f[1]==='-'?-x:x; }
+  return NaN;
+}
 function onRailInput(ev){
   const t=ev.target;
+  // a number box with text that is not a number: flag it and keep the last good value
+  if(t.classList&&t.classList.contains('n')&&t.tagName==='INPUT'){
+    const bad=t.value.trim()!==''&&!isFinite(parseNum(t.value));
+    if(bad){ if(ev.type==='change'){ t.setAttribute('aria-invalid','true'); t.title='Enter a number, e.g. 0.6875 or 11/16'; } return; } // still typing: wait for a full number
+    if(t.hasAttribute('aria-invalid')){ t.removeAttribute('aria-invalid'); t.removeAttribute('title'); }
+  }
+  const nv=()=>t.value.trim()===''?0:parseNum(t.value);
   if(t.dataset.kind==='pours'){
     model.pour.pours=t.value.split(/\n/).map(l=>l.trim().split(/[\s,;]+/).map(Number)).filter(a=>a.length>=3&&a.every(isFinite)&&a[1]>a[0]).map(a=>({from:a[0],to:a[1],order:a[2]}));
   }
@@ -4049,7 +4070,7 @@ function onRailInput(ev){
       const w=haunchRange(model).lo;
       model.loads.dc1=+Math.max(0,(+model.loads.dc1||0)+(t.checked?-w:w)).toFixed(6);
     }
-    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(t.dataset.path==='deck.btrib'&&t.value.trim()===''?null:+t.value)));
+    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(t.dataset.path==='deck.btrib'&&t.value.trim()===''?null:nv())));
     if(t.dataset.path==='code.edition') syncEdition();
     if(['deck.ts','deck.beff','deck.btrib','deck.haunch','loads.wc'].includes(t.dataset.path)){
       if($('deckHint')) $('deckHint').textContent=deckHint();
@@ -4057,16 +4078,16 @@ function onRailInput(ev){
     }
     if(['code.edition','loads.selfWeight','loads.deckAuto','loads.haunchAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode'].includes(t.dataset.path)) renderRail();
   }
-  else if(t.dataset.span!=null){ model.spans[+t.dataset.span]=+t.value; }
+  else if(t.dataset.span!=null){ model.spans[+t.dataset.span]=nv(); }
   else if(t.dataset.sec!=null){
     const s=model.sections[+t.dataset.sec], k=t.dataset.k;
     if(k==='id'){ const old=s.id; s.id=t.value.trim()||old; model.ranges.forEach(r=>{if(r.sec===old)r.sec=s.id;}); }
     else if(k==='name') s.name=t.value;
     else if(k==='type'){ s.type=t.value; if(s.type==='rolled'){ s.shape=s.shape||'W36x150'; Object.assign(s,W_SHAPES[s.shape]); } else { Object.assign(s,{bt:s.bt??16,tt:s.tt??1,D:s.D??54,tw:s.tw??0.5625,bb:s.bb??18,tb:s.tb??1.25}); } renderRail(); }
     else if(k==='shape'){ s.shape=t.value; Object.assign(s,W_SHAPES[t.value]); renderRail(); }
-    else s[k]= t.value===''?undefined:+t.value;
+    else s[k]= t.value.trim()===''?undefined:nv();
   }
-  else if(t.dataset.rng!=null){ const r=model.ranges[+t.dataset.rng]; r[t.dataset.k]= t.dataset.k==='sec'?t.value:+t.value; }
+  else if(t.dataset.rng!=null){ const r=model.ranges[+t.dataset.rng]; r[t.dataset.k]= t.dataset.k==='sec'?t.value:nv(); }
   else return;
   schedule();
 }
@@ -4619,7 +4640,7 @@ fillReport();
 // ---------- wire up ----------
 renderRail(); syncEdition();
 $('rail').addEventListener('change',onRailInput);
-$('rail').addEventListener('input',ev=>{ if(ev.target.type==='number'||['text','stf','pours'].includes(ev.target.dataset.kind)&&ev.target.tagName==='TEXTAREA') onRailInput(ev); });
+$('rail').addEventListener('input',ev=>{ if((ev.target.tagName==='INPUT'&&ev.target.classList.contains('n'))||['text','stf','pours'].includes(ev.target.dataset.kind)&&ev.target.tagName==='TEXTAREA') onRailInput(ev); });
 $('rail').addEventListener('click',onRailClick);
 document.querySelector('.edsel').addEventListener('click',e=>{ const b=e.target.closest('button[data-ed]'); if(!b) return; model.code.edition=b.dataset.ed; renderRail(); syncEdition(); run(); });
 $('btnRun').addEventListener('click',run);
