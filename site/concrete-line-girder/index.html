@@ -2577,8 +2577,28 @@ function renderMethod() {
 function renderIO() {
   $('#c-io').innerHTML = '<div class="card-h"><h2>Save or load input</h2><span class="status">Inputs are also kept in this browser.</span></div>' +
     '<textarea id="iotxt" spellcheck="false" aria-label="Model JSON">' + esc(JSON.stringify(M(), null, 1)) + '</textarea>' +
-    '<div class="actions" style="margin-top:8px"><button type="button" id="copybtn">Copy</button><button type="button" id="loadbtn" class="primary">Load from text</button><button type="button" id="resetbtn">Reset this tab</button><span class="status" id="iostat"></span></div>';
+    '<div class="actions" style="margin-top:8px"><button type="button" id="copybtn">Copy</button><button type="button" id="savefilebtn">Save file</button><button type="button" id="openfilebtn">Open file</button><input type="file" id="openfile" accept=".json,application/json,text/plain" hidden><button type="button" id="loadbtn" class="primary">Load from text</button><button type="button" id="resetbtn">Reset this tab</button><span class="status" id="iostat"></span></div>' +
+    '<p class="hint" style="margin:8px 0 0">Save file downloads this tab\u2019s input as a .json file. Open file, or drop the file on this card, loads it back.</p>';
 }
+function ioFileName() {
+  const m = M(), r = m.report || {};
+  const base = String(r.structure || r.bridge || (m.kind === 'deck' ? 'deck-beam' : 'i-beam')).trim().replace(/[^\w.-]+/g, '-').replace(/^-+|-+$/g, '') || 'girder';
+  return base + '.concrete-line-girder.json';
+}
+function loadModelText(txt, what) {
+  try { const m = JSON.parse(txt); if (!m || (m.kind !== 'I' && m.kind !== 'deck')) throw new Error('The text needs "kind": "I" or "deck".'); state.models[m.kind] = m; setFam(m.kind); $('#iostat').textContent = 'Loaded' + (what ? ' ' + what : '') + '.'; }
+  catch (e) { $('#iostat').textContent = 'Could not load' + (what ? ' ' + what : '') + ': ' + e.message; }
+}
+function readModelFile(file) {
+  if (!file) return;
+  const fr = new FileReader();
+  fr.onload = () => loadModelText(String(fr.result || ''), file.name);
+  fr.onerror = () => { $('#iostat').textContent = 'Could not read ' + file.name + '.'; };
+  fr.readAsText(file);
+}
+document.addEventListener('change', ev => { if (ev.target.id === 'openfile') { readModelFile(ev.target.files && ev.target.files[0]); ev.target.value = ''; } });
+$('#c-io').addEventListener('dragover', ev => { if (ev.dataTransfer && [...ev.dataTransfer.types].includes('Files')) { ev.preventDefault(); ev.dataTransfer.dropEffect = 'copy'; } });
+$('#c-io').addEventListener('drop', ev => { const f = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0]; if (f) { ev.preventDefault(); readModelFile(f); } });
 
 
 // ---------------- calculation report (PDF) ----------------
@@ -2663,9 +2683,13 @@ document.addEventListener('click', ev => {
   const t = ev.target.closest('[data-table]'); if (t) { state.view.table = t.dataset.table; renderTables(); save(); return; }
   const f = ev.target.closest('#famsel button'); if (f) { setFam(f.dataset.fam); return; }
   if (ev.target.id === 'copybtn') { const ta = $('#iotxt'); const done = () => { $('#iostat').textContent = 'Copied.'; }; try { navigator.clipboard.writeText(ta.value).then(done, () => { ta.select(); $('#iostat').textContent = 'Select-all done; copy with your keyboard.'; }); } catch (e) { ta.select(); } }
-  if (ev.target.id === 'loadbtn') {
-    try { const m = JSON.parse($('#iotxt').value); if (!m || (m.kind !== 'I' && m.kind !== 'deck')) throw new Error('The text needs "kind": "I" or "deck".'); state.models[m.kind] = m; setFam(m.kind); $('#iostat').textContent = 'Loaded.'; }
-    catch (e) { $('#iostat').textContent = 'Could not load: ' + e.message; }
+  if (ev.target.id === 'loadbtn') loadModelText($('#iotxt').value);
+  if (ev.target.id === 'openfilebtn') $('#openfile').click();
+  if (ev.target.id === 'savefilebtn') {
+    const name = ioFileName(), a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(M(), null, 1) + '\n'], { type: 'application/json' }));
+    a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    $('#iostat').textContent = 'Saved ' + name + '.';
   }
   if (ev.target.id === 'resetbtn') { state.models[state.fam] = state.fam === 'I' ? defI() : defDeck(); renderRail(); runNow(); fillReport(); }
 });

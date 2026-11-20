@@ -319,7 +319,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <div class="toolbar" style="margin-top:8px">
         <button id="ioCopy" type="button">Copy</button>
         <button id="ioSave" type="button">Save file</button>
-        <label class="btn" for="ioFile">Open file</label>
+        <button id="ioOpen" type="button">Open file</button>
         <input type="file" id="ioFile" accept=".json,application/json" hidden>
         <button id="ioLoad" type="button" class="primary">Load from text</button>
         <button id="ioReset" type="button">Reset to default</button>
@@ -4611,6 +4611,7 @@ $('ioSave').addEventListener('click',()=>{
   const a=document.createElement('a'); a.href=url; a.download=base+'.steel-line-girder.json'; document.body.appendChild(a); a.click(); a.remove();
   setTimeout(()=>URL.revokeObjectURL(url),60000); ioStatus('Saved '+a.download+'.');
 });
+$('ioOpen').addEventListener('click',()=>$('ioFile').click());
 $('ioFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>loadModelText(String(r.result),f.name); r.readAsText(f); e.target.value=''; });
 $('ioLoad').addEventListener('click',()=>loadModelText($('ioTxt').value,'pasted text'));
 let resetArmed=null;
