@@ -411,7 +411,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       return x;
     };
     if (m.beam) { num(m.beam.fc, "Beam f'c", { pos: true, max: 15 }); num(m.beam.fci, "Beam f'ci", { pos: true }); if (+m.beam.fci > +m.beam.fc) throw new Error("Beam f'ci must not exceed f'c."); }
-    if (comp) { num(m.S, 'Beam spacing', { pos: true, max: 20 }); num(m.deck && m.deck.t, 'Deck thickness', { pos: true }); num(m.deck && m.deck.fc, "Deck f'c", { pos: true }); num(m.deck && m.deck.fillet != null ? m.deck.fillet : 0, 'Fillet', { min: 0 }); num(m.overhang || 0, 'Overhang', { min: 0 }); }
+    if (comp) { num(m.S, 'Beam spacing', { pos: true, max: 20 }); num(m.deck && m.deck.t, 'Deck thickness', { pos: true }); num(m.deck && m.deck.fc, "Deck f'c", { pos: true }); num(m.deck && m.deck.fillet != null ? m.deck.fillet : 0, 'Fillet', { min: 0 }); num(m.overhang || 0, 'Overhang', { min: 0 }); num(m.deck && m.deck.beff || 0, 'Effective width', { min: 0 }); num(m.deck && m.deck.btrib || 0, 'Tributary width', { min: 0 }); }
     if (m.nBeams != null) num(m.nBeams, 'Number of beams', { min: 2 });
     num(m.skew || 0, 'Skew', { min: 0, max: 60 });
     if (m.H != null) num(m.H, 'Relative humidity', { min: 0, max: 100 });
@@ -452,7 +452,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       if (!(S > 0)) throw new Error('Enter the beam spacing.');
       dk.E = Eo.Ed > 0 ? +Eo.Ed : Ec(dk.fc, m.deck.wc);
       const ovh = +m.overhang || 0;
-      const beff = m.deck.beff > 0 ? +m.deck.beff : S * 12; // tributary width; exterior beams use the interior width (BM 3.1.12)
+      const beff = m.deck.beff > 0 ? +m.deck.beff : S * 12; // effective width, in.; blank = S (exterior beams use the interior width, BM 3.1.12)
       const n = dk.E / Eb; // slab transformed to beam concrete
       const As = n * beff * dk.t, ys = h + dk.gap + dk.t / 2; // fillet not in section properties (BM 3.4) unless haunchInProps (zero-area gap)
       const Ac = A + As, ybc = (A * yb + As * ys) / Ac;
@@ -637,7 +637,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // ----- dead loads -----
     const loads = {};
     if (comp) {
-      const trib = ext_g ? Math.max(S, S / 2 + (+m.overhang || 0)) : S; // exterior: extra overhang slab as additional DC1 (BM 3.1.12)
+      // tributary width for the deck slab weight, ft; blank = S, exterior: the extra overhang slab as additional DC1 (BM 3.1.12)
+      const trib = m.deck.btrib > 0 ? +m.deck.btrib / 12 : (ext_g ? Math.max(S, S / 2 + (+m.overhang || 0)) : S);
+      loads.trib = trib;
       loads.beam = shp.wt;
       loads.fillet = wcLoad * dk.fillet * shp.btf / 144;
       loads.slab = wcLoad * trib * dk.tw / 12;
@@ -1927,7 +1929,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       ['Spans', res.spans.map(s => fx(+s, 3)).join(' – ') + ' ft' + (res.spans.length > 1 ? (res.cont ? ', continuous for DC2, DW and LL' : ', simple spans') : '')],
       ['Beams', (model.nBeams || res.df.Nb) + (deck ? ' deck beams' : ' at ' + model.S + ' ft') + ', roadway ' + model.roadway + ' ft, skew ' + (model.skew || 0) + '°'],
       ['Concrete', "beam f′c " + mt.fc + " ksi, f′ci " + mt.fci + ' ksi; Eci ' + fx(mt.Eci, 0) + ', Ec ' + fx(mt.Eb, 0) + ' ksi' + (res.comp ? '; deck f′c ' + (model.deck || {}).fc + ' ksi' : '')],
-      ['Deck', res.comp ? (model.deck.t + ' in. slab, ' + (model.deck.fillet || 0) + ' in. fillet; b_eff ' + fn(res.section.comp.beff, 1) + ' in.') : (model.overlay ? model.overlay.t + ' in. ' + model.overlay.type + ' overlay, noncomposite' : 'noncomposite')],
+      ['Deck', res.comp ? (model.deck.t + ' in. slab, ' + (model.deck.fillet || 0) + ' in. fillet; b_eff ' + fn(res.section.comp.beff, 1) + ' in., tributary ' + fn(res.loads.trib * 12, 1) + ' in.') : (model.overlay ? model.overlay.t + ' in. ' + model.overlay.type + ' overlay, noncomposite' : 'noncomposite')],
       ['Strands', st.n + ' × ' + st.d + ' in., Aps ' + fn(st.Aps, 3) + ' in.², ' + (model.pattern && model.pattern.name ? 'pattern ' + model.pattern.name : 'custom pattern') + (st.groups.some(g => g.draped) ? ', draped' : '') + (st.groups.some(g => g.Ldb > 0) ? ', debonded' : '')],
       ['Prestress', 'fpbt ' + fn(ls.fpbt, 1) + ', fpt ' + fn(ls.fpt, 1) + ', fpe ' + fn(ls.fpe, 1) + ' ksi; total loss ' + fn(ls.pct, 1) + '%'],
       ['Dead loads', 'DC1 ' + fn(ld.DC1, 3) + ', DC2 ' + fn(ld.DC2, 3) + ', DW ' + fn(ld.DW, 3) + ' k/ft'],
@@ -2121,6 +2123,11 @@ const getP = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
 const setP = (o, p, v) => { const ks = p.split('.'); let a = o; ks.slice(0, -1).forEach(k => { if (a[k] == null || typeof a[k] !== 'object') a[k] = {}; a = a[k]; }); a[ks[ks.length - 1]] = v; };
 
 // ---------------- rail ----------------
+// what a blank effective or tributary width uses, in.
+function widthPH(m) {
+  const S = +m.S || 0, ext = m.girder === 'exterior', t = ext ? Math.max(S, S / 2 + (+m.overhang || 0)) : S;
+  return { beff: '= S (' + +(S * 12).toFixed(2) + ')', trib: ext && t > S ? '= S/2 + overhang (' + +(t * 12).toFixed(2) + ')' : '= S (' + +(S * 12).toFixed(2) + ')' };
+}
 const fld = (k, label, unit, o = {}) => {
   const v = getP(M(), k);
   const val = o.t === 'list' ? (Array.isArray(v) ? v.join(', ') : '') : (v == null ? '' : v);
@@ -2177,13 +2184,14 @@ function renderRail() {
       fld('pierFace', 'CL pier to face of support', 'ft') + fld('padW', 'Abutment bearing pad width', 'in.') +
       '</div>', true);
     h += grp('Cross section and deck', '<div class="fields">' +
-      fld('S', 'Beam spacing', 'ft') + fld('nBeams', 'Number of beams', '') +
+      fld('S', 'Beam spacing S (distribution factors)', 'ft') + fld('nBeams', 'Number of beams', '') +
       fld('overhang', 'Overhang (CL beam to edge)', 'ft') + fld('parapetWidth', 'Parapet base width', 'ft') +
       fld('roadway', 'Clear roadway width', 'ft') + fld('lanes', 'Design lanes (0 = from roadway)', '') +
       fld('skew', 'Skew', 'deg') + sel('girder', 'Beam designed', [['interior', 'Typical bridge — interior factors'], ['exterior', 'Atypical — exterior factors govern']]) +
       fld('deck.t', 'Deck thickness', 'in.') + fld('deck.fc', "Deck f'c", 'ksi') +
+      fld('deck.beff', 'Effective width, composite section', 'in.', { ph: widthPH(m).beff }) + fld('deck.btrib', 'Tributary width, DC1 deck slab', 'in.', { ph: widthPH(m).trib }) +
       fld('deck.fillet', 'Average fillet (load only)', 'in.') +
-      '</div>', true);
+      '</div><p class="hint">Beam spacing S, with the overhang, parapet and roadway, sets the live load distribution factors. Effective width sets the composite section (blank = S). Tributary width sets the deck slab weight in DC1 (blank = S; exterior case: the larger of S and S/2 + overhang). The fillet weight uses the top flange width.</p>', true);
   } else {
     h += grp('Beam and span', '<div class="fields">' +
       sel('shape', 'Deck beam section', shapeOptions(), { w2: true }) +
@@ -2221,8 +2229,8 @@ function renderRail() {
     h += grp('Dead loads', '<div class="fields">' +
       fld('loads.parapet', 'Parapet weight, each', 'k/ft') + fld('loads.nParapet', 'Parapets', '') +
       fld('loads.fws', 'Future wearing surface', 'psf') + sel('loads.fwsDist', 'Wearing surface to beams', [['equal', 'Equally (BM 3.1.12)'], ['tributary', 'Tributary width']]) +
-      fld('loads.dc1', 'Additional DC1', 'k/ft') + fld('loads.dc2', 'Additional DC2', 'k/ft') + fld('loads.dw', 'Additional DW', 'k/ft') +
-      '</div><p class="hint">Concrete 0.150 kcf for loads. Parapets are shared equally by all beams.</p>');
+      fld('loads.dc1', 'Additional DC1 (forms, other concrete)', 'k/ft') + fld('loads.dc2', 'Additional DC2', 'k/ft') + fld('loads.dw', 'Additional DW', 'k/ft') +
+      '</div><p class="hint">DC1 already includes the beam, the deck slab (deck thickness × tributary width) and the fillet (average fillet × top flange width); additional DC1 is anything beyond those, such as stay-in-place forms. Concrete 0.150 kcf for loads. Parapets are shared equally by all beams.</p>');
   } else {
     h += grp('Dead loads', '<div class="fields">' +
       fld('loads.rail', 'Railing / parapet weight', 'k/ft') + fld('loads.fws', 'Future wearing surface', 'psf') +
@@ -2501,7 +2509,8 @@ function renderSection() {
   h += '<div><h3>Distribution and loads</h3>' + kv([
     ['Design lanes', r.df.NL], ...(r.comp ? [['K<sub>g</sub>', f0(r.df.info.Kg) + ' in.⁴'], ['g moment / shear', f3(g.M) + ' / ' + f3(g.V)], ['g fatigue (moment)', f3(g.MF)], ['Shear skew factor', f3(g.skV)]] : [['C / D', f3(g.C) + ' / ' + f2(g.D) + ' ft'], ['g = S/D', f3(g.M)], ['g fatigue = g/1.2', f3(g.MF)]]),
     ['g deflection', f3(r.df.mDefl)],
-    ['DC1', f3(r.loads.DC1) + ' k/ft' + (r.loads.nTies ? ' + ' + r.loads.nTies + ' ties @ ' + f2(r.loads.PT) + ' k' : '')], ...(r.comp ? [['DC2', f3(r.loads.DC2) + ' k/ft']] : []), ['DW', f3(r.loads.DW) + ' k/ft']]) + '</div>';
+    ...(r.comp ? [['b<sub>eff</sub> / tributary', f1(r.section.comp.beff) + ' / ' + f1(r.loads.trib * 12) + ' in.']] : []),
+    ['DC1', f3(r.loads.DC1) + ' k/ft' + (r.comp ? ' (beam ' + f3(r.loads.beam) + ', slab ' + f3(r.loads.slab) + ', fillet ' + f3(r.loads.fillet) + (r.loads.dc1x ? ', additional ' + f3(r.loads.dc1x) : '') + ')' : '') + (r.loads.nTies ? ' + ' + r.loads.nTies + ' ties @ ' + f2(r.loads.PT) + ' k' : '')], ...(r.comp ? [['DC2', f3(r.loads.DC2) + ' k/ft']] : []), ['DW', f3(r.loads.DW) + ' k/ft']]) + '</div>';
   const cb = r.camber[0];
   h += '<div><h3>Camber and deflection</h3>' + kv([
     ['Release force F<sub>t</sub>', f0(cb.Ft) + ' k'], ['Prestress camber 1.80Dcp', f2(cb.Dcp) + ' in. ↑'], ['Beam weight 1.85Dcb', f2(cb.Dcb) + ' in. ↓'],
@@ -2661,7 +2670,9 @@ function onRail(ev) {
   const t = el.dataset.t;
   let v = t === 'bool' ? el.checked : t === 'list' ? el.value.split(/[\s,;]+/).filter(Boolean).map(Number) : t === 'num' ? (el.value === '' ? 0 : +el.value) : el.value;
   if (t === 'num' && !isFinite(v)) return;
+  if ((k === 'deck.beff' || k === 'deck.btrib') && el.value.trim() === '') v = null;
   setP(m, k, v);
+  if (k === 'S' || k === 'overhang' || k === 'girder') { const ph = widthPH(m); document.querySelectorAll('[data-k="deck.beff"]').forEach(e => { e.placeholder = ph.beff; }); document.querySelectorAll('[data-k="deck.btrib"]').forEach(e => { e.placeholder = ph.trib; }); }
   if (k === 'shape' && ev.type === 'change') {
     if (state.fam === 'I') {
       const sh = D.shapes[v]; m.strand.d = sh.strand;
