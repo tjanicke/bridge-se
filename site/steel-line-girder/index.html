@@ -185,7 +185,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     </select>
     <label class="btn" for="mdxFile" title="Read a line girder rating output (.out or .txt text file): geometry, sections, loads, bracing and stiffeners">Import other file</label>
     <input type="file" id="mdxFile" accept=".out,.OUT,.txt" hidden>
-    <button id="btnJson">Input JSON</button>
+    <button id="btnJson">Save or load</button>
     <button class="primary" id="btnRun">Run check</button>
     <button id="themeSwitch" type="button" aria-label="Switch to dark mode">Dark mode</button>
   </div>
@@ -198,8 +198,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     <div id="warnBox" hidden class="warnbox"></div>
     <div id="impBox" hidden class="info"></div>
     <section class="card" id="jsonCard" hidden>
-      <div class="card-h"><h2 id="jsonTitle">Input JSON</h2><div class="toolbar"><button id="btnCopy">Copy</button><button id="btnApply" class="primary">Apply pasted JSON</button><button id="btnCloseJson">Close</button></div></div>
-      <p class="hint">Copy to save this bridge. Paste a saved file here and apply it to reload.</p>
+      <div class="card-h"><h2 id="jsonTitle">Input JSON</h2><div class="toolbar"><button id="btnCopy">Copy</button><button id="btnCloseJson">Close</button></div></div>
+      <p class="hint">Results at every analysis point, comma separated. Copy and paste into a spreadsheet.</p>
       <textarea id="jsonTxt" spellcheck="false"></textarea>
     </section>
 
@@ -311,6 +311,21 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     <section class="card">
       <h2 style="margin-bottom:8px">Method and assumptions</h2>
       <ul class="notes" id="methodNotes"></ul>
+    </section>
+
+    <section class="card" id="ioCard">
+      <div class="card-h"><h2>Save or load input</h2><span class="status">Inputs are also kept in this browser.</span></div>
+      <textarea id="ioTxt" spellcheck="false" aria-label="Input JSON"></textarea>
+      <div class="toolbar" style="margin-top:8px">
+        <button id="ioCopy" type="button">Copy</button>
+        <button id="ioSave" type="button">Save file</button>
+        <label class="btn" for="ioFile">Open file</label>
+        <input type="file" id="ioFile" accept=".json,application/json" hidden>
+        <button id="ioLoad" type="button" class="primary">Load from text</button>
+        <button id="ioReset" type="button">Reset to default</button>
+        <span class="status" id="ioStat"></span>
+      </div>
+      <p class="hint" style="margin-top:6px">Save file keeps this girder as a .json file you can open here again later. To load, open a saved file, or paste saved text above and press Load from text.</p>
     </section>
   </main>
 </div>
@@ -834,6 +849,15 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     if (Array.isArray(v)) return v.map(Number).filter(isFinite);
     return String(v || '').split(/[\s,;]+/).filter(t => t !== '').map(Number).filter(isFinite);
   }
+  // DC1 deck weight per girder, k/ft: structural slab x tributary width (blank = effective width) x unit weight.
+  // Off for models saved or imported before this option existed, so their DC1 is never counted twice.
+  function deckWeight(m) {
+    const l = m.loads || {}, d = m.deck || {};
+    if (!l.deckAuto) return 0;
+    const b = +d.btrib > 0 ? +d.btrib : +d.beff;
+    return (+d.ts || 0) / 12 * ((b || 0) / 12) * ((+l.wc > 0 ? +l.wc : 150) / 1000);
+  }
+  const addedDC1 = m => (+m.loads.dc1 || 0) + deckWeight(m);
   function braceLocations(m, supX) {
     const L = supX[supX.length - 1];
     let b = parseList(m.bracing.locs);
@@ -941,6 +965,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const d = m.deck || {};
     pos(d.ts, 'Slab thickness'); pos(d.beff, 'Effective slab width'); pos(d.n, 'Modular ratio n'); pos(d.fc, "f'c");
     if (!(+d.haunch >= 0)) errs.push('Haunch cannot be negative.');
+    if (d.btrib != null && d.btrib !== '' && !(+d.btrib >= 0)) errs.push('Tributary width cannot be negative.');
+    if (m.loads && m.loads.deckAuto && m.loads.wc != null && m.loads.wc !== '' && !(+m.loads.wc > 0)) errs.push('Concrete unit weight must be greater than zero.');
     if (!(+d.Ar >= 0)) errs.push('Rebar area cannot be negative.');
     (m.sections || []).forEach(s => {
       const t = 'Section ' + s.id + ': ';
@@ -981,7 +1007,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const lastO = orders[orders.length - 1];
       for (let e = 0; e < ne; e++) if (ordE[e] === Infinity) ordE[e] = lastO; // uncovered length is cast with the last pour
       const swTrue = eSec.map(id => props[id].steelArea / 144 * 0.490 * swF + (+m.loads.steelAdd || 0));
-      const wetE = eSec.map((id, e) => +pc.wet > 0 ? +pc.wet : (selfW ? +m.loads.dc1 : Math.max(0, +m.loads.dc1 - swTrue[e])));
+      const wetE = eSec.map((id, e) => +pc.wet > 0 ? +pc.wet : (selfW ? addedDC1(m) : Math.max(0, addedDC1(m) - swTrue[e])));
       const restE = wDC1.map((w, e) => Math.max(0, w - wetE[e]));
       const secFor = (e, k) => (ordE[e] < orders[k] ? props[eSec[e]][nC] : props[eSec[e]].s); // k = stage index
       const r0 = deadLoad(x, restE, sh1, supX);
@@ -1099,7 +1125,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const selfW = m.loads.selfWeight !== false;
     const swF = 1 + (+m.loads.misc || 0) / 100;
     const wSW = eSec.map(id => selfW ? props[id].steelArea / 144 * 0.490 * swF + (+m.loads.steelAdd || 0) : 0);
-    const wDC1 = wSW.map(v => v + (+m.loads.dc1));
+    const wDC1 = wSW.map(v => v + addedDC1(m));
     const dc1 = deadLoad(x, wDC1, sh1, supX), dc2 = deadLoad(x, eSec.map(() => +m.loads.dc2), sh3, supX), dw = deadLoad(x, eSec.map(() => +m.loads.dw), sh3, supX);
     const uni = deadLoad(x, eSec.map(() => 1), shn, supX);
     const cl = +((m.construction || {}).cl) || 0;
@@ -2508,7 +2534,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
 
-  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES };
+  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LGCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -3177,7 +3203,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       ['Roadway, skew', (df.roadway || '—') + ' ft, ' + (df.skew || 0) + '°'],
       ['Steel', 'Fy = ' + (model.Fy || 50) + ' ksi unless noted per section'],
       ['Deck', isComp(model, res) ? (dk.ts + ' in. structural, haunch ' + (dk.haunch || 0) + ' in., b_eff ' + (dk.beff || '—') + ' in., f′c ' + (dk.fc || '—') + ' ksi, n = ' + (dk.n || '—')) : 'noncomposite'],
-      ['Dead loads', 'DC1 ' + fn(+ld.dc1 || 0, 3) + (ld.selfWeight !== false ? ' k/ft + steel self weight' : ' k/ft') + ', DC2 ' + fn(+ld.dc2 || 0, 3) + ', DW ' + fn(+ld.dw || 0, 3) + ' k/ft'],
+      ['Dead loads', (ld.deckAuto ? 'DC1 deck ' + fn(dk.ts, 2) + ' in. × ' + fn(+dk.btrib > 0 ? +dk.btrib : +dk.beff, 1) + ' in. tributary × ' + fn(+ld.wc > 0 ? +ld.wc : 150, 0) + ' pcf = ' + fn(LGCheck.deckWeight(model), 3) + ' k/ft + ' + fn(+ld.dc1 || 0, 3) + ' k/ft added' : 'DC1 ' + fn(+ld.dc1 || 0, 3) + ' k/ft') + (ld.selfWeight !== false ? ' + steel self weight' : '') + ', DC2 ' + fn(+ld.dc2 || 0, 3) + ', DW ' + fn(+ld.dw || 0, 3) + ' k/ft'],
       ['Live load', LFD ? (R.vehicle || 'HS20') + ' truck or lane, impact per 3.8.2' : 'HL-93, IM 33%; fatigue truck IM 15%'],
       ['Fatigue traffic', (model.fatigue && model.fatigue.adtt ? 'ADTT ' + model.fatigue.adtt + (LFD ? ', case ' + res.fatigueCase : ', (ADTT)SL ' + fx(res.adttSL, 0)) : 'not checked')],
       ['Cross-frames', (res.braces || []).length + ' locations'],
@@ -3683,8 +3709,8 @@ const W_SHAPES={
  'W21x68':{d:21.1,bf:8.27,tf:0.685,tw:0.430},'W21x62':{d:21.0,bf:8.24,tf:0.615,tw:0.400}
 };
 const baseCommon={
- deck:{ts:8,haunch:2,beff:108,n:8,fc:4,Ar:8.6,yr:4,fyr:60}, Fy:50,
- loads:{dc1:1.10,misc:5,steelAdd:0,selfWeight:true,dc2:0.35,dw:0.45}, bracing:{locs:'',Lb:20},
+ deck:{ts:8,haunch:2,beff:108,btrib:null,n:8,fc:4,Ar:8.6,yr:4,fyr:60}, Fy:50,
+ loads:{dc1:1.10,misc:5,steelAdd:0,selfWeight:true,deckAuto:false,wc:150,dc2:0.35,dw:0.45}, bracing:{locs:'',Lb:20},
  df:{S:9,tsDF:0,overrideM:0,overrideV:0,useTable:false,table:null,girder:'interior',Ng:5,roadway:0,de:2,skew:0,skewShear:false,rigid:true},
  flb:{on:false,str:0,svc:0,conTop:0,conBot:0,bracket:false,bo:3.5,tso:0,share:0.5,forms:0.04,screed:0.085,rail:0.025,walk:0.125,fm:3,bh:36,bv:0},
  pour:{on:false,pours:[],wet:0,nCast:'n',checkSingle:true,useFinal:true},
@@ -3720,11 +3746,13 @@ const EXAMPLES={
 // bring any saved or imported model up to the current input set; drop retired options
 function migrate(m){
   const b=structuredClone(baseCommon);
+  const hadDeckOpt=!!(m.loads&&'deckAuto' in m.loads); // older inputs carry the deck inside DC1
   if(!m.code){ m.code={edition:'10',eta:(m.factors&&+m.factors.eta>0)?+m.factors.eta:1}; }
   for(const k of ['deck','loads','bracing','df','flb','pour','code','fatigue','construction','deflection','factors','options','lfd','lfr']) m[k]=Object.assign({},b[k],m[k]||{});
   ['mdxGoverningSign','mdxSvcSign'].forEach(k=>delete m.options[k]);
   ['IM','eta'].forEach(k=>delete m.factors[k]);
   ['cbMode','Cb','atSupports'].forEach(k=>delete m.bracing[k]);
+  if(!hadDeckOpt) m.loads.deckAuto=false;
   if(m.Fy==null) m.Fy=50;
   if(!Array.isArray(m.stiffeners)) m.stiffeners=[];
   if(!Array.isArray(m.pour.pours)) m.pour.pours=[];
@@ -3732,8 +3760,8 @@ function migrate(m){
 }
 let model=null, impNotes=null;
 try{const s=localStorage.getItem('lgc-model-v1'); if(s) model=JSON.parse(s);}catch(e){}
-if(!model) model=window.LG_EXAMPLES?EXAMPLES.b7u2():EXAMPLES.pg3();
-model=migrate(model);
+const defaultModel=()=>withDeckWeight(migrate(window.LG_EXAMPLES?EXAMPLES.b7u2():EXAMPLES.pg3()));
+model=model?migrate(model):defaultModel();
 let res=null, resOther=null, selI=null;
 const $=id=>document.getElementById(id);
 const fmt=(v,d=1)=>v===Infinity?'∞':v===-Infinity?'−∞':(v==null||!isFinite(v))?'—':(Math.abs(v)<5e-13?0:v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -3774,6 +3802,16 @@ function field(path,label,unit,attrs=''){
 function check(path,label){ return `<label class="chk"><input type="checkbox" id="in-${path}" data-path="${path}" data-kind="bool" ${get(path)?'checked':''}> ${label}</label>`; }
 function sel(path,label,opts){ const v=String(get(path)??''); return `<label class="f">${label}<select id="in-${path}" data-path="${path}" data-kind="text">${opts.map(([o,t])=>`<option value="${o}" ${String(o)===v?'selected':''}>${t}</option>`).join('')}</select></label>`; }
 function get(path){return path.split('.').reduce((o,k)=>o==null?o:o[k],model);}
+function dc1Label(){ const l=model.loads; return l.deckAuto?(l.selfWeight?'DC1 added (haunch, forms, other)':'DC1 added, incl. steel (haunch, forms)'):(l.selfWeight?'DC1 added (deck, haunch, forms)':'DC1 total, incl. steel'); }
+function deckHint(){ const d=model.deck, b=+d.btrib>0?+d.btrib:+d.beff, wc=+model.loads.wc>0?+model.loads.wc:150;
+  return `Deck: ${fmt(+d.ts,2)} in. × ${fmt(b,1)} in.${+d.btrib>0?'':' (effective width)'} × ${fmt(wc,0)} pcf = ${fmt(LGCheck.deckWeight(model),3)} k/ft per girder, added to DC1.`; }
+// use the deck weight option on a model whose DC1 includes the deck: same DC1 total, deck weight shown separately
+function withDeckWeight(m){
+  const l=m.loads; if(l.deckAuto||l.selfWeight===false) return m;
+  const w=LGCheck.deckWeight(Object.assign({},m,{loads:Object.assign({},l,{deckAuto:true})}));
+  if(+l.dc1-w>=-1e-9){ l.deckAuto=true; l.dc1=+Math.max(0,+l.dc1-w).toFixed(6); }
+  return m;
+}
 function set(path,val){const ks=path.split('.');let o=model;for(let i=0;i<ks.length-1;i++)o=o[ks[i]];o[ks[ks.length-1]]=val;}
 const CATOPTS=[['A','A'],['B','B'],["B'","B′"],['C','C'],["C'","C′"],['D','D'],['E','E'],["E'","E′"]];
 
@@ -3840,16 +3878,17 @@ function renderRail(){
   </div></details>
   <details class="grp"><summary>Deck and steel</summary><div class="gbody"><div class="fields">
     ${field('deck.ts','Structural slab','in')}${field('deck.haunch','Haunch, slab to top flange','in')}
-    ${field('deck.beff','Effective width','in')}${field('deck.n','Modular ratio n','')}
-    ${field('deck.fc',"f'c",'ksi')}${field('Fy','Fy, all plates','ksi')}
-    ${field('deck.Ar','Rebar area, neg. region','in²')}${field('deck.yr','Rebar centroid below top of slab','in')}
-    ${field('deck.fyr','Rebar fy','ksi')}
-  </div></div></details>
+    ${field('deck.beff','Effective width','in')}${field('deck.btrib','Tributary width, DC1 deck','in',`placeholder="= effective (${esc(model.deck.beff)})"`)}
+    ${field('deck.n','Modular ratio n','')}${field('deck.fc',"f'c",'ksi')}
+    ${field('Fy','Fy, all plates','ksi')}${field('deck.Ar','Rebar area, neg. region','in²')}
+    ${field('deck.yr','Rebar centroid below top of slab','in')}${field('deck.fyr','Rebar fy','ksi')}
+  </div><p class="hint">Effective width sets the composite section; tributary width sets the deck weight in DC1. Leave tributary width blank to use the effective width.</p></div></details>
   <details class="grp"><summary>Dead loads per girder</summary><div class="gbody"><div class="fields">
-    ${field('loads.dc1',model.loads.selfWeight?'DC1 added (deck, haunch, forms)':'DC1 total, incl. steel','k/ft')}${field('loads.misc','Steel misc. allowance','%')}
-    ${field('loads.steelAdd','Additional steel','k/ft')}<span></span>
+    ${field('loads.dc1',dc1Label(),'k/ft')}${model.loads.deckAuto?field('loads.wc','Concrete unit weight, deck','pcf'):field('loads.misc','Steel misc. allowance','%')}
+    ${model.loads.deckAuto?field('loads.misc','Steel misc. allowance','%')+field('loads.steelAdd','Additional steel','k/ft'):field('loads.steelAdd','Additional steel','k/ft')+'<span></span>'}
     ${field('loads.dc2','DC2 (barriers, rail)','k/ft')}${field('loads.dw','DW (wearing surface)','k/ft')}
-  </div>${check('loads.selfWeight','Compute steel self weight from each section at 490 pcf')}</div></details>
+  </div>${check('loads.deckAuto','Compute deck weight from structural slab × tributary width')}${model.loads.deckAuto?`<p class="hint" id="deckHint">${esc(deckHint())}</p>`:''}
+  ${check('loads.selfWeight','Compute steel self weight from each section at 490 pcf')}</div></details>
   <details class="grp"><summary>Transverse stiffeners</summary><div class="gbody">
     <label class="f">Stiffener panels, one per line: from (ft), to (ft), spacing (in)
       <textarea class="braces" id="in-stiffeners" data-kind="stf" spellcheck="false" placeholder="0 15 180">${(model.stiffeners||[]).map(r=>r.from+' '+r.to+' '+r.do).join('\n')}</textarea></label>
@@ -3903,7 +3942,7 @@ function renderRail(){
       <textarea class="braces" id="in-pours" data-kind="pours" spellcheck="false" placeholder="0 90 1">${(model.pour.pours||[]).map(q=>q.from+' '+q.to+' '+q.order).join('\n')}</textarea></label>
     <div class="toolbar"><button id="suggestPours">Suggest a sequence</button><span class="status">Positive regions first, then piers</span></div>
     <div class="fields">
-      ${field('pour.wet','Wet deck load, deck + haunch (0 = DC1 added)','k/ft')}
+      ${field('pour.wet','Wet deck load, deck + haunch (0 = '+(model.loads.deckAuto?'deck + DC1 added':'DC1 added')+')','k/ft')}
       ${sel('pour.nCast','Hardened pours act with',[['n','Short-term n'],['3n','Long-term 3n']])}
     </div>
     ${check('pour.useFinal','Use the locked-in DC1 from the sequence in the final design checks')}
@@ -3960,9 +3999,18 @@ function onRailInput(ev){
   }
   else if(t.dataset.path){
     const k=t.dataset.kind;
-    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:+t.value));
+    if(t.dataset.path==='loads.deckAuto'&&t.checked!==!!model.loads.deckAuto){
+      // keep the DC1 total: move the deck weight out of (or back into) "DC1 added"
+      const w=LGCheck.deckWeight(Object.assign({},model,{loads:Object.assign({},model.loads,{deckAuto:true})}));
+      model.loads.dc1=+Math.max(0,(+model.loads.dc1||0)+(t.checked?-w:w)).toFixed(6);
+    }
+    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(t.dataset.path==='deck.btrib'&&t.value.trim()===''?null:+t.value)));
     if(t.dataset.path==='code.edition') syncEdition();
-    if(['code.edition','loads.selfWeight','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode'].includes(t.dataset.path)) renderRail();
+    if(['deck.ts','deck.beff','deck.btrib','loads.wc'].includes(t.dataset.path)){
+      if($('deckHint')) $('deckHint').textContent=deckHint();
+      if(t.dataset.path==='deck.beff'&&$('in-deck.btrib')) $('in-deck.btrib').placeholder=`= effective (${model.deck.beff})`;
+    }
+    if(['code.edition','loads.selfWeight','loads.deckAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode'].includes(t.dataset.path)) renderRail();
   }
   else if(t.dataset.span!=null){ model.spans[+t.dataset.span]=+t.value; }
   else if(t.dataset.sec!=null){
@@ -4005,6 +4053,7 @@ let resModel=null, resKey=null; // the exact input the current results were comp
 const modelKey=m=>JSON.stringify(Object.assign({},m,{report:undefined}));
 function run(){
   try{ localStorage.setItem('lgc-model-v1',JSON.stringify(model)); }catch(e){}
+  refreshIO();
   clearTimeout(otherTimer); resOther=null;
   try{
     if(model.spans.some(s=>!(+s>0))) throw new Error('Every span needs a length greater than zero.');
@@ -4538,13 +4587,38 @@ $('detAll').addEventListener('change',renderDetail);
 $('impBox').addEventListener('click',e=>{ if(e.target.id==='impClose') $('impBox').hidden=true; });
 $('mdxFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>importText(r.result,f.name); r.readAsText(f); e.target.value=''; });
 document.addEventListener('dragover',e=>{ e.preventDefault(); });
-document.addEventListener('drop',e=>{ e.preventDefault(); const f=e.dataTransfer&&e.dataTransfer.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>importText(r.result,f.name); r.readAsText(f); });
-$('example').addEventListener('change',e=>{ const k=e.target.value; if(!k) return; const ed=String(model.code.edition); model=migrate(EXAMPLES[k]()); model.code.edition=ed; selI=null; fillReport(); $('impBox').hidden=true; renderRail(); syncEdition(); run(); e.target.value=''; });
+document.addEventListener('drop',e=>{ e.preventDefault(); const f=e.dataTransfer&&e.dataTransfer.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const t=String(r.result); if(/^\s*\{/.test(t)) loadModelText(t,f.name); else importText(t,f.name); }; r.readAsText(f); });
+$('example').addEventListener('change',e=>{ const k=e.target.value; if(!k) return; const ed=String(model.code.edition); model=withDeckWeight(migrate(EXAMPLES[k]())); model.code.edition=ed; selI=null; fillReport(); $('impBox').hidden=true; renderRail(); syncEdition(); run(); e.target.value=''; });
 $('resTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-i]'); if(tr) select(+tr.dataset.i,false); });
-$('btnJson').addEventListener('click',()=>{ $('jsonCard').hidden=false; $('jsonTitle').textContent='Input JSON'; $('jsonTxt').value=JSON.stringify(model,null,1); $('jsonCard').scrollIntoView({block:'start'}); });
+$('btnJson').addEventListener('click',()=>{ refreshIO(true); $('ioCard').scrollIntoView({block:'start'}); });
 $('btnCloseJson').addEventListener('click',()=>{ $('jsonCard').hidden=true; });
 $('btnCopy').addEventListener('click',e=>copyText($('jsonTxt').value,e.target,$('jsonTxt')));
-$('btnApply').addEventListener('click',()=>{ try{ const m=JSON.parse($('jsonTxt').value); if(!m.spans||!m.sections||!m.ranges) throw new Error('JSON needs spans, sections and ranges.'); model=migrate(m); selI=null; fillReport(); renderRail(); syncEdition(); run(); $('jsonCard').hidden=true; }catch(e){ $('errBox').hidden=false; $('errBox').textContent='Could not read that JSON: '+e.message; } });
+// ---------- save or load input ----------
+function refreshIO(force){ const ta=$('ioTxt'); if(ta&&(force||document.activeElement!==ta)) ta.value=JSON.stringify(model,null,1); }
+function ioStatus(t){ $('ioStat').textContent=t; }
+function loadModelText(txt,what){
+  try{
+    const m=JSON.parse(txt);
+    if(!m||!Array.isArray(m.spans)||!Array.isArray(m.sections)||!Array.isArray(m.ranges)) throw new Error('this is not a saved Steel Line Girder input (it needs spans, sections and ranges).');
+    model=migrate(m); selI=null; $('impBox').hidden=true; $('errBox').hidden=true;
+    fillReport(); renderRail(); syncEdition(); run(); refreshIO(true); ioStatus('Loaded '+(what||'input')+'.');
+  }catch(e){ ioStatus('Could not load '+(what||'that input')+': '+e.message); }
+}
+$('ioCopy').addEventListener('click',e=>{ refreshIO(true); copyText($('ioTxt').value,e.target,$('ioTxt')); });
+$('ioSave').addEventListener('click',()=>{
+  const base=(model.name||'girder').replace(/[^\w.-]+/g,'_').replace(/^_+|_+$/g,'').slice(0,60)||'girder';
+  const url=URL.createObjectURL(new Blob([JSON.stringify(model,null,1)],{type:'application/json'}));
+  const a=document.createElement('a'); a.href=url; a.download=base+'.steel-line-girder.json'; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(()=>URL.revokeObjectURL(url),60000); ioStatus('Saved '+a.download+'.');
+});
+$('ioFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>loadModelText(String(r.result),f.name); r.readAsText(f); e.target.value=''; });
+$('ioLoad').addEventListener('click',()=>loadModelText($('ioTxt').value,'pasted text'));
+let resetArmed=null;
+$('ioReset').addEventListener('click',e=>{
+  if(!resetArmed){ e.target.textContent='Click again to reset'; resetArmed=setTimeout(()=>{ e.target.textContent='Reset to default'; resetArmed=null; },4000); return; }
+  clearTimeout(resetArmed); resetArmed=null; e.target.textContent='Reset to default';
+  model=defaultModel(); selI=null; $('impBox').hidden=true; fillReport(); renderRail(); syncEdition(); run(); refreshIO(true); ioStatus('Reset to the default girder.');
+});
 $('btnCsv').addEventListener('click',e=>{ $('jsonCard').hidden=false; $('jsonTitle').textContent='Results CSV'; $('jsonTxt').value=csv(); copyText($('jsonTxt').value,e.target,$('jsonTxt')); });
 run();
 })();
