@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Steel Line Girder is a browser-based steel bridge girder analysis and rating study tool with AASHTO LRFD 9th and 10th Edition and Standard Specifications 17th Edition LFD/LFR checks.">
+<meta name="description" content="Steel Line Girder is a browser-based steel bridge girder analysis and rating study tool for I-girders and straight tub girders, with AASHTO LRFD 9th and 10th Edition and Standard Specifications 17th Edition LFD/LFR checks.">
 <link rel="canonical" href="https://bridge-se.open-dot.org/steel-line-girder/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Bridge SE · Open DOT">
@@ -60,6 +60,7 @@ button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid 
 .edsel button small{font-size:11px;color:var(--muted)}
 .edsel button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .edsel button[aria-pressed="true"] small{color:var(--accent-ink);opacity:.85}
+.edsel button:disabled{opacity:.45;cursor:not-allowed}
 .edlbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);display:block;margin-bottom:4px}
 .wrap{display:grid;grid-template-columns:minmax(0,380px) minmax(0,1fr);gap:18px;max-width:1500px;margin:0 auto}
 @media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}.sheet{order:-1}}
@@ -165,12 +166,19 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
 <header>
   <div>
     <h1>Steel Line Girder Check</h1>
-    <p>Design check of continuous composite steel plate girders and rolled beams, with performance ratios for every limit state and a load rating: AASHTO LRFD (9th or 10th edition, HL-93) with MBE LRFR, or the AASHTO Standard Specifications 17th edition Load Factor Design (HS loading) with MBE LFR. Edit any input and results update. A line girder rating output file can be imported with Import other file to fill the inputs.</p>
+    <p>Design check of continuous composite steel plate girders, rolled beams and straight tub girders, with performance ratios for every limit state and a load rating: AASHTO LRFD (9th or 10th edition, HL-93) with MBE LRFR, or the AASHTO Standard Specifications 17th edition Load Factor Design (HS loading) with MBE LFR. Tub girders are checked to the LRFD 10th edition (Article 6.11). Edit any input and results update. A line girder rating output file can be imported with Import other file to fill the inputs.</p>
   </div>
   <div class="actions">
     <div>
+      <span class="edlbl" id="kindLbl">Girder type</span>
+      <div class="edsel kindsel" role="group" aria-labelledby="kindLbl">
+        <button data-kind="i" aria-pressed="true"><b>I-girder</b><small>plate or rolled</small></button>
+        <button data-kind="tub" aria-pressed="false"><b>Tub girder</b><small>straight, 6.11</small></button>
+      </div>
+    </div>
+    <div>
       <span class="edlbl" id="edLbl">Design specification</span>
-      <div class="edsel" role="group" aria-labelledby="edLbl">
+      <div class="edsel edselEd" role="group" aria-labelledby="edLbl">
         <button data-ed="10" aria-pressed="true"><b>LRFD 10th Edition</b><small>2024</small></button>
         <button data-ed="9" aria-pressed="false"><b>LRFD 9th Edition</b><small>2020</small></button>
         <button data-ed="LFD" aria-pressed="false"><b>Standard Specs 17th</b><small>2002 · LFD / LFR</small></button>
@@ -178,6 +186,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     </div>
     <select id="example" aria-label="Load example" style="width:auto">
       <option value="">Load example…</option>
+      <optgroup label="I-girders">
       <option value="b7u2">Bridge 7 Unit 2, 4-span plate girder</option>
       <option value="b12u5">Bridge 1-2 Unit 5, hybrid plate girder</option>
       <option value="mdx">17-span W24x104 stringer</option>
@@ -188,6 +197,10 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <option value="rb2">2-span rolled beam W36x150, 70-70</option>
       <option value="a1">MBE Example A1, 65 ft cover-plated W33x130</option>
       <option value="a1p">MBE Example A1 with its 220 k escorted permit</option>
+      </optgroup>
+      <optgroup label="Tub girders">
+      <option value="tub5">NSBA Design Example 5, 3-span tub girder</option>
+      </optgroup>
     </select>
     <label class="btn" for="mdxFile" title="Read a line girder rating output (.out or .txt text file): geometry, sections, loads, bracing and stiffeners">Import other file</label>
     <input type="file" id="mdxFile" accept=".out,.OUT,.txt" hidden>
@@ -716,6 +729,106 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     };
   }
 
+  // =====================================================================================
+  //  Tub (box) girders — AASHTO LRFD 10th Edition (2024), Article 6.11; straight, non-skewed
+  //  sec: { type: 'tub', bt, tt (each of the two top flanges), D (web depth along the slope), tw (each web),
+  //         bb (bottom flange, full width), tb, Fyt, Fyw, Fyb, do }
+  //  m.tub: { slope (webs, vertical : horizontal), ext (bottom flange beyond the outside face of each web, in.),
+  //           w (top flange c/c within a tub, in.), a (top flange c/c of adjacent tubs, in.), overhang (deck, ft), lateral }
+  //  y from the bottom of the bottom flange; the deck haunch is measured from the top of the webs (NSBA SBDH DE5).
+  // =====================================================================================
+  const numOr = (v, d) => (v != null && v !== '' && isFinite(+v) ? +v : d);
+  function tubCfg(m) {
+    const t = m.tub || {};
+    return { slope: numOr(t.slope, 4), ext: numOr(t.ext, 1.5), w: numOr(t.w, 0), a: numOr(t.a, 0), overhang: numOr(t.overhang, 0),
+      lateral: t.lateral === 'partial' || t.lateral === 'none' ? t.lateral : 'full', shearLat: t.shearLat !== false };
+  }
+  function tubGeom(sec, T) {
+    const S = T.slope, cosT = S / Math.sqrt(S * S + 1);
+    const g = { tub: true, S, cosT, tanT: 1 / S, D: +sec.D, tw: +sec.tw, bt: +sec.bt, tt: +sec.tt, bb: +sec.bb, tb: +sec.tb, ext: T.ext };
+    g.Dv = g.D * cosT;                                // vertical web depth
+    g.bfi = g.bb - 2 * (g.ext + g.tw);                // clear width of the box flange between the webs (6.11.2.2)
+    g.yw0 = g.tb; g.yw1 = g.tb + g.Dv; g.d = g.yw1 + g.tt;
+    g.At = 2 * g.bt * g.tt; g.Ab = g.bb * g.tb;       // both top flanges; the box flange
+    g.Iyt = g.tt * g.bt ** 3 / 12; g.Iyb = g.tb * g.bb ** 3 / 12; // one top flange; the box flange
+    g.yct = g.yw1 + g.tt / 2; g.ycb = g.tb / 2;
+    g.cbT = g.cbB = g.ctT = g.ctB = 0;
+    return g;
+  }
+  // elastic rectangles; bottom flange width bB (effective width for a slender compression flange)
+  function tubRects(g, bB) {
+    const b = bB != null ? bB : g.bb;
+    return [
+      { A: b * g.tb, y: g.tb / 2, Io: b * g.tb ** 3 / 12 },
+      // two inclined webs: Iow = cos²θ · tw D³/12 about the horizontal axis at mid-depth (NSBA SBDH DE5 Fig. 10)
+      { A: 2 * g.tw * g.D, y: g.yw0 + g.Dv / 2, Io: 2 * g.cosT ** 2 * g.tw * g.D ** 3 / 12 },
+      { A: g.At, y: g.yw1 + g.tt / 2, Io: 2 * g.bt * g.tt ** 3 / 12 }
+    ];
+  }
+  // plastic moment, composite positive flexure (D6.1), longitudinal deck steel neglected; webs as their horizontal width per unit height
+  function tubPlastic(g, deck, F, ySoffit) {
+    const parts = [{ y0: 0, y1: g.tb, b: g.bb, f: F.b }, { y0: g.yw0, y1: g.yw1, b: 2 * g.tw / g.cosT, f: F.w }, { y0: g.yw1, y1: g.d, b: 2 * g.bt, f: F.t }]
+      .map(q => Object.assign(q, { conc: false }));
+    parts.push({ y0: ySoffit, y1: ySoffit + deck.ts, b: deck.beff, f: 0.85 * deck.fc, conc: true });
+    const top = ySoffit + deck.ts;
+    const bal = yp => { let C = 0, T = 0; for (const q of parts) { C += q.f * q.b * Math.max(0, q.y1 - Math.max(q.y0, yp)); if (!q.conc) T += q.f * q.b * Math.max(0, Math.min(q.y1, yp) - q.y0); } return C - T; };
+    let lo = 0, hi = top;
+    for (let i = 0; i < 100; i++) { const mid = (lo + hi) / 2; if (bal(mid) > 0) lo = mid; else hi = mid; }
+    const yp = (lo + hi) / 2;
+    let Mp = 0;
+    for (const q of parts) {
+      const a0 = Math.max(q.y0, yp), a1 = q.y1;
+      if (a1 > a0) Mp += q.f * q.b * (a1 - a0) * ((a0 + a1) / 2 - yp);
+      if (!q.conc) { const b0 = q.y0, b1 = Math.min(q.y1, yp); if (b1 > b0) Mp += q.f * q.b * (b1 - b0) * (yp - (b0 + b1) / 2); }
+    }
+    const Dcp = yp < g.yw1 ? (g.yw1 - Math.max(yp, g.yw0)) / g.cosT : 0; // along the web (6.11.2.1.1)
+    return { yp, Mp: Mp / 12, Dp: top - yp, Dt: top, Dcp };
+  }
+  // hybrid factor (6.10.1.10.1), distances along the web; Afn per web: half the box flange or one top flange
+  function tubRh(p, g, F) {
+    if (F.w >= Math.max(F.t, F.b)) return 1;
+    const DnB = (p.yb - g.yw0) / g.cosT, DnT = (g.yw1 - p.yb) / g.cosT, bot = DnB >= DnT;
+    const Dn = Math.max(DnB, DnT), Afn = bot ? g.Ab / 2 : g.bt * g.tt, fn = bot ? F.b : F.t;
+    const rho = Math.min(F.w / fn, 1), beta = 2 * Dn * g.tw / Afn;
+    return Math.min(1, (12 + beta * (3 * rho - rho ** 3)) / (12 + 2 * beta));
+  }
+  // effective width of a longitudinally unstiffened box flange in compression, 6.9.4.2.2b with Fcr = Fyc (6.11.8.2.2b):
+  // b = clear width between webs, λr = 1.09√(E/Fy); c1 = 0.22, c2 = 1.74, c3 = 0.075 as applied in NSBA SBDH DE5 (Table 6.9.4.2.2b-1);
+  // corner areas and flange extensions are added to the effective clear width
+  function boxEffWidth(g, Fyc) {
+    const lamF = g.bfi / g.tb, lamR = 1.09 * Math.sqrt(ES / Fyc);
+    if (lamF <= lamR) return { lamF, lamR, compact: true, Fel: null, beClear: g.bfi, be: g.bb };
+    const Fel = (1.74 * lamR / lamF) ** 2 * Fyc, r = Math.sqrt(Fel / Fyc);
+    const beClear = Math.max(0, Math.min(g.bfi, g.bfi * ((1 - 0.22 * r) * r - 0.075)));
+    return { lamF, lamR, compact: false, Fel, beClear, be: beClear + 2 * (g.tw + g.ext) };
+  }
+  function tubProps(sec, deck, Fy, T) {
+    const g = tubGeom(sec, T);
+    const F = { t: +sec.Fyt > 0 ? +sec.Fyt : Fy, w: +sec.Fyw > 0 ? +sec.Fyw : Fy, b: +sec.Fyb > 0 ? +sec.Fyb : Fy };
+    const hW = Math.max(+deck.haunch || 0, g.tt);    // slab soffit above the top of the webs (not below the top flange)
+    const ySoffit = g.yw1 + hW, ySlab = ySoffit + deck.ts / 2, yRebar = ySoffit + deck.ts - deck.yr;
+    const slab = n => ({ A: deck.beff * deck.ts / n, y: ySlab, Io: (deck.beff / n) * deck.ts ** 3 / 12 });
+    const rebar = { A: deck.Ar, y: yRebar, Io: 0 };
+    const st = tubRects(g);
+    const s = elastic(st, g.d), sn = elastic([...st, slab(deck.n)], g.d), s3n = elastic([...st, slab(3 * deck.n)], g.d), sr = elastic([...st, rebar], g.d);
+    const eff = boxEffWidth(g, F.b);
+    const stE = tubRects(g, eff.be), sE = elastic(stE, g.d), srE = elastic([...stE, rebar], g.d);
+    const pl = tubPlastic(g, deck, F, ySoffit);
+    const RhPos = tubRh(sn, g, F), RhNeg = tubRh(sr, g, F), RhNC = tubRh(s, g, F);
+    // compact composite section in positive flexure, 6.11.6.2.2 conditions 1, 2 and 5 (3 and 4 are checked along the girder)
+    const compactBase = Math.max(F.t, F.b) <= 70 && F.w <= 70 && g.D / g.tw <= 150 && 2 * pl.Dcp / g.tw <= 3.76 * Math.sqrt(ES / F.t);
+    // noncomposite depths of web in compression, along the web
+    const DcTopNC = Math.max(0, g.yw1 - s.yb) / g.cosT, DcBotNC = Math.max(0, s.yb - g.yw0) / g.cosT;
+    const DcNeg = Math.max(0, srE.yb - g.yw0) / g.cosT;
+    return {
+      g, F, s, sn, s3n, sr, sE, srE, pl, eff, compactBase, RhPos, RhNeg, RhNC,
+      pn: { Mp: NaN, yp: NaN, Dcp: NaN }, compact: compactBase, Rb: 1, DcNeg, lrwNeg: NaN, rtNeg: NaN, a6ok: false, J: 0, h: g.yct - g.ycb,
+      Iyb: g.Iyb, Iyt: g.Iyt, DcTop: DcTopNC, DcBot: DcBotNC, DcTopNC, DcBotNC,
+      rtTopNC: rtOf(g.bt, g.tt, DcTopNC, g.tw), rtBotNC: NaN,
+      ySoffit, ySlab, yRebar, hWeb: hW, haunch: hW - g.tt, eg: ySlab - s.yb, steelArea: s.A, rolled: false, tub: true
+    };
+  }
+
   // ---------- compression-flange resistances (stress form, Article 6.10.8.2) ----------
   function flbD(Fyc, Fyw, Rb, Rh, bfc, tfc) { // FLB resistance with intermediate values (report)
     const Fyr = Math.max(0.5 * Fyc, Math.min(0.7 * Fyc, Fyw));
@@ -929,6 +1042,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     if (!l.haunchAuto || !sec) return 0;
     const h = sec.haunch != null && sec.haunch !== '' && isFinite(+sec.haunch) ? +sec.haunch : (+d.haunch || 0);
     const bt = +geom(sec).bt || 0;
+    // tub: haunch above both top flanges, measured from the top of the webs
+    if (sec.type === 'tub') return Math.max(0, h - (+sec.tt || 0)) / 12 * (2 * Math.max(0, bt) / 12) * ((+l.wc > 0 ? +l.wc : 150) / 1000);
     return Math.max(0, h) / 12 * (Math.max(0, bt) / 12) * ((+l.wc > 0 ? +l.wc : 150) / 1000);
   }
   // per section: { id, haunch, bt, w } with the option on, for the input hint
@@ -1071,10 +1186,13 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     if (!(+d.Ar >= 0)) errs.push('Rebar area cannot be negative.');
     (m.sections || []).forEach(s => {
       const t = 'Section ' + s.id + ': ';
+      if (m.kind === 'tub' && s.type !== 'tub') errs.push(t + 'tub girders need tub sections.');
+      if (s.type === 'tub') { const T = tubCfg(m), g = tubGeom(s, T); if (g.bfi <= 0) errs.push(t + 'the bottom flange is narrower than the webs and their extensions.'); }
       if (s.type === 'rolled') { ['d', 'bf', 'tf', 'tw'].forEach(k => pos(s[k], t + k)); if (+s.d <= 2 * +s.tf) errs.push(t + 'd must exceed 2tf.'); if (+s.tw >= +s.bf) errs.push(t + 'tw must be less than bf.'); }
       else { ['bt', 'tt', 'D', 'tw', 'bb', 'tb'].forEach(k => pos(s[k], t + k)); if (+s.tw >= Math.min(+s.bt, +s.bb)) errs.push(t + 'tw must be less than the flange widths.'); }
       ['Fyt', 'Fyw', 'Fyb', 'Ix', 'J', 'A', 'do', 'haunch'].forEach(k => { if (s[k] != null && s[k] !== '' && !(+s[k] >= 0)) errs.push(t + k + ' cannot be negative.'); });
     });
+    if (m.kind === 'tub') { const T = tubCfg(m); if (!(T.slope > 0)) errs.push('Web slope must be greater than zero.'); if (!(T.ext >= 0)) errs.push('Bottom flange extension cannot be negative.'); }
     (m.stiffeners || []).forEach(r => { if (!(+r.do > 0)) errs.push('Stiffener panel ' + r.from + '–' + r.to + ' ft needs a spacing greater than zero.'); });
     const lv = m.live || {};
     if (String(m.code && m.code.edition) !== 'LFD') {
@@ -1222,7 +1340,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const nodeAt = v => { let bi = 0, bd = Infinity; for (let i = 0; i < nn; i++) { const d = Math.abs(x[i] - v); if (d < bd) { bd = d; bi = i; } } return bi; };
 
     const secById = {}; m.sections.forEach(s => { secById[s.id] = s; });
-    const props = {}; m.sections.forEach(s => { props[s.id] = sectionProps(s, deck, Fy, ed); props[s.id].id = s.id; });
+    const tubT = m.kind === 'tub' ? tubCfg(m) : null;
+    const props = {}; m.sections.forEach(s => { props[s.id] = tubT ? tubProps(s, deck, Fy, tubT) : sectionProps(s, deck, Fy, ed); props[s.id].id = s.id; });
     const secAt = xx => { for (const r of m.ranges) if (xx >= +r.from - 1e-6 && xx <= +r.to + 1e-6) return r.sec; return null; };
     const eSec = [];
     for (let e = 0; e < ne; e++) {
@@ -1966,23 +2085,474 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       wSW, eSec, adttSL, dfSpan, pour, flOn, vibration, llc, warnings: collectWarnings(), ms: Date.now() - t0 };
   }
 
+
+  // live-load distribution, multiple steel box girders with a concrete deck: Table 4.6.2.2.2b-1, lanes per tub
+  // 0.05 + 0.85NL/Nb + 0.425/NL with 0.5 ≤ NL/Nb ≤ 1.5; multiple presence included (C4.6.2.2.2b). Shear: as for moment
+  // (Table 4.6.2.2.3a-1). Fatigue: one lane, not divided by 1.2 (NSBA SBDH DE5 7.1).
+  function tubDF(m) {
+    const d = m.df || {}, NL = designLanes(d.roadway), Nb = Math.max(1, Math.round(+d.Ng || 0) || 2);
+    const r = NL / Nb, g = 0.05 + 0.85 * NL / Nb + 0.425 / NL, g1 = 0.05 + 0.85 / Nb + 0.425;
+    const warn = [];
+    if (r < 0.5 - 1e-9 || r > 1.5 + 1e-9) warn.push('NL/Nb = ' + r.toFixed(2) + ' is outside 0.5–1.5 (Table 4.6.2.2.2b-1); a refined analysis is required');
+    return { NL, Nb, ratio: r, M: g, V: g, MF: g1, VF: g1, warn,
+      govM: '0.05 + 0.85NL/Nb + 0.425/NL', govV: 'as for moment (Table 4.6.2.2.3a-1)', govF: 'one lane, NL = 1, not divided by 1.2' };
+  }
+  // Article 6.11.2.3 restrictions for the distribution factors (and for neglecting St. Venant torsion and distortion)
+  function tubRestrictions(m, T) {
+    const d = m.df || {}, out = [];
+    const item = (ok, txt) => out.push({ ok, txt });
+    item(!(+d.skew > 0), 'bearing lines not skewed' + (+d.skew > 0 ? ' (skew ' + d.skew + '°)' : ''));
+    if (T.w > 0 && T.a > 0) item(T.a >= 0.8 * T.w - 1e-9 && T.a <= 1.2 * T.w + 1e-9, 'adjacent tubs a = ' + T.a + ' in. within 0.8w–1.2w (w = ' + T.w + ' in.)');
+    else item(false, 'top flange spacings w and a not entered');
+    if (T.overhang > 0 && T.a > 0) item(T.overhang * 12 <= 0.6 * T.a + 1e-9 && T.overhang <= 6 + 1e-9, 'deck overhang ' + T.overhang + ' ft ≤ 0.6a and ≤ 6.0 ft');
+    else if (!(T.overhang > 0)) item(false, 'deck overhang not entered');
+    const NL = designLanes(d.roadway), Nb = Math.max(1, Math.round(+d.Ng || 0) || 2);
+    if (Nb < 2) item(false, 'single tub: 6.11.2.3 applies to two or more tubs');
+    return { ok: out.every(q => q.ok), items: out, NL, Nb };
+  }
+
+  // one live load case through every Article 6.11 check (straight tub girders, 10th Edition)
+  function runCaseTub(m, ed, ctx, llc) {
+    const { t0, eta, phiF, phiV, spans, supX, Ltot, deck, Fy, braces, stf, stiffPos, x, nn, ne, nodeAt, secById, props, eSec, supNodes, wDC1, dc1, dc2, dw, uni, cl, clr, h, ng, xg, spanOf, dfT, nearIdx, IM, IMf } = ctx;
+    if (llc.kind === 'ped' || llc.kind === 'H') throw new Error('Pedestrian bridges are not available for tub girders.');
+    const T = tubCfg(m), fat = m.fatigue || {};
+    const lanesTruck = +fat.lanes || 2;
+    const pFac = lanesTruck <= 1 ? 1.0 : lanesTruck === 2 ? 0.85 : 0.80;
+    const adttSL = llc.kind === 'hl93' ? (+fat.adtt || 0) * pFac : 0;
+    const life = +fat.life || 75;
+    const DF = tubDF(m), RS = tubRestrictions(m, T);
+    const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
+    const llEnv = (IL, neg, si, forShear) => {
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
+      const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
+      if (llc.kind === 'permit') {
+        const ln = llc.lane ? uniformEnv(IL, h, 0.2) : null, long = spans[si] > 200;
+        const lMax = ln && long ? ln.max : 0, lMin = ln && (long || (!forShear && spans.length > 1)) ? ln.min : 0;
+        llc.vehicles.forEach(v => { const t = axleEnv(IL, h, v.w, v.s); take(t.max * (1 + llc.IM) + lMax, t.min * (1 + llc.IM) + lMin, v.name); });
+        return out;
+      }
+      return NONE;
+    };
+    // permanent-load contraflexure points: effective span for shear lag (6.11.1.1)
+    const Mperm = Array.from({ length: nn }, (_, i) => dc1.M[i] + dc2.M[i] + dw.M[i]);
+    const zeros = [0];
+    const zTol = 0.002 * Ltot; // ignore round-off sign changes next to the end supports
+    for (let i = 1; i < nn; i++) { const a = Mperm[i - 1], b = Mperm[i]; if (a * b < 0) { const z = x[i - 1] + (x[i] - x[i - 1]) * a / (a - b); if (z - zeros[zeros.length - 1] > zTol && Ltot - z > zTol) zeros.push(z); } }
+    zeros.push(Ltot);
+    const LeAt = s => { for (let k = 0; k < zeros.length - 1; k++) if (s >= zeros[k] - 1e-6 && s <= zeros[k + 1] + 1e-6) return zeros[k + 1] - zeros[k]; return Ltot; };
+
+    const pois = [];
+    for (let i = 0; i < nn; i++) {
+      const s = x[i];
+      const { IMl, IVl, IVr } = influenceAt(ctx, s);
+      const neg = uni.M[i] < -1e-9;
+      const si = spanOf(s), frac = (s - supX[si]) / spans[si];
+      const Lm = llEnv(IMl, neg, si, false);
+      const Lvl = i > 0 ? llEnv(IVl, false, si, true) : { max: 0, min: 0 };
+      const Lvr = i < nn - 1 ? llEnv(IVr, false, si, true) : { max: 0, min: 0 };
+      const hasF = adttSL > 0;
+      const Fm = hasF ? vehEnvelope(IMl, h, 'fatigue', IMf) : NONE;
+      const Fvl = hasF && i > 0 ? vehEnvelope(IVl, h, 'fatigue', IMf) : { max: 0, min: 0 };
+      const Fvr = hasF && i < nn - 1 ? vehEnvelope(IVr, h, 'fatigue', IMf) : { max: 0, min: 0 };
+      const adj = []; if (i > 0) adj.push(eSec[i - 1]); if (i < ne && !adj.includes(eSec[i])) adj.push(eSec[i]);
+      let DFm = +m.df.overrideM > 0 ? +m.df.overrideM : DF.M, DFv = +m.df.overrideV > 0 ? +m.df.overrideV : DF.V;
+      let DFmF = +fat.dfM > 0 ? +fat.dfM : DF.MF, DFvF = +fat.dfV > 0 ? +fat.dfV : DF.VF;
+      if (dfT) { const k = nearIdx(dfT.x, s); DFm = dfT.M[k]; DFv = dfT.V[k]; }
+      if (llc.kind === 'permit' && llc.single) { DFm = DFmF; DFv = DFvF; }
+      let nCyc = 1.0;
+      if (spans.length > 1) for (let k = 1; k < supX.length - 1; k++) { const near = Math.max(0.1 * spans[k - 1], 0.1 * spans[k]); if (Math.abs(s - supX[k]) <= Math.min(0.1 * (s < supX[k] ? spans[k - 1] : spans[k]), near) + 1e-6) nCyc = 1.5; }
+      pois.push({
+        i, x: s, span: si + 1, frac, label: (si + 1) + '.' + (Math.round(frac * 1000) / 1000).toFixed(3).slice(2),
+        secs: adj, neg, Ldf: spans[si], DFm, DFv, DFmF, DFvF, nCyc, Le: LeAt(s),
+        MDC1: dc1.M[i], MDC2: dc2.M[i], MDW: dw.M[i], MCL: clr ? clr.M[i] : 0,
+        VDC1: [dc1.Vl[i], dc1.Vr[i]], VDC2: [dc2.Vl[i], dc2.Vr[i]], VDW: [dw.Vl[i], dw.Vr[i]], VCL: clr ? [clr.Vl[i], clr.Vr[i]] : [0, 0],
+        LLpos: Lm.max * DFm, LLneg: Lm.min * DFm, LLposCfg: Lm.maxCfg, LLnegCfg: Lm.minCfg,
+        VLL: [[Lvl.max * DFv, Lvl.min * DFv], [Lvr.max * DFv, Lvr.min * DFv]],
+        FMpos: Fm.max * DFmF, FMneg: Fm.min * DFmF,
+        FV: [[Fvl.max * DFvF, Fvl.min * DFvF], [Fvr.max * DFvF, Fvr.min * DFvF]],
+        MDC1one: dc1.M[i], VDC1one: [dc1.Vl[i], dc1.Vr[i]]
+      });
+    }
+
+    // ---- live-load deflection (optional, 2.5.2.6.2): all lanes with multiple presence, shared equally by all tubs
+    const dset = m.deflection || {};
+    let deflection = null;
+    if (llc.kind === 'hl93' && dset.on !== false) {
+      const loadNodes = [];
+      spans.forEach((L, i) => { for (let q = 0.3; q <= 0.701; q += 0.05) loadNodes.push(nodeAt(supX[i] + q * L)); });
+      const uniq = [...new Set(loadNodes)];
+      const EIk = eSec.map(id => ES * props[id].sn.I / 144);
+      const U = deflectionShapes(x, EIk, supNodes, uniq);
+      const NL = +dset.NL || DF.NL, Ng = +dset.Ng || DF.Nb;
+      const dfD = NL * MPF(NL) / Ng;
+      deflection = spans.map((L, si) => ({ span: si + 1, L, delta: 0, x: 0, limit: L * 12 / (+dset.ratio || 800) }));
+      uniq.forEach((nd, k) => {
+        const IL = new Float64Array(ng); let e = 0;
+        for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; }
+        const env = vehEnvelope(IL, h, 'defl', IM);
+        const dd = env.max * dfD, si = spanOf(x[nd]);
+        if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
+      });
+      deflection.forEach(d => { d.ratio = d.delta / d.limit; d.dfD = dfD; });
+    }
+
+    // ---- helpers
+    const gp = (v, gmax, gmin) => (v >= 0 ? gmax : gmin);
+    const strengthDemand = (D, L) => eta * (gp(D.DC, 1.25, 0.9) * D.DC + gp(D.DW, 1.5, 0.65) * D.DW + llc.gS * L);
+    const stressOf = (P, M, which, sectionFor) => { const q = sectionFor(M); return which === 'top' ? fTop(M, q, P.g.d) : fBot(M, q); };
+    const strengthSec = P => ({ dc1: () => P.s, comp: M => (M >= 0 ? P.s3n : P.sr), ll: M => (M >= 0 ? P.sn : P.sr) });
+    const compStress = (P, p, which, LL, secs) => ({ DC: stressOf(P, p.MDC1, which, secs.dc1) + stressOf(P, p.MDC2, which, secs.comp), DW: stressOf(P, p.MDW, which, secs.comp), LL: stressOf(P, LL, which, secs.ll) });
+    const segs = unbracedSegments(ctx);
+    const segOf = i => segs.filter(sg => x[i] >= sg.a - 1e-6 && x[i] <= sg.b + 1e-6);
+    const lbAtNode = i => Math.max(0, ...segOf(i).map(sg => sg.Lb)); // in.: panel length for top-flange lateral bending (6.11.3.2)
+    const wAtNode = i => Math.max(i > 0 ? wDC1[i - 1] : 0, i < ne ? wDC1[i] : 0);
+    const flc = m.flb || {}, flOn = flc.on === true;
+    const flUserTop = flOn ? +flc.conTop || 0 : 0;
+    const continuous = spans.length > 1;
+    const fr = 0.24 * Math.sqrt(deck.fc);
+    const svcR = (P, ff, fother, Rh) => (Math.abs(ff) <= P.F.w && Math.abs(fother) <= P.F.w) ? 1 : Rh;
+    const Fsplice = new Set(); m.ranges.forEach(r => { if (+r.from > 1e-6) Fsplice.add(+(+r.from).toFixed(3)); });
+    const stiffX = new Set(stiffPos.filter(v => !supX.some(sx => Math.abs(sx - v) < 0.01)).map(v => +v.toFixed(3)));
+    const braceX = new Set(braces.filter(b => !supX.some(s => Math.abs(s - b) < 0.01)).map(b => +b.toFixed(3)));
+    // web shear on one inclined web (6.11.9-1): Vui = Vu / (2 cos θ)
+    const perWeb = (P, v) => v / (2 * P.g.cosT);
+    // shear resistance of one web, D along the slope; bfc tfc / bft tft for 6.10.9.3.2-1 per 6.11.9
+    const tubShear = (P, doIn, end, negRegion) => {
+      const g = P.g;
+      const Afc = negRegion ? P.eff.be / 2 * g.tb : g.bt * g.tt, Aft = negRegion ? g.bt * g.tt : g.Ab / 2;
+      return shearCap({ g: { D: g.D, tw: g.tw, At: Afc, Ab: Aft }, F: P.F }, Fy, doIn, end);
+    };
+    // second-order amplification of top-flange lateral bending (6.10.1.6-2 to -4), Cb = Rb = 1.0, K = 1.0
+    function amplify(fl1, fbu, P, LbIn, Fyc, Dc) {
+      if (!(fl1 > 0) || !(fbu > 0) || !(LbIn > 0)) return { fl: Math.max(0, fl1), amp: 1 };
+      const rt = rtOf(P.g.bt, P.g.tt, Dc, P.g.tw), Lp = 1.1 * rt * Math.sqrt(ES / Fyc);
+      const lim = 1.1 * Lp * Math.sqrt(1 / (fbu / Fyc));
+      if (LbIn <= lim) return { fl: fl1, amp: 1, rt, Lp };
+      const Fe = PI2E / (LbIn / rt) ** 2;
+      if (fbu >= Fe) return { fl: Infinity, amp: Infinity, rt, Lp, Fe };
+      const amp = Math.max(1, 0.85 / (1 - fbu / Fe));
+      return { fl: amp * fl1, amp, rt, Lp, Fe };
+    }
+    const flNote = (fl, amp) => !isFinite(fl) ? ', fbu ≥ Fe: amplified fℓ is unbounded (6.10.1.6-4)' : fl > 0 ? ', fℓ = ' + fl.toFixed(2) + ' ksi' + (amp > 1 ? ' (amplified ×' + amp.toFixed(2) + ')' : '') : '';
+
+    // ---- checks
+    const allChecks = [];
+    const push = (p, c) => { c.x = p.x; c.label = p.label; c.i = p.i; allChecks.push(c); p.checks.push(c); };
+    const compBot = {}; // sections whose box flange is in compression at the strength limit state (6.11.2.2-4 limit)
+
+    pois.forEach(p => {
+      p.checks = [];
+      const i = p.i;
+      const effective = id => props[id].g.bb <= p.Le * 12 / 5 + 1e-9; // box flange fully effective, 6.11.1.1
+      for (const id of p.secs) {
+        const P = props[id], g = P.g, sec = secById[id], S = strengthSec(P);
+        const fullEff = effective(id);
+        // ======== Strength I flexure
+        for (const [LL, sign] of [[p.LLpos, '+'], [p.LLneg, '−']]) {
+          if (Math.abs(LL) < 1e-6 && (sign === '−' || Math.abs(p.LLneg) > 1e-6)) continue;
+          const sgn = LL >= 0 ? 1 : -1;
+          const Mcomp = { DC: sgn * (p.MDC1 + p.MDC2), DW: sgn * p.MDW };
+          const Mu = sgn * strengthDemand(Mcomp, sgn * LL);
+          if (Mu >= 0) {
+            const compact = P.compactBase && RS.ok && fullEff;
+            if (compact) {
+              let Mn = P.pl.Dp <= 0.1 * P.pl.Dt ? P.pl.Mp : P.pl.Mp * (1.07 - 0.7 * P.pl.Dp / P.pl.Dt);
+              const Mn0 = Mn;
+              const MD1 = eta * gp(p.MDC1, 1.25, 0.9) * p.MDC1, MD2 = eta * (gp(p.MDC2, 1.25, 0.9) * p.MDC2 + gp(p.MDW, 1.5, 0.65) * p.MDW);
+              const MADt = P.sn.Stop * (P.F.t - Math.abs(MD1 * 12 / P.s.Stop) - Math.abs(MD2 * 12 / P.s3n.Stop)) / 12;
+              const MADb = P.sn.Sbot * (P.F.b - MD1 * 12 / P.s.Sbot - MD2 * 12 / P.s3n.Sbot) / 12;
+              const My = MD1 + MD2 + Math.min(MADt, MADb);
+              let note = 'compact, Mp = ' + P.pl.Mp.toFixed(0) + ' k-ft, Dp/Dt = ' + (P.pl.Dp / P.pl.Dt).toFixed(3) + ', My = ' + My.toFixed(0) + ' k-ft';
+              if (continuous && Mn > 1.3 * P.RhPos * My) { Mn = 1.3 * P.RhPos * My; note += ', Mn ≤ 1.3RhMy (6.11.7.1.2)'; }
+              push(p, { lim: 'Strength I', cat: 'flexure', sec: id, what: 'Positive moment (' + sign + 'LL)', art: '6.11.7.1', unit: 'k-ft', demand: Mu, cap: phiF * Mn, ratio: Mu / (phiF * Mn), note,
+                calc: { t: 'posCompact', Mp: P.pl.Mp, Dp: P.pl.Dp, Dt: P.pl.Dt, Mn0, Mn, My, Rh: P.RhPos, cap13: Mn < Mn0 - 1e-9, phi: phiF, flT: 0, eta, comps: { DC1: p.MDC1, DC2: p.MDC2, DW: p.MDW, LL } },
+                rating: { cap: phiF * Mn, DC: Mcomp.DC * sgn, DW: Mcomp.DW * sgn, L: LL, sgn } });
+              if (sign === '+') push(p, { lim: 'Strength I', cat: 'ductility', sec: id, what: 'Ductility Dp ≤ 0.42Dt', art: '6.10.7.3', unit: 'in.', demand: P.pl.Dp, cap: 0.42 * P.pl.Dt, ratio: P.pl.Dp / (0.42 * P.pl.Dt), note: '' });
+            } else {
+              // noncompact (6.11.7.2.2): top flanges continuously braced, Fnc = RbRhFyc (Rb = 1.0, D/tw ≤ 150 or as computed);
+              // box flange in tension, Fnt = RhFyt with Δ = 1.0 (no St. Venant torsion, C6.11.2.3)
+              const why = !P.compactBase ? 'noncompact section' : !RS.ok ? 'noncompact: Article 6.11.2.3 restrictions not met' : 'noncompact: box flange not fully effective (6.11.1.1)';
+              const top = compStress(P, p, 'top', LL, S), bot = compStress(P, p, 'bot', LL, S);
+              const Dt = { DC: -top.DC, DW: -top.DW }, Db = { DC: bot.DC, DW: bot.DW };
+              const fc = strengthDemand(Dt, -top.LL), ft = strengthDemand(Db, bot.LL);
+              let Rb = 1;
+              if (g.D / g.tw > 150) { const Dc = Math.max(0, g.yw1 - P.sn.yb) / g.cosT; Rb = rbFactor(ed, Dc, g.tw, g.bt, g.tt, P.F.t).Rb; }
+              const Fnc = Rb * P.RhPos * P.F.t, Fnt = P.RhPos * P.F.b;
+              push(p, { lim: 'Strength I', cat: 'flexure', sec: id, what: 'Positive moment, top flanges (' + sign + 'LL)', art: '6.11.7.2.2', unit: 'ksi', demand: fc, cap: phiF * Fnc, ratio: fc / (phiF * Fnc), note: why + ', Fnc = RbRhFyc' + (Rb < 1 ? ', Rb = ' + Rb.toFixed(3) : ''),
+                rating: { cap: phiF * Fnc, DC: Dt.DC, DW: Dt.DW, L: -top.LL, sgn: 1 } });
+              push(p, { lim: 'Strength I', cat: 'flexure', sec: id, what: 'Positive moment, box flange (' + sign + 'LL)', art: '6.11.7.2.2', unit: 'ksi', demand: ft, cap: phiF * Fnt, ratio: ft / (phiF * Fnt), note: why + ', Fnt = RhFytΔ, Δ = 1.0',
+                rating: { cap: phiF * Fnt, DC: Db.DC, DW: Db.DW, L: bot.LL, sgn: 1 } });
+            }
+          } else {
+            // negative flexure (6.11.8): box flange in compression, top flanges in tension (continuously braced, no fℓ)
+            const top = compStress(P, p, 'top', LL, S), bot = compStress(P, p, 'bot', LL, S);
+            const Db = { DC: -bot.DC, DW: -bot.DW }, Dt = { DC: top.DC, DW: top.DW };
+            const fc = strengthDemand(Db, -bot.LL), ft = strengthDemand(Dt, top.LL);
+            if (fc > 0) {
+              if (fc > 0.02 * P.F.b) compBot[id] = true; // ignore round-off compression where M ≈ 0
+              const E_ = P.eff, Fyc = P.F.b;
+              let Fnc, note, calc;
+              if (E_.compact) {
+                const Dc = Math.max(0, P.sr.yb - g.yw0) / g.cosT, rb = rbFactor(ed, Dc, g.tw, g.bb / 2, g.tb, Fyc);
+                Fnc = rb.Rb * P.RhNeg * Fyc;
+                note = 'compact box flange, λf = ' + E_.lamF.toFixed(1) + ' ≤ λpf = ' + E_.lamR.toFixed(1) + ', Fnc = RbRhFycΔ' + (rb.Rb < 1 ? ', Rb = ' + rb.Rb.toFixed(3) : '');
+                calc = { t: 'boxFlange', compact: true, lamF: E_.lamF, lamR: E_.lamR, Rb: rb.Rb, Rh: P.RhNeg, Fyc, Dc, awc: rb.awc, lrw: rb.lrw, phi: phiF, eta, comps: { DC: Db.DC, DW: Db.DW, LL: -bot.LL } };
+              } else {
+                // 6.11.8.2.2b: Fnc = RbRhFycΔ Myce/Myc, yield moments with the factored dead-load moments (D6.2.3, steel + deck steel)
+                const MD1 = Math.abs(eta * gp(-p.MDC1, 1.25, 0.9) * p.MDC1), MD2 = Math.abs(eta * (gp(-p.MDC2, 1.25, 0.9) * p.MDC2 + gp(-p.MDW, 1.5, 0.65) * p.MDW));
+                const My = (sNC, sLT) => { const MAD = sLT.Sbot * (Fyc - MD1 * 12 / sNC.Sbot - MD2 * 12 / sLT.Sbot) / 12; return { MAD, M: MD1 + MD2 + MAD }; };
+                const yc = My(P.s, P.sr), yce = My(P.sE, P.srE);
+                const Dce = Math.max(0, P.srE.yb - g.yw0) / g.cosT, rb = rbFactor(ed, Dce, g.tw, E_.be / 2, g.tb, Fyc);
+                const ratio = yc.M > 0 ? Math.max(0, Math.min(1, yce.M / yc.M)) : 0;
+                Fnc = rb.Rb * P.RhNeg * Fyc * ratio;
+                note = 'slender box flange, λf = ' + E_.lamF.toFixed(1) + ', be = ' + E_.be.toFixed(2) + ' in., Myce/Myc = ' + yce.M.toFixed(0) + '/' + yc.M.toFixed(0) + ', Rb = ' + rb.Rb.toFixed(3);
+                calc = { t: 'boxFlange', compact: false, lamF: E_.lamF, lamR: E_.lamR, Fel: E_.Fel, bfi: g.bfi, beClear: E_.beClear, be: E_.be, Myc: yc.M, Myce: yce.M, MD1, MD2, Dce, awc: rb.awc, lrw: rb.lrw, Rb: rb.Rb, Rh: P.RhNeg, Fyc, phi: phiF, eta, comps: { DC: Db.DC, DW: Db.DW, LL: -bot.LL } };
+              }
+              push(p, { lim: 'Strength I', cat: 'flexure', sec: id, what: 'Negative moment, box flange (' + sign + 'LL)', art: '6.11.8.1.1', unit: 'ksi', demand: fc, cap: phiF * Fnc, ratio: fc / (phiF * Fnc), note: note + ', Δ = 1.0', calc,
+                rating: { cap: phiF * Fnc, DC: Db.DC, DW: Db.DW, L: -bot.LL, sgn: 1 } });
+            }
+            if (ft > 0) push(p, { lim: 'Strength I', cat: 'flexure', sec: id, what: 'Negative moment, top flanges (' + sign + 'LL)', art: '6.11.8.1.2', unit: 'ksi', demand: ft, cap: phiF * P.RhNeg * P.F.t, ratio: ft / (phiF * P.RhNeg * P.F.t), note: 'Fnt = RhFyt (6.11.8.3), continuously braced',
+              rating: { cap: phiF * P.RhNeg * P.F.t, DC: Dt.DC, DW: Dt.DW, L: top.LL, sgn: 1 } });
+          }
+        }
+        // ======== Strength I shear (6.11.9), one inclined web
+        const panelsFor = () => {
+          if (stf.length) {
+            const hits = stf.filter(r => p.x >= +r.from - 1e-6 && p.x <= +r.to + 1e-6);
+            const first = Math.min(...stf.map(r => +r.from)), last = Math.max(...stf.map(r => +r.to));
+            return hits.length ? hits.map(r => ({ doIn: +r.do || 0, end: (+r.from <= first + 1e-6 && p.x <= +r.from + (+r.do) / 12 + 1e-6) || (+r.to >= last - 1e-6 && p.x >= +r.to - (+r.do) / 12 - 1e-6) })) : [{ doIn: 0, end: false }];
+          }
+          const doIn = +sec.do || 0;
+          return [{ doIn, end: doIn > 0 && (p.x <= doIn / 12 + 1e-6 || p.x >= Ltot - doIn / 12 - 1e-6) }];
+        };
+        const sc = panelsFor().map(q => tubShear(P, q.doIn, q.end, p.neg)).reduce((a, c) => (c.Vn < a.Vn ? c : a));
+        p.shear = sc;
+        const Afl = p.neg ? P.eff.be / 2 * g.tb + g.bt * g.tt : g.bt * g.tt + g.Ab / 2;
+        for (let side = 0; side < 2; side++) {
+          if ((side === 0 && i === 0) || (side === 1 && i === nn - 1)) continue;
+          for (const VL of p.VLL[side]) {
+            if (Math.abs(VL) < 1e-9) continue;
+            const sg = Math.sign(VL);
+            const D = { DC: perWeb(P, sg * (p.VDC1[side] + p.VDC2[side])), DW: perWeb(P, sg * p.VDW[side]) }, L = perWeb(P, Math.abs(VL));
+            const Vu = strengthDemand(D, L);
+            push(p, { lim: 'Strength I', cat: 'shear', sec: id, what: 'Shear, one web, ' + (side ? 'right' : 'left'), art: sc.type === 'unstiffened' ? '6.10.9.2' : (sc.type.includes('end') ? '6.10.9.3.3' : '6.10.9.3.2'), unit: 'k', demand: Vu, cap: phiV * sc.Vn, ratio: Vu / (phiV * sc.Vn),
+              note: 'Vui = Vu/(2 cos θ) (6.11.9-1), D along the web; ' + sc.type + (sc.do ? ', do = ' + sc.do + ' in.' : '') + ', C = ' + sc.C.toFixed(3),
+              calc: { t: 'shear', sc: Object.assign({}, sc), D: g.D, tw: g.tw, Fyw: P.F.w, Afl, phi: phiV, eta, comps: { DC: D.DC, DW: D.DW, LL: L } },
+              rating: { cap: phiV * sc.Vn, DC: D.DC, DW: D.DW, L, sgn: 1 } });
+          }
+        }
+        // ======== Service II (6.11.4 → 6.10.4.2.2, fℓ = 0); η = 1.0
+        for (const [LL, sign] of [[p.LLpos, '+'], [p.LLneg, '−']]) {
+          // deck effective in negative flexure only where the option is on and the Service II deck tension ≤ 2fr (6.10.4.2.1)
+          let uncr = false, fdeck = null;
+          if (LL < 0 && m.options.serviceUncracked) {
+            const yTop = P.ySoffit + deck.ts, Mc = p.MDC2 + p.MDW + llc.gSv * LL;
+            fdeck = -Mc * 12 * (yTop - P.sn.yb) / (P.sn.I * deck.n);
+            uncr = fdeck <= 2 * fr;
+          }
+          const SV = uncr ? { dc1: () => P.s, comp: () => P.s3n, ll: () => P.sn } : { dc1: () => P.s, comp: M => (M >= 0 ? P.s3n : P.sr), ll: M => (M >= 0 ? P.sn : P.sr) };
+          const top = compStress(P, p, 'top', LL, SV), bot = compStress(P, p, 'bot', LL, SV);
+          const fT = top.DC + top.DW + llc.gSv * top.LL, fB = bot.DC + bot.DW + llc.gSv * bot.LL;
+          const Rh = LL >= 0 ? P.RhPos : P.RhNeg;
+          const deckNote = fdeck != null ? (uncr ? ', deck effective: Service II deck tension ' + fdeck.toFixed(3) + ' ≤ 2fr' : ', deck cracked: Service II deck tension ' + fdeck.toFixed(3) + ' > 2fr = ' + (2 * fr).toFixed(3) + ' ksi') : '';
+          [['top', 'Top flanges', top, fT, P.F.t, fB], ['bottom', 'Box flange', bot, fB, P.F.b, fT]].forEach(([nm, lab, c, ff, Fyf, fo]) => {
+            if (Math.abs(c.LL) < 1e-9) return;
+            const Rh2 = svcR(P, ff, fo, Rh), cap = 0.95 * Rh2 * Fyf, lsg = Math.sign(c.LL);
+            push(p, { lim: 'Service II', cat: 'service', sec: id, what: lab + ' (' + sign + 'LL)', art: nm === 'bottom' ? '6.10.4.2.2-2' : '6.10.4.2.2-1', unit: 'ksi', demand: Math.abs(ff), cap, ratio: Math.abs(ff) / cap,
+              calc: { t: 'svc2', Rh: Rh2, Fyf, fl2: 0, comps: { DC: lsg * c.DC, DW: lsg * c.DW, LL: Math.abs(c.LL) } },
+              note: '0.95RhFyf, fℓ = 0 (6.11.4)' + (Rh2 !== Rh ? ', Rh = 1.0 (flange stresses ≤ Fyw)' : '') + deckNote,
+              rating: { cap, DC: lsg * c.DC, DW: lsg * c.DW, L: Math.abs(c.LL), sgn: 1, service: true } });
+          });
+          const negCase = fB < 0 && LL < 0;
+          if (negCase || (fT < 0 && g.D / g.tw > 150)) {
+            const fc = negCase ? -fB : -fT, ft = negCase ? fT : fB;
+            const DcV = negCase ? (uncr ? Math.max(0, (fc / (fc + Math.abs(ft))) * g.d - g.tb) : Math.max(0, P.sr.yb - g.yw0)) : Math.max(0, (fc / (fc + Math.abs(ft))) * g.d - g.tt);
+            const Dc = DcV / g.cosT, k = 9 / (Math.max(Dc, 1e-6) / g.D) ** 2, Fyc = negCase ? P.F.b : P.F.t;
+            const Fcrw = Math.min(0.9 * ES * k / (g.D / g.tw) ** 2, Rh * Fyc, P.F.w / 0.7), cc = negCase ? bot : top;
+            push(p, { lim: 'Service II', cat: 'service', sec: id, what: 'Web bend-buckling (' + sign + 'LL)', art: '6.10.4.2.2-4', unit: 'ksi', demand: fc, cap: Fcrw, ratio: fc / Fcrw,
+              calc: { t: 'webBB', D: g.D, tw: g.tw, Dc, k, Rh, Fyc, Fyw: P.F.w, phi: 1, comps: { DC: -cc.DC, DW: -cc.DW, LL: -cc.LL } }, note: 'Fcrw, Dc = ' + Dc.toFixed(1) + ' in. along the web, k = ' + k.toFixed(1) + deckNote });
+            if (negCase && !P.eff.compact) {
+              const lim = Math.min(0.9 * ES * 4 / P.eff.lamF ** 2, P.F.b);
+              push(p, { lim: 'Service II', cat: 'service', sec: id, what: 'Box flange local buckling (' + sign + 'LL)', art: '6.11.4-1', unit: 'ksi', demand: fc, cap: lim, ratio: fc / lim, note: '0.9Ek/λf² ≤ Fyc, k = 4.0, λf = ' + P.eff.lamF.toFixed(1) });
+            }
+          }
+        }
+        // ======== Fatigue (6.11.5 → 6.10.5, 6.6.1.2): short-term composite section, deck effective (6.6.1.2.1)
+        if (adttSL > 0) {
+          const details = [];
+          const baseCat = fat.baseCat || 'B';
+          details.push({ name: 'Box flange-to-web fillet welds', cat: baseCat, y: g.yw0, where: 'top of the box flange' });
+          details.push({ name: 'Top flange-to-web fillet welds', cat: baseCat, y: g.yw1, where: 'underside of the top flanges' });
+          if (fat.studs !== false) details.push({ name: 'Shear stud welds', cat: fat.studCat || 'C', y: g.d, where: 'top of the top flanges' });
+          const xr = +p.x.toFixed(3), nearStiff = [...stiffX].some(v => Math.abs(v - p.x) < 0.0105);
+          if (braceX.has(xr)) { details.push({ name: 'Internal cross-frame connection plate welds, box flange', cat: fat.stiffCat || "C'", y: g.yw0, where: 'top of the box flange' }); details.push({ name: 'Cross-frame / strut connection welds, top flanges', cat: fat.stiffCat || "C'", y: g.yw1, where: 'underside of the top flanges' }); }
+          else if (nearStiff) { details.push({ name: 'Intermediate stiffener weld toe, box flange', cat: fat.stiffCat || "C'", y: g.yw0, where: 'top of the box flange' }); details.push({ name: 'Intermediate stiffener weld toe, top flanges', cat: fat.stiffCat || "C'", y: g.yw1, where: 'underside of the top flanges' }); }
+          if (Fsplice.has(xr)) { details.push({ name: 'Box flange butt-weld splice', cat: fat.spliceCat || 'B', y: 0, where: 'bottom of the box flange' }); details.push({ name: 'Top flange butt-weld splice', cat: fat.spliceCat || 'B', y: g.d, where: 'top of the top flanges' }); }
+          const fAt = (M, q, y) => M * 12 * (q.yb - y) / q.I;
+          details.forEach(dt => {
+            const y = dt.y, df = Math.abs(fAt(p.FMpos, P.sn, y) - fAt(p.FMneg, P.sn, y));
+            if (df < 1e-6) return;
+            const fd = fAt(p.MDC1, P.s, y) + fAt(p.MDC2 + p.MDW, P.s3n, y);
+            const fLLt = Math.max(fAt(p.FMpos, P.sn, y), fAt(p.FMneg, P.sn, y), 0);
+            const R = fatigueResistance(dt.cat, adttSL, p.nCyc, life);
+            const skip = fd < 0 && -fd >= 2 * fLLt;
+            push(p, { lim: R.combo, cat: 'fatigue', sec: id, what: dt.name, art: '6.6.1.2', unit: 'ksi', demand: R.gamma * df, cap: R.dFn, ratio: skip ? 0 : R.gamma * df / R.dFn,
+              calc: { t: 'fatigue', cat: dt.cat, A: (FAT[dt.cat] || FAT.C)[0], TH: (FAT[dt.cat] || FAT.C)[1], gamma: R.gamma, df, dFn: R.dFn, N: R.N, n: p.nCyc, adtt: adttSL, combo: R.combo, Mmax: p.FMpos, Mmin: p.FMneg, y, S: P.sn },
+              note: 'Category ' + dt.cat + ', stress at the ' + dt.where + ', n = ' + p.nCyc + ', (ADTT)SL = ' + adttSL.toFixed(0) + (skip ? ', not checked: permanent compression ≥ 2× LL tension' : '') + (R.combo === 'Fatigue II' ? ', N = ' + R.N.toExponential(2) : ', infinite life') });
+          });
+          if (sc.type === 'stiffened interior') {
+            const Vcr = sc.C * sc.Vp;
+            for (let side = 0; side < 2; side++) {
+              if ((side === 0 && i === 0) || (side === 1 && i === nn - 1)) continue;
+              const VD = perWeb(P, p.VDC1[side] + p.VDC2[side] + p.VDW[side]), FV = p.FV[side].map(v => perWeb(P, v));
+              const Vu = Math.max(Math.abs(VD + 1.75 * FV[0]), Math.abs(VD + 1.75 * FV[1]));
+              push(p, { lim: 'Fatigue I', cat: 'fatigue', sec: id, what: 'Web shear buckling, one web, ' + (side ? 'right' : 'left'), art: '6.10.5.3', unit: 'k', demand: Vu, cap: Vcr, ratio: Vu / Vcr, calc: { t: 'webShearFat', VD, FV: FV.slice(), sc, D: g.D, tw: g.tw, Fyw: P.F.w }, note: 'Vcr = CVp, C = ' + sc.C.toFixed(3) + ', Vui = V/(2 cos θ)' });
+            }
+          }
+        }
+        // ======== Constructibility (6.11.3), noncomposite steel, deck in one pour: 1.4(DC + CL) and 1.25DC + 1.5CL (3.4.2.1)
+        for (const combA of [true, false]) {
+          const fac = combA ? 1.4 : 1.25, facL = combA ? 1.4 : 1.5, tag = combA ? ' [1.4(DC+CL)]' : ' [1.25DC+1.5CL]';
+          const Mu = fac * p.MDC1one + facL * p.MCL;
+          const ft = fTop(Mu, P.s, g.d), fb = fBot(Mu, P.s);
+          const C = o => push(p, Object.assign({ lim: 'Constructibility', cat: 'construct', sec: id, unit: 'ksi', combo: tag }, o, { what: o.what + tag }));
+          // first-order top-flange lateral bending: horizontal component of the web shear (C6.11.3.2, all on the top flanges)
+          // plus deck-overhang brackets on the exterior web (C6.10.3.4.1), over the panel length Lb (full-length lateral bracing)
+          const Lb = lbAtNode(i), Sl = g.tt * g.bt ** 2 / 6;
+          const qWeb = T.shearLat ? 0.5 * (fac * wAtNode(i) + facL * cl) * g.tanT : 0; // k/ft per top flange
+          const flWeb = qWeb / 12 * Lb * Lb / 12 / Sl;
+          let flBr = 0;
+          if (flOn && flc.bracket) {
+            const tanA = (+flc.bh || 0) / Math.max(1e-6, +flc.bv || g.Dv);
+            const tso = +flc.tso > 0 ? +flc.tso : deck.ts;
+            const wDeck = 0.150 * (tso / 12) * Math.max(0, +flc.bo || 0) * (flc.share != null && flc.share !== '' ? +flc.share : 0.5);
+            const live = (+flc.forms || 0) + (+flc.screed || 0) + (+flc.rail || 0) + (+flc.walk || 0), Pfm = +flc.fm || 0;
+            const w = combA ? 1.4 * (wDeck + live) : 1.25 * wDeck + 1.5 * live, P1 = (combA ? 1.4 : 1.5) * Pfm;
+            flBr = ((w / 12) * tanA * Lb * Lb / 12 + P1 * tanA * Lb / 8) / Sl;
+          }
+          const fl1 = flWeb + flBr + flUserTop;
+          const flWhat = 'web shear ' + flWeb.toFixed(2) + (flBr ? ' + brackets ' + flBr.toFixed(2) : '') + (flUserTop ? ' + entered ' + flUserTop.toFixed(2) : '') + ' ksi, Lb = ' + (Lb / 12).toFixed(2) + ' ft';
+          if (Math.abs(Mu) > 1e-6) {
+            if (ft < -1e-9) {
+              const fc = -ft, DcV = fb > 0 ? Math.max(0, fc / (fc + fb) * g.d - g.tt) : g.Dv, Dc = Math.min(g.D, DcV / g.cosT);
+              const awc = 2 * Dc * g.tw / (g.bt * g.tt), slender = 2 * Dc / g.tw > lambdaRw(ed, P.F.t, awc);
+              const Fnc = flb(P.F.t, P.F.w, 1, P.RhNC, g.bt, g.tt);
+              const A = amplify(fl1, fc, P, Lb, P.F.t, Dc);
+              C({ what: 'Compression top flanges, local buckling', art: '6.10.3.2.1-2', demand: fc + A.fl / 3, cap: phiF * Fnc, ratio: (fc + A.fl / 3) / (phiF * Fnc), note: 'FLB, Rb = 1.0; no LTB with full-length top lateral bracing (6.11.3.2)' + (fl1 > 0 ? '; fℓ1: ' + flWhat : '') + flNote(A.fl, A.amp) });
+              if (!slender || A.fl > 0) C({ what: 'Compression top flanges, yielding', art: '6.10.3.2.1-1', demand: fc + A.fl, cap: phiF * P.RhNC * P.F.t, ratio: (fc + A.fl) / (phiF * P.RhNC * P.F.t), note: 'fbu + fℓ ≤ RhFyc' + flNote(A.fl, A.amp) });
+              if (slender) {
+                const k = 9 / (Math.max(Dc, 1e-6) / g.D) ** 2, Fcrw = Math.min(0.9 * ES * k / (g.D / g.tw) ** 2, P.RhNC * P.F.t, P.F.w / 0.7);
+                C({ what: 'Web bend-buckling', art: '6.10.3.2.1-3', demand: fc, cap: phiF * Fcrw, ratio: fc / (phiF * Fcrw), calc: { t: 'webBB', D: g.D, tw: g.tw, Dc, k, Rh: P.RhNC, Fyc: P.F.t, Fyw: P.F.w, phi: phiF }, note: 'slender web, Dc = ' + Dc.toFixed(1) + ' in. along the web, k = ' + k.toFixed(1) });
+              }
+              if (A.fl > 0) C({ what: 'Top flange lateral bending limit', art: '6.10.1.6-1', demand: A.fl, cap: 0.6 * P.F.t, ratio: A.fl / (0.6 * P.F.t), note: 'fℓ ≤ 0.6Fyf' + flNote(A.fl, A.amp) });
+            } else if (ft > 1e-9) {
+              C({ what: 'Tension top flanges', art: '6.10.3.2.2', demand: ft + fl1, cap: phiF * P.RhNC * P.F.t, ratio: (ft + fl1) / (phiF * P.RhNC * P.F.t), note: 'fbu + fℓ ≤ RhFyt' + (fl1 > 0 ? '; fℓ: ' + flWhat : '') });
+              if (fl1 > 0) C({ what: 'Top flange lateral bending limit', art: '6.10.1.6-1', demand: fl1, cap: 0.6 * P.F.t, ratio: fl1 / (0.6 * P.F.t), note: 'fℓ ≤ 0.6Fyf' });
+            }
+            if (fb < -1e-9) {
+              const fc = -fb, E_ = P.eff;
+              const lim = E_.compact ? P.RhNC * P.F.b : Math.min(0.9 * ES * 4 / E_.lamF ** 2, P.F.b);
+              C({ what: 'Compression box flange', art: E_.compact ? '6.11.3.2' : '6.11.3.2-1', demand: fc, cap: phiF * lim, ratio: fc / (phiF * lim), note: E_.compact ? 'compact box flange, RhFyc' : '0.9Ek/λf² ≤ Fyc, k = 4.0, λf = ' + E_.lamF.toFixed(1) });
+              const DcV = ft > 0 ? Math.max(0, fc / (fc + ft) * g.d - g.tb) : g.Dv, Dc = Math.min(g.D, DcV / g.cosT);
+              const awc = 2 * Dc * g.tw / (g.bb / 2 * g.tb);
+              if (2 * Dc / g.tw > lambdaRw(ed, P.F.b, awc)) {
+                const k = 9 / (Math.max(Dc, 1e-6) / g.D) ** 2, Fcrw = Math.min(0.9 * ES * k / (g.D / g.tw) ** 2, P.RhNC * P.F.b, P.F.w / 0.7);
+                C({ what: 'Web bend-buckling, box flange in compression', art: '6.11.3.2-2', demand: fc, cap: phiF * Fcrw, ratio: fc / (phiF * Fcrw), calc: { t: 'webBB', D: g.D, tw: g.tw, Dc, k, Rh: P.RhNC, Fyc: P.F.b, Fyw: P.F.w, phi: phiF }, note: 'slender web, Dc = ' + Dc.toFixed(1) + ' in. along the web' });
+              }
+            } else if (fb > 1e-9) C({ what: 'Tension box flange', art: '6.11.3.2-3', demand: fb, cap: phiF * P.RhNC * P.F.b, ratio: fb / (phiF * P.RhNC * P.F.b), note: 'fbu ≤ RhFyfΔ, Δ = 1.0' });
+          }
+          for (let side = 0; side < 2; side++) {
+            if (!combA) break;
+            if ((side === 0 && i === 0) || (side === 1 && i === nn - 1)) continue;
+            const V = perWeb(P, Math.max(Math.abs(1.4 * (p.VDC1one[side] + p.VCL[side])), Math.abs(1.25 * p.VDC1one[side] + 1.5 * p.VCL[side])));
+            const Vcr = sc.C * sc.Vp;
+            push(p, { lim: 'Constructibility', cat: 'construct', sec: id, what: 'Shear, one web, ' + (side ? 'right' : 'left'), art: '6.11.3.3', unit: 'k', demand: V, cap: phiV * Vcr, ratio: V / (phiV * Vcr), note: 'Vui ≤ φvVcr, Vcr = CVp (6.10.3.3), larger of 1.4(DC + CL) and 1.25DC + 1.5CL' });
+          }
+        }
+      }
+    });
+
+    // ---- proportion limits (6.11.2)
+    const proportions = m.sections.filter(s => m.ranges.some(r => r.sec === s.id)).map(s => {
+      const P = props[s.id], g = P.g, comp = !!compBot[s.id], lamB = g.bfi / g.tb, limB = comp ? 90 : 130;
+      const items = [
+        { what: 'D/tw ≤ 150, D along the web', art: '6.11.2.1.2-1', val: g.D / g.tw, lim: 150, ratio: (g.D / g.tw) / 150 },
+        { what: 'Web inclination ≤ 1 : 2.5', art: '6.11.2.1.1', val: g.tanT, lim: 0.4, ratio: g.tanT / 0.4 },
+        { what: 'bf/2tf ≤ 12.0, top flanges', art: '6.11.2.2-1', val: g.bt / (2 * g.tt), lim: 12, ratio: g.bt / (2 * g.tt) / 12 },
+        { what: 'bf ≥ D/6, top flanges', art: '6.11.2.2-2', val: g.bt, lim: g.D / 6, ratio: (g.D / 6) / g.bt },
+        { what: 'tf ≥ 1.1tw, top flanges', art: '6.11.2.2-3', val: g.tt, lim: 1.1 * g.tw, ratio: 1.1 * g.tw / g.tt },
+        { what: 'bfi/tf ≤ ' + limB + ', box flange ' + (comp ? '(compression)' : '(tension only)'), art: '6.11.2.2-4', val: lamB, lim: limB, ratio: lamB / limB },
+        { what: 'tf ≥ 0.5 in., box flange', art: 'C6.11.2.2', val: g.tb, lim: 0.5, ratio: 0.5 / g.tb }
+      ];
+      return { sec: s.id, name: s.name, items, ratio: Math.max(...items.map(t => t.ratio)), boxNote: !comp && lamB > 90 ? 'box flange in tension with bfi/tf = ' + lamB.toFixed(1) + ' > 90: consult fabricators (6.11.2.2)' : '' };
+    });
+
+    // ---- load rating (MBE LRFR), as for I-girders
+    const F = m.factors, phiC = +F.phiC || 1, phiS = +F.phiS || 1;
+    const phiFlex = Math.max(0.85, phiC * phiS), phiShear = Math.max(0.85, phiC);
+    const RT = llc.rate || { inv: +F.gLinv, op: +F.gLop, sInv: +F.gSinv, sOp: +F.gSop };
+    allChecks.forEach(c => {
+      if (c.lim === 'Strength I' && llc.limS && c.cat !== 'ductility') c.lim = llc.limS;
+      if (c.lim === 'Strength I' || c.lim === llc.limS) c.gLL = llc.gS; else if (c.lim === 'Service II') c.gLL = llc.gSv;
+      c.llName = llc.name;
+      if (!c.rating) return;
+      const r = c.rating, cap = r.service ? r.cap : (c.cat === 'shear' ? phiShear : phiFlex) * r.cap;
+      const gDC = r.service ? 1.0 : +F.gDC, gDW = r.service ? 1.0 : +F.gDW, num = cap - (gDC * r.DC + gDW * r.DW);
+      const gi = r.service ? RT.sInv : RT.inv, go = r.service ? RT.sOp : RT.op;
+      c.RFinv = r.L > 1e-9 ? num / (gi * r.L) : Infinity; c.RFop = r.L > 1e-9 ? num / (go * r.L) : Infinity;
+      c.rfNA = rfDisplayNA(c.RFinv, gi * r.L, cap);
+    });
+
+    // ---- warnings
+    const warnings = [];
+    if (!(+m.df.overrideM > 0 && +m.df.overrideV > 0) && DF.warn.length) warnings.push({ kind: 'Distribution factors', text: DF.warn.join('; ') + '.' });
+    if (!RS.ok) warnings.push({ kind: 'Article 6.11.2.3', text: 'Not satisfied: ' + RS.items.filter(q => !q.ok).map(q => q.txt).join('; ') + '. The Table 4.6.2.2.2b-1 distribution factor, compact positive sections, and neglecting St. Venant torsion and cross-section distortion (C6.11.2.3, 6.11.5) all rely on it; positive flexure is checked as noncompact. A refined analysis is needed.' });
+    const notEff = [...new Set(pois.filter(p => p.secs.some(id => props[id].g.bb > p.Le * 12 / 5 + 1e-9)).map(p => p.secs.join('/')))];
+    if (notEff.length) warnings.push({ kind: 'Shear lag, 6.11.1.1', text: 'The box flange is wider than one-fifth of the effective span (between permanent-load contraflexure points) at sections ' + notEff.join(', ') + '. The reduced effective flange width is not applied here; positive flexure there is checked as noncompact.' });
+    if (T.lateral !== 'full') warnings.push({ kind: 'Top lateral bracing', text: (T.lateral === 'partial' ? 'Partial-length' : 'No') + ' top lateral bracing: the global lateral-torsional buckling of the noncomposite tub during deck placement (6.11.3.2) and the transition-point unbraced length are not checked here.' });
+    proportions.filter(q => q.boxNote).forEach(q => warnings.push({ kind: 'Section ' + q.sec, text: q.boxNote + '.' }));
+    const inf = allChecks.filter(c => c.ratio === Infinity).length;
+    if (inf) warnings.push({ kind: 'Instability', text: inf + ' checks have an unbounded ratio: the top-flange stress reaches the elastic buckling stress under amplified lateral bending (6.10.1.6-4).' });
+    const bad = allChecks.filter(c => Number.isNaN(c.ratio) || Number.isNaN(c.demand) || Number.isNaN(c.cap));
+    if (bad.length) throw new Error('Calculation error: ' + bad.length + ' checks produced invalid numbers, first at x = ' + bad[0].x.toFixed(2) + ' ft (' + bad[0].lim + ', ' + bad[0].what + '). Check the section and material inputs.');
+
+    // ---- summaries
+    const summary = {};
+    ['flexure', 'shear', 'fatigue', 'service', 'construct', 'ductility'].forEach(k => { const cs = allChecks.filter(c => c.cat === k && !Number.isNaN(c.ratio)); summary[k] = cs.length ? cs.reduce((a, c) => (c.ratio > a.ratio ? c : a)) : null; });
+    summary.deflection = deflection ? deflection.reduce((a, d) => (d.ratio > a.ratio ? d : a)) : null;
+    summary.proportions = proportions.length ? proportions.reduce((a, q) => (q.ratio > a.ratio ? q : a)) : null;
+    const rmin = (pred, key) => allChecks.filter(c => c.rating && pred(c) && !Number.isNaN(c[key]) && c[key] !== Infinity).reduce((a, c) => (!a || c[key] < a[key] ? c : a), null);
+    const rating = {
+      flexure: rmin(c => c.cat === 'flexure', 'RFinv'), shear: rmin(c => c.cat === 'shear', 'RFinv'),
+      strength: rmin(c => c.lim === (llc.limS || 'Strength I'), 'RFinv'), service: rmin(c => c.lim === 'Service II' && c.rating, 'RFinv'),
+      strengthOp: rmin(c => c.lim === (llc.limS || 'Strength I'), 'RFop'), serviceOp: rmin(c => c.lim === 'Service II' && c.rating, 'RFop')
+    };
+    const secTable = m.sections.map(s => ({ id: s.id, name: s.name, P: props[s.id] }));
+    const panels = segs.map(sg => ({ a: sg.a, b: sg.b, Lb: sg.Lb / 12 }));
+    return { ed, eta, x, supX, pois, checks: allChecks, summary, rating, deflection, proportions, secTable, braces, segs: [], panels, kind: 'tub',
+      tub: { cfg: T, DF, restrictions: RS, zeros, fr }, wSW: ctx.wSW, eSec, adttSL, dfSpan: [], pour: null, flOn, vibration: null, llc, warnings, ms: Date.now() - t0 };
+  }
+
   // LRFD run: the design live load (HL-93 or pedestrian), plus permit trucks under Strength II when asked
   function run(m) {
     const ed0 = String(m.code && m.code.edition);
-    if (ed0 === 'LFD') return runLFD(m);
-    const ed = ed0 === '9' ? 9 : 10;
+    const tub = m.kind === 'tub';
+    if (ed0 === 'LFD' && !tub) return runLFD(m);
+    const ed = tub ? 10 : ed0 === '9' ? 9 : 10; // tub girders: AASHTO LRFD 10th Edition only
     const ctx = prepare(m, ed);
+    const runCase_ = tub ? runCaseTub : runCase;
     const L = liveOpts(m);
     const keyOf = c => [c.i, c.sec, c.lim, c.what, c.stage || ''].join('|');
     const pedLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, gSv: 1.3, ped: L.ped } : null;
     const designLL = pedLL || { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 };
     let base = null;
-    if (L.permit !== 'only') base = runCase(m, ed, ctx, designLL);
+    if (L.permit !== 'only') base = runCase_(m, ed, ctx, designLL);
     // pedestrian bridges are rated for the maintenance vehicle (or the pedestrian load where vehicles are kept off)
     if (base && L.ped) {
       base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
       if (L.ped.veh) {
-        const hr = runCase(m, ed, ctx, { kind: 'H', name: L.ped.veh, gS: 1.75, gSv: 1.3, ped: L.ped });
+        const hr = runCase_(m, ed, ctx, { kind: 'H', name: L.ped.veh, gS: 1.75, gSv: 1.3, ped: L.ped });
         const map = new Map(hr.checks.map(c => [keyOf(c), c]));
         base.checks.forEach(c => { const q = map.get(keyOf(c)); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
         base.rating = hr.rating;
@@ -1992,9 +2562,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const P = L.perm;
       const pl = { kind: 'permit', name: 'Permit', gS: P.gDesign, gSv: 1.0, limS: 'Strength II', vehicles: P.vehicles, lane: P.lane, IM: 0.33, single: P.single,
         rate: { inv: P.gR, op: P.gR, sInv: 1.0, sOp: 1.0 } };
-      const pd = runCase(m, ed, ctx, pl);
+      const pd = runCase_(m, ed, ctx, pl);
       // special permits use one lane loaded (multiple presence removed) for design and rating; the rating IM may be reduced
-      const pr = P.IMrate !== 0.33 ? runCase(m, ed, ctx, Object.assign({}, pl, { IM: P.IMrate })) : pd;
+      const pr = P.IMrate !== 0.33 ? runCase_(m, ed, ctx, Object.assign({}, pl, { IM: P.IMrate })) : pd;
       const rmap = new Map(pr.checks.map(c => [keyOf(c), c]));
       const pc = pd.checks.filter(c => c.lim === 'Strength II' || c.lim === 'Service II');
       pc.forEach(c => { c.permit = true; const q = rmap.get(keyOf(c)); c.RFp = q ? q.RFinv : undefined; c.rfNAp = q ? q.rfNA : false; c.ratingP = q ? q.rating : null; delete c.RFinv; delete c.RFop; });
@@ -2757,7 +3327,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
 
-  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES };
+  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES, tubCfg, tubGeom, tubProps, tubDF, tubRestrictions, boxEffWidth };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LGCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -3106,7 +3676,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     let val = null;
     const gL = c.gLL != null ? c.gLL : 1.75, gLs = fn(gL, 2).replace(/0$/, ''), gV = c.gLL != null ? c.gLL : 1.3, gVs = fn(gV, 2).replace(/0$/, '').replace(/\.0$/, '.0');
     const tbl = c.permit ? 'Table 3.4.1-1, Strength II' : '3.4.1-1';
-    if (!LFD && (k.t === 'posCompact' || k.t === 'negFlange' || k.t === 'shear')) {
+    if (!LFD && (k.t === 'posCompact' || k.t === 'negFlange' || k.t === 'boxFlange' || k.t === 'shear')) {
       const eta = k.eta != null ? k.eta : res.eta;
       if (k.t === 'posCompact') {
         const DC = cp.DC1 + cp.DC2; let [gDC, gDW] = pickG(eta, DC, cp.DW, cp.LL, c.demand - (k.flT || 0), gL);
@@ -3174,6 +3744,27 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         if (k.cap13) { Mn = 1.3 * k.Rh * k.My; lines.push({ lhs: 'M_{n}', expr: '1.3R_{h}M_{y}', sub: '1.3 × ' + fn(k.Rh, 3) + ' × ' + fx(k.My, 0), res: fx(Mn, 0), unit: 'k-ft', ref: '6.10.7.1.2-3' }); }
         lines.push({ lhs: 'φ_{f}M_{n}', sub: fn(k.phi, 2) + ' × ' + fx(Mn, 0), res: fx(k.phi * Mn, 0), unit: 'k-ft', ref: '6.5.4.2' });
         ok = close(k.phi * Mn, c.cap);
+      } else if (k.t === 'boxFlange') {
+        // tub box flange in compression, 6.11.8.2.2
+        lines.push({ lhs: 'λ_{f}', expr: '\\f{b_{fi}}{t_{f}}', res: fn(k.lamF, 2) });
+        lines.push({ lhs: 'λ_{p}', expr: '1.09√(E/F_{yc})', sub: '1.09√(' + ES + '/' + fn(k.Fyc, 0) + ')', res: fn(k.lamR, 2), ref: '6.11.8.2.2' });
+        let Fnc;
+        if (k.compact) {
+          Fnc = k.Rb * k.Rh * k.Fyc;
+          lines.push({ lhs: 'F_{nc}', expr: 'R_{b}R_{h}F_{yc}Δ', sub: fn(k.Rb, 3) + ' × ' + fn(k.Rh, 3) + ' × ' + fn(k.Fyc, 0) + ' × 1.0', res: fx(Fnc, 2), unit: 'ksi', ref: '6.11.8.2.2a' });
+        } else {
+          const r = Math.sqrt(k.Fel / k.Fyc);
+          lines.push({ lhs: 'F_{el}', expr: '(1.74\\f{λ_{p}}{λ_{f}})^{2}F_{yc}', sub: '(1.74 × \\f{' + fn(k.lamR, 2) + '}{' + fn(k.lamF, 2) + '})^{2} × ' + fn(k.Fyc, 0), res: fx(k.Fel, 2), unit: 'ksi', ref: '6.9.4.2.2b' });
+          lines.push({ lhs: 'b_{e}', expr: 'b_{fi}[(1 − 0.22√(F_{el}/F_{yc}))√(F_{el}/F_{yc}) − 0.075]', sub: fn(k.bfi, 3) + '[(1 − 0.22 × ' + fn(r, 3) + ') × ' + fn(r, 3) + ' − 0.075]', res: fn(k.beClear, 2), unit: 'in.', ref: '6.9.4.2.2b' });
+          lines.push({ lhs: 'b_{e,total}', expr: 'b_{e} + corners and extensions', sub: fn(k.beClear, 2) + ' + ' + fn(k.be - k.beClear, 3), res: fn(k.be, 2), unit: 'in.' });
+          lines.push({ lhs: 'M_{yc}', sub: 'D6.2.3, steel + deck steel, M_{D1} = ' + fx(k.MD1, 0) + ', M_{D2} = ' + fx(k.MD2, 0) + ' k-ft', res: fx(k.Myc, 0), unit: 'k-ft', ref: 'D6.2.3' });
+          lines.push({ lhs: 'M_{yce}', sub: 'same, with the effective box flange width', res: fx(k.Myce, 0), unit: 'k-ft', ref: '6.11.8.2.2b' });
+          lines.push({ lhs: 'R_{b}', sub: 'D_{ce} = ' + fn(k.Dce, 2) + ' in. along the web, b_{fc} = b_{e,total}/2', res: fn(k.Rb, 3), ref: '6.10.1.10.2' });
+          Fnc = k.Rb * k.Rh * k.Fyc * k.Myce / k.Myc;
+          lines.push({ lhs: 'F_{nc}', expr: 'R_{b}R_{h}F_{yc}Δ\\f{M_{yce}}{M_{yc}}', sub: fn(k.Rb, 3) + ' × ' + fn(k.Rh, 3) + ' × ' + fn(k.Fyc, 0) + ' × 1.0 × \\f{' + fx(k.Myce, 0) + '}{' + fx(k.Myc, 0) + '}', res: fx(Fnc, 2), unit: 'ksi', ref: '6.11.8.2.2b' });
+        }
+        lines.push({ lhs: 'φ_{f}F_{nc}', sub: fn(k.phi, 2) + ' × ' + fx(Fnc, 2), res: fx(k.phi * Fnc, 2), unit: 'ksi', ref: '6.11.8.1.1-1' });
+        ok = close(k.phi * Fnc, c.cap);
       } else if (k.t === 'negFlange') {
         const F = k.flb, Rb = F.Rb, Rh = F.Rh, Fyc = F.Fyc;
         lines.push({ note: 'Flange local buckling (6.10.8.2.2)' });
@@ -3340,8 +3931,38 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       d.text(x0 + 10, y0 + 110, 'Elevation (not to scale vertically). Shaded bands: sections; ticks below the girder: cross-frames; markers: governing locations.', { size: 6.8, color: F.pal.mute });
     });
   }
+  // one tub drawn to scale: inclined webs, two top flanges, box flange and the deck over the tub
+  function tubSection(F, model, res, t, title) {
+    const g = t.P.g, dk = model.deck || {}, ts = +dk.ts || 0, hW = t.P.hWeb || 0, beff = +dk.beff || 0;
+    const T = model.tub || {}, wTop = +T.w > 0 ? +T.w : g.bb - 2 * g.ext - g.tw + 2 * g.Dv / g.S; // top flange spacing, c/c
+    const Hin = g.yw1 + hW + ts, Win = Math.max(wTop + g.bt, g.bb, Math.min(beff, 1.6 * (wTop + g.bt)));
+    const sc = Math.min(171 / Hin, 250 / Win), boxH = Math.max(120, Hin * sc + 44);
+    F.box(boxH, (d, x0, y0, w) => {
+      const cx = x0 + 150, base = y0 + boxH - 22, Y = v => base - v * sc, X = v => cx + v * sc;
+      const steel = [0.55, 0.60, 0.66], conc = [0.86, 0.87, 0.86], ink = [0.25, 0.27, 0.3];
+      if (ts) { const bw = Math.min(beff, Win); d.rect(X(-bw / 2), Y(g.yw1 + hW + ts), bw * sc, ts * sc, { fill: conc, stroke: [0.45, 0.47, 0.5], w: 0.4 }); }
+      const R = (cxIn, b, y0_, h) => d.rect(X(cxIn - b / 2), Y(y0_ + h), b * sc, Math.max(h * sc, 0.6), { fill: steel, stroke: ink, w: 0.4 });
+      R(0, g.bb, 0, g.tb);
+      const xb = g.bb / 2 - g.ext - g.tw / 2, xt = wTop / 2, twh = g.tw / g.cosT / 2;
+      [-1, 1].forEach(sg => {
+        d.poly([[X(sg * (xb - twh)), Y(g.tb)], [X(sg * (xb + twh)), Y(g.tb)], [X(sg * (xt + twh)), Y(g.yw1)], [X(sg * (xt - twh)), Y(g.yw1)]], { fill: steel, stroke: ink, w: 0.4, close: true });
+        R(sg * xt, g.bt, g.yw1, g.tt);
+      });
+      const labs = []; const lab = (s, xx, yy) => labs.push([s, xx, yy]);
+      const xr = Math.max(cx + 132, X(Math.min(beff || 0, Win) / 2) + 14, X(xt + g.bt / 2) + 14);
+      lab('Top flanges 2 × ' + fn(g.bt, 3) + ' × ' + fn(g.tt, 3) + ' in.', xr, Y(g.yw1 + g.tt / 2) + 2);
+      lab('Webs 2 × ' + fn(g.D, 3) + ' × ' + fn(g.tw, 4) + ' in., slope 1 : ' + fn(g.S, 2), xr, Y(g.yw0 + g.Dv / 2) + 2);
+      lab('Box flange ' + fn(g.bb, 3) + ' × ' + fn(g.tb, 3) + ' in.', xr, Y(g.tb / 2) + 2);
+      if (ts) lab('Deck ' + fn(ts, 2) + ' in., soffit ' + fn(hW, 2) + ' in. above the webs, b_eff ' + fn(beff, 1) + ' in.' + (beff > Win + 1e-6 ? ' (drawn shortened)' : '') + ', n = ' + (dk.n || '—'), xr, Y(g.yw1 + hW + ts / 2) + 2);
+      lab('Fy: top ' + t.P.F.t + ', web ' + t.P.F.w + ', bottom ' + t.P.F.b + ' ksi', xr, Y(g.d * 0.25));
+      labs.sort((p, q) => p[2] - q[2]); for (let k = 1; k < labs.length; k++) if (labs[k][2] < labs[k - 1][2] + 9) labs[k][2] = labs[k - 1][2] + 9;
+      labs.forEach(([s, xx, yy]) => d.text(xx, yy, s, { size: 7, color: [0.2, 0.22, 0.25] }));
+      d.text(x0, y0 + 10, title + ': section ' + t.id + (t.name ? ' (' + t.name + ')' : '') + ', one tub, drawn to scale', { font: 'B', size: 8, color: F.pal.ink });
+    });
+  }
   function crossSection(F, model, res, secId, title) {
     const t = res.secTable.find(q => q.id === secId) || res.secTable[0]; if (!t) return;
+    if (res.kind === 'tub') return tubSection(F, model, res, t, title);
     const g = t.P.g, dk = model.deck || {}, comp = isComp(model, res);
     const ts = comp ? +dk.ts || 0 : 0, hn = comp ? (+(model.sections.find(s => s.id === t.id) || {}).haunch || +dk.haunch || 0) : 0;
     const beff = comp ? +dk.beff || 0 : 0;
@@ -3386,7 +4007,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.doc.text(F.m.l, 50, 'STEEL LINE GIRDER CHECK', { font: 'B', size: 9, color: F.pal.accent });
     F.y = 58; F.doc.text(F.m.l, F.y + 18, titleTxt, { font: 'B', size: 17, color: F.pal.ink }); F.y += 30;
     F.doc.text(F.m.l, F.y + 9, edName, { size: 9, color: F.pal.mute }); F.y += 18;
-    const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Girder', meta.girder || ((model.df && model.df.girder === 'exterior' ? 'Exterior' : 'Interior') + ' girder, ' + model.spans.length + ' span' + (model.spans.length > 1 ? 's' : ''))]];
+    const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Girder', meta.girder || ((res.kind === 'tub' ? 'Tub girder' : (model.df && model.df.girder === 'exterior' ? 'Exterior' : 'Interior') + ' girder') + ', ' + model.spans.length + ' span' + (model.spans.length > 1 ? 's' : ''))]];
     F.box(4 * 20 + 46, (d, x0, y0, w) => {
       const rowH = 20, lw = 120;
       tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); d.text(x0 + lw + 8, y + 13.5, String(r[1]), { font: 'B', size: 9.5, color: F.pal.ink }); });
@@ -3443,7 +4064,8 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const dk = model.deck || {}, df = model.df || {}, ld = model.loads || {};
     const desc = [
       ['Spans', model.spans.map(s => fx(+s, 2)).join(' – ') + ' ft (' + model.spans.length + ' span' + (model.spans.length > 1 ? 's, continuous' : '') + ')'],
-      ['Girder', (df.girder === 'exterior' ? 'exterior' : 'interior') + ', ' + (df.Ng || '—') + ' girders at ' + (df.S || '—') + ' ft'],
+      res.kind === 'tub' ? ['Girder', 'straight tub, one of ' + (df.Ng || '—') + ' tubs, web slope 1 : ' + fn(res.tub.cfg.slope, 2) + ', top flanges ' + (res.tub.cfg.w || '—') + ' in. apart, ' + (res.tub.cfg.a || '—') + ' in. to the next tub, ' + res.tub.cfg.lateral + '-length top lateral bracing; DF ' + fn(res.tub.DF.M, 3) + ' lanes (Table 4.6.2.2.2b-1)']
+        : ['Girder', (df.girder === 'exterior' ? 'exterior' : 'interior') + ', ' + (df.Ng || '—') + ' girders at ' + (df.S || '—') + ' ft'],
       ['Roadway, skew', (df.roadway || '—') + ' ft, ' + (df.skew || 0) + '°'],
       ['Steel', 'Fy = ' + (model.Fy || 50) + ' ksi unless noted per section'],
       ['Deck', isComp(model, res) ? (dk.ts + ' in. structural, haunch ' + (dk.haunch || 0) + ' in., b_eff ' + (dk.beff || '—') + ' in., f′c ' + (dk.fc || '—') + ' ksi, n = ' + (dk.n || '—')) : 'noncomposite'],
@@ -3457,7 +4079,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         if (L.perm) out.push('Permit (Strength II, γLL ' + fn(L.perm.gDesign, 2) + ', IM 33%): ' + L.perm.vehicles.map(v => v.name + ' ' + v.w.join('-') + ' k at ' + v.s.join('-') + ' ft').join('; ') + (L.perm.lane ? '; 0.2 k/ft lane for negative moment and spans over 200 ft' : ''));
         return out.join('. '); })()],
       ['Fatigue traffic', res.live && res.live.ped ? 'not checked: pedestrian bridge (Guide Spec 3.5)' : res.live && res.live.permit === 'only' ? 'not checked: permit only' : (model.fatigue && model.fatigue.adtt ? 'ADTT ' + model.fatigue.adtt + (LFD ? ', case ' + res.fatigueCase : ', (ADTT)SL ' + fx(res.adttSL, 0)) : 'not checked')],
-      ['Cross-frames', (res.braces || []).length + ' locations'],
+      [res.kind === 'tub' ? 'Top lateral panel points' : 'Cross-frames', (res.braces || []).length + ' locations'],
       ['Sections', res.secTable.map(t => t.id).join(', ')],
       ['Rating factors', LFD ? 'A1 = ' + R.factors.A1 + ', A2 = ' + R.factors.A2inv + ' / ' + R.factors.A2op : 'φc = ' + ((model.factors || {}).phiC || 1) + ', φs = ' + ((model.factors || {}).phiS || 1) + ', γDC = ' + ((model.factors || {}).gDC) + ', γDW = ' + ((model.factors || {}).gDW)],
       ['η (load modifier)', LFD ? '—' : fn(res.eta, 3)],
@@ -3486,25 +4108,37 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.newPage();
     F.h1('Input');
     F.h3('Sections');
-    F.table([{ h: 'ID', w: 0.6 }, { h: 'Name', w: 2 }, { h: 'Type', w: 0.9 }, { h: 'Top flange', w: 1.4 }, { h: 'Web', w: 1.4 }, { h: 'Bottom flange', w: 1.4 }, { h: 'Cover plates', w: 1.6 }, { h: 'Fy t / w / b', w: 1.2 }, { h: 'do, in.', w: 0.7, a: 'r' }, { h: 'Haunch', w: 0.7, a: 'r' }],
+    if (res.kind === 'tub') F.table([{ h: 'ID', w: 0.6 }, { h: 'Name', w: 2.2 }, { h: 'Top flanges, each', w: 1.5 }, { h: 'Webs, each, D along slope', w: 1.8 }, { h: 'Box flange', w: 1.5 }, { h: 'Fy t / w / b', w: 1.2 }, { h: 'do, in.', w: 0.7, a: 'r' }],
+      (model.sections || []).map(s => { const t = res.secTable.find(q => q.id === s.id); const g = t ? t.P.g : s; const Fy = t ? t.P.F : {}; return [s.id, s.name || '', fn(g.bt, 3) + ' × ' + fn(g.tt, 3), fn(g.D, 3) + ' × ' + fn(g.tw, 4), fn(g.bb, 3) + ' × ' + fn(g.tb, 3), (Fy.t || '') + ' / ' + (Fy.w || '') + ' / ' + (Fy.b || ''), s.do ? fn(+s.do, 0) : '—']; }));
+    else F.table([{ h: 'ID', w: 0.6 }, { h: 'Name', w: 2 }, { h: 'Type', w: 0.9 }, { h: 'Top flange', w: 1.4 }, { h: 'Web', w: 1.4 }, { h: 'Bottom flange', w: 1.4 }, { h: 'Cover plates', w: 1.6 }, { h: 'Fy t / w / b', w: 1.2 }, { h: 'do, in.', w: 0.7, a: 'r' }, { h: 'Haunch', w: 0.7, a: 'r' }],
       (model.sections || []).map(s => { const t = res.secTable.find(q => q.id === s.id); const g = t ? t.P.g : s; const Fy = t ? t.P.F : {}; return [s.id, s.name || '', s.type || 'plate', fn(g.bt, 3) + ' × ' + fn(g.tt, 3), fn(g.D, 3) + ' × ' + fn(g.tw, 4), fn(g.bb, 3) + ' × ' + fn(g.tb, 3), (g.cbT > 0 ? 'bot ' + fn(g.cbB, 2) + '×' + fn(g.cbT, 3) : '') + (g.ctT > 0 ? ' top ' + fn(g.ctB, 2) + '×' + fn(g.ctT, 3) : '') || '—', (Fy.t || '') + ' / ' + (Fy.w || '') + ' / ' + (Fy.b || ''), s.do ? fn(+s.do, 0) : '—', s.haunch != null ? fn(+s.haunch, 2) : '—']; }));
     F.h3('Section ranges');
     F.table([{ h: 'From, ft', w: 1, a: 'r' }, { h: 'To, ft', w: 1, a: 'r' }, { h: 'Section', w: 1 }], (model.ranges || []).map(r => [fn(+r.from, 2), fn(+r.to, 2), r.sec]), { size: 7.4 });
     if ((model.stiffeners || []).length) { F.h3('Transverse stiffener spacing'); F.table([{ h: 'From, ft', w: 1, a: 'r' }, { h: 'To, ft', w: 1, a: 'r' }, { h: 'do, in.', w: 1, a: 'r' }], model.stiffeners.map(r => [fn(+r.from, 2), fn(+r.to, 2), fn(+r.do, 1)]), { size: 7.4 }); }
-    F.h3('Cross-frame locations, ft');
+    F.h3(res.kind === 'tub' ? 'Top lateral panel points and internal cross-frames, ft' : 'Cross-frame locations, ft');
     F.para((res.braces || []).map(b => fn(b, 2)).join(', '), { size: 8 });
     F.h3('Other input');
     const flat = [];
     const walk = (o, pre) => Object.keys(o || {}).forEach(k => { const v = o[k]; if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, pre + k + '.'); else if (!Array.isArray(v)) flat.push([pre + k, String(v)]); });
-    ['deck', 'loads', 'df', 'code', 'fatigue', 'construction', 'deflection', 'flb', 'factors', 'options', 'lfd'].forEach(k => { if (model[k]) walk(model[k], k + '.'); });
+    (res.kind === 'tub' ? ['tub', 'deck', 'loads', 'df', 'code', 'fatigue', 'construction', 'deflection', 'flb', 'factors', 'options'] : ['deck', 'loads', 'df', 'code', 'fatigue', 'construction', 'deflection', 'flb', 'factors', 'options', 'lfd']).forEach(k => { if (model[k]) walk(model[k], k + '.'); });
     flat.push(['Fy', String(model.Fy)]);
     F.kv(flat, { cols: 3, size: 7.4, kw: 88 });
 
     F.h1('Section properties');
+    if (res.kind === 'tub') {
+      F.para('One tub. d is the vertical steel depth; D and Dc are along the web. be is the effective box flange width in compression (6.9.4.2.2b with Fcr = Fyc), including the corners and extensions; s+r, be is the steel and deck steel section with that width.', { size: 8, color: F.pal.mute });
+      F.table([{ h: 'Sec', w: 0.5 }, { h: 'd, in.', w: 0.8, a: 'r' }, { h: 'A, in.²', w: 0.8, a: 'r' }, { h: 'I steel', w: 1, a: 'r' }, { h: 'I 3n', w: 1, a: 'r' }, { h: 'I n', w: 1, a: 'r' }, { h: 'I s+r', w: 1, a: 'r' }, { h: 'yb steel', w: 0.8, a: 'r' }, { h: 'yb n', w: 0.8, a: 'r' }, { h: 'Mp+ k-ft', w: 1, a: 'r' }, { h: 'Dp, in.', w: 0.8, a: 'r' }, { h: 'bfi/tf', w: 0.8, a: 'r' }, { h: 'be, in.', w: 0.8, a: 'r' }, { h: 'Compact +', w: 0.9 }],
+        res.secTable.map(t => { const P = t.P; return [t.id, fn(P.g.d, 2), fn(P.s.A, 2), fx(P.s.I, 0), fx(P.s3n.I, 0), fx(P.sn.I, 0), fx(P.sr.I, 0), fn(P.s.yb, 2), fn(P.sn.yb, 2), fx(P.pl.Mp, 0), fn(P.pl.Dp, 2), fn(P.eff.lamF, 1), P.eff.compact ? 'full' : fn(P.eff.be, 2), P.compactBase ? 'yes' : 'no']; }), { size: 7 });
+      F.table([{ h: 'Sec', w: 0.5 }, { h: 'S bot steel', w: 1, a: 'r' }, { h: 'S top steel', w: 1, a: 'r' }, { h: 'S bot 3n', w: 1, a: 'r' }, { h: 'S top 3n', w: 1, a: 'r' }, { h: 'S bot n', w: 1, a: 'r' }, { h: 'S top n', w: 1, a: 'r' }, { h: 'S bot s+r', w: 1, a: 'r' }, { h: 'S bot s+r, be', w: 1, a: 'r' }, { h: 'Rh +/−', w: 1, a: 'r' }, { h: 'rt top', w: 0.7, a: 'r' }],
+        res.secTable.map(t => { const P = t.P; return [t.id, fx(P.s.Sbot, 0), fx(P.s.Stop, 0), fx(P.s3n.Sbot, 0), fx(P.s3n.Stop, 0), fx(P.sn.Sbot, 0), fx(P.sn.Stop, 0), fx(P.sr.Sbot, 0), fx(P.srE.Sbot, 0), fn(P.RhPos, 3) + ' / ' + fn(P.RhNeg, 3), fn(P.rtTopNC, 2)]; }), { size: 7 });
+      F.h3('Distribution factor and 6.11.2.3 conditions');
+      F.kv([['DF, moment and shear', fn(res.tub.DF.M, 3) + ' lanes per tub, NL = ' + res.tub.DF.NL + ', Nb = ' + res.tub.DF.Nb], ['DF, fatigue', fn(res.tub.DF.MF, 3) + ' (one lane, not divided by 1.2)']].concat(res.tub.restrictions.items.map(q => [q.ok ? 'Met' : 'Not met', q.txt])), { cols: 1, size: 7.6, kw: 120 });
+    } else {
     F.table([{ h: 'Sec', w: 0.5 }, { h: 'd, in.', w: 0.8, a: 'r' }, { h: 'A, in.²', w: 0.8, a: 'r' }, { h: 'I steel', w: 1, a: 'r' }, { h: 'I 3n', w: 1, a: 'r' }, { h: 'I n', w: 1, a: 'r' }, { h: 'I s+r', w: 1, a: 'r' }, { h: 'yb steel', w: 0.8, a: 'r' }, { h: 'yb n', w: 0.8, a: 'r' }, { h: 'Mp+ k-ft', w: 1, a: 'r' }, { h: 'Dp, in.', w: 0.8, a: 'r' }, { h: 'Mp− k-ft', w: 1, a: 'r' }, { h: 'Dc neg', w: 0.8, a: 'r' }, { h: 'Compact +', w: 0.9 }],
       res.secTable.map(t => { const P = t.P; return [t.id, fn(P.g.d, 2), fn(P.s.A, 2), fx(P.s.I, 0), fx(P.s3n.I, 0), fx(P.sn.I, 0), fx(P.sr.I, 0), fn(P.s.yb, 2), fn(P.sn.yb, 2), fx(P.pl.Mp, 0), fn(P.pl.Dp, 2), fx(P.pn.Mp, 0), fn(P.DcNeg, 2), LFD ? (t.LFD && t.LFD.compactPos ? 'yes' : 'no') : (P.compact ? 'yes' : 'no')]; }), { size: 7 });
     F.table([{ h: 'Sec', w: 0.5 }, { h: 'S bot steel', w: 1, a: 'r' }, { h: 'S top steel', w: 1, a: 'r' }, { h: 'S bot 3n', w: 1, a: 'r' }, { h: 'S top 3n', w: 1, a: 'r' }, { h: 'S bot n', w: 1, a: 'r' }, { h: 'S top n', w: 1, a: 'r' }, { h: 'S bot s+r', w: 1, a: 'r' }, { h: 'S top s+r', w: 1, a: 'r' }, { h: 'Rh +/−', w: 1, a: 'r' }, { h: 'Rb', w: 0.7, a: 'r' }],
       res.secTable.map(t => { const P = t.P; return [t.id, fx(P.s.Sbot, 0), fx(P.s.Stop, 0), fx(P.s3n.Sbot, 0), fx(P.s3n.Stop, 0), fx(P.sn.Sbot, 0), fx(P.sn.Stop, 0), fx(P.sr.Sbot, 0), fx(P.sr.Stop, 0), fn(P.RhPos, 3) + ' / ' + fn(P.RhNeg, 3), fn(P.Rb, 3)]; }), { size: 7 });
+    }
     if (res.proportions && res.proportions.length) {
       F.h3('Proportion limits');
       const items = res.proportions[0].items;
@@ -3995,6 +4629,34 @@ const EXAMPLES={
    permits:{type:'escorted',adtt:1000,crawl:false,lane:true,gDesign:1.35,im:20,
     vehicles:[{name:'MBE A1 permit, 220 k',w:'10, 18, 18, 23, 23, 23, 21, 21, 21, 21, 21',s:'9, 4, 4, 4, 4, 10, 4, 4, 4, 4'}]}};
   return m;},
+ // NSBA Steel Bridge Design Handbook Design Example 5 (10th Ed.): three-span continuous straight tub girder, 187.5-275-187.5 ft;
+ // DC1 is the example's total noncomposite load per tub (steel, deck, haunch, forms), so self weight is off
+ tub5:()=>{
+  const half=[0,16.0625,32.125,48.1875,64.25,80.3125,96.375,112.4375,128.5,131.5,145.5,159.5,173.5,187.5,205.25,223,240.75,258.5,261.5,277.375,293.25,309.125,325];
+  const locs=[...new Set([...half,...half.map(v=>650-v)])].sort((a,b)=>a-b);
+  const bnd=[[0,75,'A'],[75,130,'B'],[130,153.5,'C'],[153.5,165.5,'D'],[165.5,204.5,'E'],[204.5,212.5,'D'],[212.5,260,'C'],[260,270,'B'],[270,325,'A']];
+  const rg=[]; [...bnd,...bnd.slice().reverse().map(([a,b,id])=>[650-b,650-a,id])].forEach(([a,b,id])=>{ const l=rg[rg.length-1]; if(l&&l.sec===id&&Math.abs(l.to-a)<1e-9) l.to=b; else rg.push({from:a,to:b,sec:id}); });
+  const m={...structuredClone(baseCommon),name:'NSBA Design Example 5, 3-span tub girder',kind:'tub',spans:[187.5,275,187.5],
+   tub:{slope:4,ext:1.5,w:138,a:144,overhang:4,lateral:'full',shearLat:true},
+   sections:[
+    {id:'A',name:'Positive, 7/8 bottom',type:'tub',bt:18,tt:1,D:87,tw:0.625,bb:99.375,tb:0.875,do:0},
+    {id:'B',name:'1 1/8 bottom',type:'tub',bt:18,tt:1,D:87,tw:0.625,bb:99.375,tb:1.125,do:0},
+    {id:'C',name:'1 5/8 top, 1 1/2 bottom',type:'tub',bt:30,tt:1.625,D:87,tw:0.625,bb:99.375,tb:1.5,do:0},
+    {id:'D',name:'1 5/8 top, 2 1/4 bottom',type:'tub',bt:30,tt:1.625,D:87,tw:0.625,bb:99.375,tb:2.25,do:0},
+    {id:'E',name:'Pier, 2 3/4 top, 2 1/4 bottom',type:'tub',bt:30,tt:2.75,D:87,tw:0.625,bb:99.375,tb:2.25,do:0}],
+   ranges:rg,
+   // intermediate stiffeners from Figure 3; the 3 ft panels either side of each field splice are bounded by cross-frame connection plates
+   stiffeners:[{from:0,to:10.875,do:130.5},{from:128.5,to:131.5,do:36},{from:131.5,to:187.5,do:168},{from:187.5,to:258.5,do:213},{from:258.5,to:261.5,do:36},
+    {from:388.5,to:391.5,do:36},{from:391.5,to:462.5,do:213},{from:462.5,to:518.5,do:168},{from:518.5,to:521.5,do:36},{from:639.125,to:650,do:130.5}]};
+  m.deck={ts:9,haunch:3.5,beff:258,btrib:null,n:8,fc:4,Ar:24.73,yr:4.46,fyr:60};
+  m.loads=Object.assign(m.loads,{dc1:3.954,misc:0,steelAdd:0,selfWeight:false,deckAuto:false,haunchAuto:false,dc2:0.52,dw:0.50});
+  m.bracing={locs:locs.join(' '),Lb:0};
+  Object.assign(m.df,{Ng:2,roadway:40,skew:0,girder:'interior'});
+  Object.assign(m.flb,{on:true,bracket:true,bo:4,tso:11.6,share:0.5,bh:69.25,bv:84.4});
+  Object.assign(m.fatigue,{adtt:2000,lanes:3});
+  m.construction={cl:0.215}; m.deflection={on:true,NL:3,Ng:2,ratio:800};
+  m.options=Object.assign(m.options,{serviceUncracked:true,appendixA6:false});
+  return m;},
  rb2:()=>{const m={...structuredClone(baseCommon),name:'2-span rolled beam',spans:[70,70],
   sections:[{id:'R1',name:'W36x150',type:'rolled',shape:'W36x150',...W_SHAPES['W36x150'],do:0}],
   ranges:[{from:0,to:140,sec:'R1'}],stiffeners:[]};
@@ -4018,12 +4680,24 @@ function migrate(m){
   if(!Array.isArray(m.live.permits.vehicles)) m.live.permits.vehicles=[];
   if(!Array.isArray(m.stiffeners)) m.stiffeners=[];
   if(!Array.isArray(m.pour.pours)) m.pour.pours=[];
+  if(m.kind==='tub'){
+    // tub girders: LRFD 10th Edition only, no deck placement sequence, no pedestrian live load
+    m.tub=Object.assign({slope:4,ext:1.5,w:0,a:0,overhang:0,lateral:'full',shearLat:true},m.tub||{});
+    m.code.edition='10'; m.options.appendixA6=false; m.pour.on=false;
+    if(m.live.design==='ped') m.live.design='hl93';
+    m.sections.forEach(s=>{ s.type='tub'; });
+  } else delete m.kind;
   return m;
 }
-let model=null, impNotes=null;
-try{const s=localStorage.getItem('lgc-model-v1'); if(s) model=JSON.parse(s);}catch(e){}
-const defaultModel=()=>withDeckWeight(migrate(window.LG_EXAMPLES?EXAMPLES.b7u2():EXAMPLES.pg3()));
-model=model?migrate(model):defaultModel();
+// I-girder and tub inputs are kept separately in the browser; the girder-type switch moves between them
+const STORE={i:'lgc-model-v1',tub:'lgc-tub-v1'}, KIND_KEY='lgc-kind';
+const kindOf=m=>m&&m.kind==='tub'?'tub':'i';
+let model=null, impNotes=null, startKind='i';
+try{ if(localStorage.getItem(KIND_KEY)==='tub') startKind='tub'; }catch(e){}
+function storedModel(k){ try{ const s=localStorage.getItem(STORE[k]); if(s){ const m=JSON.parse(s); if(kindOf(m)===k) return m; } }catch(e){} return null; }
+const defaultModel=k=>(k||kindOf(model))==='tub'?migrate(EXAMPLES.tub5()):withDeckWeight(migrate(window.LG_EXAMPLES?EXAMPLES.b7u2():EXAMPLES.pg3()));
+model=storedModel(startKind); model=model?migrate(model):defaultModel(startKind);
+function saveModel(){ try{ localStorage.setItem(STORE[kindOf(model)],JSON.stringify(model)); localStorage.setItem(KIND_KEY,kindOf(model)); }catch(e){} }
 let res=null, resOther=null, selI=null;
 const $=id=>document.getElementById(id);
 const fmt=(v,d=1)=>v===Infinity?'∞':v===-Infinity?'−∞':(v==null||!isFinite(v))?'—':(Math.abs(v)<5e-13?0:v).toLocaleString('en-US',{minimumFractionDigits:d,maximumFractionDigits:d});
@@ -4053,7 +4727,7 @@ const CATS_LFD=[
  {k:'deflection',lbl:'Live-load deflection',sub:'10.6'},
  {k:'ductility',lbl:'Ductility',sub:'Dp/D′ ≤ 5'},
  {k:'proportions',lbl:'Proportion limits',sub:'10.48, 10.49'}];
-const cats=()=>resLFD()?CATS_LFD:(res&&res.vibration?CATS.concat([{k:'vibration',lbl:'Vibration',sub:'Guide Spec 6'}]):CATS);
+const cats=()=>resLFD()?CATS_LFD:res&&res.kind==='tub'?CATS.map(c=>c.k==='proportions'?Object.assign({},c,{sub:'6.11.2'}):c):(res&&res.vibration?CATS.concat([{k:'vibration',lbl:'Vibration',sub:'Guide Spec 6'}]):CATS);
 const CATS=[
  {k:'flexure',lbl:'Flexure',sub:'Strength I',color:'var(--c-flex)'},
  {k:'shear',lbl:'Shear',sub:'Strength I',color:'var(--c-shear)'},
@@ -4106,7 +4780,7 @@ function liveGroup(){
   const ph=info.ped||{};
   return `<details class="grp" open><summary>Live load</summary><div class="gbody">
     <div class="fields one">
-      ${sel('live.design','Design live load',[['hl93','HL-93 vehicular'],['ped','Pedestrian bridge (Guide Spec 2009/2015)']])}
+      ${sel('live.design','Design live load',model.kind==='tub'?[['hl93','HL-93 vehicular']]:[['hl93','HL-93 vehicular'],['ped','Pedestrian bridge (Guide Spec 2009/2015)']])}
       ${sel('live.permit','Permit trucks',[['none','None'],['include','Include with the design live load'],['only','Permit only']])}
     </div>
     ${ped?`<div class="fields">
@@ -4166,6 +4840,11 @@ function renderRail(){
     const row=(lab,a,b,c)=>`<tr><td class="hint">${lab}</td><td>${a}</td><td>${b}</td><td>${c}</td></tr>`;
     const one=(lab,k,what)=>`<tr><td class="hint" colspan="2">${lab}</td><td colspan="2">${num(k,what)}</td></tr>`;
     const cover=row('Top cover plate',num('cptB','top cover plate width'),num('cptT','top cover plate thickness'),'')+row('Bottom cover plate',num('cpbB','bottom cover plate width'),num('cpbT','bottom cover plate thickness'),'');
+    if(s.type==='tub') return head.replace(/<select[^]*?<\/select>/,'')+`<tr><th></th><th>b or D, in</th><th>t, in</th><th>Fy, ksi</th></tr>`+
+      row('Top flange, each',num('bt','top flange width'),num('tt','top flange thickness'),num('Fyt','top flange Fy'))+
+      row('Web, each, D along slope',num('D','web depth D along the slope'),num('tw','web thickness'),num('Fyw','web Fy'))+
+      row('Box flange, full width',num('bb','box flange width'),num('tb','box flange thickness'),num('Fyb','box flange Fy'))+
+      one('Stiffener spacing do, in (0 = none)','do','stiffener spacing');
     const tail=one('Stiffener spacing do, in (0 = none)','do','stiffener spacing')+one('Haunch above top flange, in (blank = deck)','haunch','haunch')+cover;
     if(s.type==='rolled') return head+`<tr><td colspan="4"><select data-sec="${i}" data-k="shape" aria-label="${esc(s.id)} shape">${s.shape?'':'<option value="" selected>Custom shape (dimensions below)</option>'}${shapeOpts(s.shape)}${s.shape&&!W_SHAPES[s.shape]?`<option selected>${esc(s.shape)}</option>`:''}</select></td></tr>
       <tr><th></th><th>b or d, in</th><th>t, in</th><th>Fy, ksi</th></tr>`+
@@ -4184,10 +4863,17 @@ function renderRail(){
     <td><select data-rng="${i}" data-k="sec" aria-label="Section">${secOpts(r.sec)}</select></td>
     <td><button class="xbtn" data-delrng="${i}" aria-label="Delete range">×</button></td></tr>`).join('');
   const spanRows=model.spans.map((L,i)=>`<label class="f">Span ${i+1} <span class="u">ft</span><div style="display:flex;gap:4px"><input class="n" type="text" inputmode="decimal" autocomplete="off" spellcheck="false" data-span="${i}" value="${L}" id="span-${i}">${model.spans.length>1?`<button class="xbtn" data-delspan="${i}" aria-label="Delete span">×</button>`:''}</div></label>`).join('');
-  const fat=model.fatigue, LFD=isLFD();
+  const fat=model.fatigue, LFD=isLFD(), TUB=model.kind==='tub';
   const wasOpen=[...$('rail').querySelectorAll('details.grp')].map(d=>[d.querySelector('summary').textContent,d.open]);
   $('rail').innerHTML=`
-  <details class="grp" open><summary>Design code</summary><div class="gbody">
+  ${TUB?`<details class="grp" open><summary>Design code</summary><div class="gbody">
+    <div class="fields">
+      <label class="f">Specification<select disabled aria-label="Specification"><option>AASHTO LRFD 10th Edition, 2024</option></select></label>
+      ${field('code.eta','Load modifier η = ηD ηR ηI','')}
+    </div>
+    ${check('options.serviceUncracked','Service II: deck effective in negative flexure where its tension ≤ 2fr (6.10.4.2.1)')}
+    <p class="hint">Straight tub girders to Article 6.11, LRFD 10th Edition only. η applies to the Strength I design checks; load ratings use MBE factors without η.</p>
+  </div></details>`:`<details class="grp" open><summary>Design code</summary><div class="gbody">
     <div class="fields">
       ${sel('code.edition','Specification',[['10','AASHTO LRFD 10th Edition, 2024'],['9','AASHTO LRFD 9th Edition, 2020'],['LFD','Standard Specifications 17th Ed., 2002 (LFD / LFR)']])}
       ${LFD?sel('lfd.vehicle','Design and rating vehicle',[['HS20','HS20-44 (36 tons)'],['HS15','HS15-44 (27 tons)'],['HS25','HS25 (45 tons)']]):field('code.eta','Load modifier η = ηD ηR ηI','')}
@@ -4202,29 +4888,36 @@ function renderRail(){
     ${check('options.limit13My','Limit positive Mn to 1.3RhMy in continuous spans (6.10.7.1.2)')}
     ${check('options.serviceUncracked','Service II: uncracked composite section in negative flexure (6.10.4.2.1)')}
     <p class="hint">η applies to the Strength I design checks. Load ratings use MBE factors without η.</p>`}
-  </div></details>
+  </div></details>`}
   ${LFD?'':liveGroup()}
   <details class="grp" open><summary>Spans</summary><div class="gbody">
     <div class="fields">${spanRows}</div>
     <div class="toolbar"><button id="addSpan">Add span</button><span class="status">Total ${fmt(model.spans.reduce((a,b)=>a+ +b,0),1)} ft</span></div>
   </div></details>
   <details class="grp" open><summary>Sections</summary><div class="gbody">
-    <p class="hint">Dimensions in inches; type decimals or fractions (11/16, 1 3/4). Blank Fy uses the global Fy; a stiffener table overrides do. Rolled shapes fill from the list; check dimensions against AISC.</p>
+    <p class="hint">${TUB?'One tub: two top flanges, two inclined webs and the box flange. D is the web depth along the slope. Dimensions in inches; type decimals or fractions (11/16, 1 3/4). Blank Fy uses the global Fy; a stiffener table overrides do.':'Dimensions in inches; type decimals or fractions (11/16, 1 3/4). Blank Fy uses the global Fy; a stiffener table overrides do. Rolled shapes fill from the list; check dimensions against AISC.'}</p>
     <table class="minitable sectbl"><colgroup><col style="width:31%"><col><col><col></colgroup>${secRows}</table>
-    <div class="toolbar"><button id="addPlate">Add plate girder</button><button id="addRolled">Add rolled beam</button></div>
+    <div class="toolbar">${TUB?'<button id="addTub">Add tub section</button>':'<button id="addPlate">Add plate girder</button><button id="addRolled">Add rolled beam</button>'}</div>
   </div></details>
+  ${TUB?`<details class="grp" open><summary>Tub geometry</summary><div class="gbody"><div class="fields">
+    ${field('tub.slope','Web slope, vertical per 1 horizontal','')}${field('tub.ext','Box flange extension past each web','in')}
+    ${field('tub.w','Top flange spacing within a tub, w','in')}${field('tub.a','Top flange spacing, adjacent tubs, a','in')}
+    ${field('tub.overhang','Deck overhang past the exterior top flange','ft')}
+    ${sel('tub.lateral','Top lateral bracing',[['full','Full length'],['partial','Partial length'],['none','None']])}
+  </div>${check('tub.shearLat','Top flange lateral bending from the horizontal component of the inclined web shear during deck placement')}
+  <p class="hint">Flange spacings are center to center. w, a, the overhang, the number of tubs and no skew are the 6.11.2.3 conditions for the Table 4.6.2.2.2b-1 distribution factor and for neglecting St. Venant torsion and distortion. A web slope of 4 is an inclination of 1 : 4 (horizontal : vertical); the limit is 1 : 2.5, a slope of 2.5 (6.11.2.1.1).</p></div></details>`:''}
   <details class="grp"><summary>Section ranges</summary><div class="gbody">
     <p class="hint">Distance along the girder from the first support, ft. Ranges must cover the full length. A range start is treated as a flange splice for fatigue.</p>
     <table class="minitable"><tr><th>From</th><th>To</th><th>Section</th><th></th></tr>${rngRows}</table>
     <div class="toolbar"><button id="addRng">Add range</button></div>
   </div></details>
   <details class="grp"><summary>Deck and steel</summary><div class="gbody"><div class="fields">
-    ${field('deck.ts','Structural slab','in')}${field('deck.haunch','Haunch, slab to top flange','in')}
-    ${field('deck.beff','Effective width','in')}${field('deck.btrib','Tributary width, DC1 deck','in',`placeholder="= effective (${esc(model.deck.beff)})"`)}
+    ${field('deck.ts','Structural slab','in')}${field('deck.haunch',TUB?'Haunch, top of web to slab soffit':'Haunch, slab to top flange','in')}
+    ${field('deck.beff',TUB?'Effective width, per tub':'Effective width','in')}${field('deck.btrib','Tributary width, DC1 deck','in',`placeholder="= effective (${esc(model.deck.beff)})"`)}
     ${field('deck.n','Modular ratio n','')}${field('deck.fc',"f'c",'ksi')}
     ${field('Fy','Fy, all plates','ksi')}${field('deck.Ar','Rebar area, neg. region','in²')}
     ${field('deck.yr','Rebar centroid below top of slab','in')}${field('deck.fyr','Rebar fy','ksi')}
-  </div><p class="hint">Effective width sets the composite section; tributary width sets the deck weight in DC1. Leave tributary width blank to use the effective width. The haunch weight uses each section's top flange width.</p></div></details>
+  </div><p class="hint">Effective width sets the composite section; tributary width sets the deck weight in DC1. Leave tributary width blank to use the effective width. ${TUB?'For a tub the haunch is measured from the top of the webs, so it includes the top flange thickness; the haunch weight uses both top flanges.':"The haunch weight uses each section's top flange width."}</p></div></details>
   <details class="grp"><summary>Dead loads per girder</summary><div class="gbody">
     ${check('loads.deckAuto','Compute deck weight: structural slab × tributary width')}
     ${check('loads.haunchAuto','Compute haunch weight: haunch × top flange width')}
@@ -4234,19 +4927,23 @@ function renderRail(){
     ${(model.loads.deckAuto||model.loads.haunchAuto)?field('loads.misc','Steel misc. allowance','%')+field('loads.steelAdd','Additional steel','k/ft'):field('loads.steelAdd','Additional steel','k/ft')+'<span></span>'}
     ${field('loads.dc2','DC2 (barriers, rail)','k/ft')}${field('loads.dw','DW (wearing surface)','k/ft')}
   </div>
-  ${check('loads.selfWeight','Compute steel self weight from each section at 490 pcf')}</div></details>
+  ${check('loads.selfWeight','Compute steel self weight from each section at 490 pcf')}${TUB?'<p class="hint">For tubs, add internal cross-frames, top lateral bracing and diaphragms through the misc. allowance or additional steel.</p>':''}</div></details>
   <details class="grp"><summary>Transverse stiffeners</summary><div class="gbody">
     <label class="f">Stiffener panels, one per line: from (ft), to (ft), spacing (in)
       <textarea class="braces" id="in-stiffeners" data-kind="stf" spellcheck="false" placeholder="0 15 180">${(model.stiffeners||[]).map(r=>r.from+' '+r.to+' '+r.do).join('\n')}</textarea></label>
     <p class="hint">Panels wider than 3D (1.5D for end panels) are treated as unstiffened (6.10.9.1). Leave empty to use each section's spacing.</p>
   </div></details>
   <details class="grp"><summary>Bracing</summary><div class="gbody">
-    <label class="f">Cross-frame locations from the first support <span class="u">ft, separated by spaces</span>
+    <label class="f">${TUB?'Top lateral panel points and internal cross-frames':'Cross-frame locations'} from the first support <span class="u">ft, separated by spaces</span>
       <textarea class="braces" id="in-bracing.locs" data-path="bracing.locs" data-kind="text" spellcheck="false">${esc(model.bracing.locs||'')}</textarea></label>
     <div class="fields">${field('bracing.Lb','Or uniform spacing within spans','ft')}</div>
-    <p class="hint">Supports are always braced. Cb is computed for each unbraced length by the edition's method; the top flange is taken as continuously braced once the deck is composite.</p>
+    <p class="hint">${TUB?'Supports are always braced. Before the deck hardens, the top flanges are braced at these points by the top lateral system; the spacing sets their lateral bending. The box flange needs no lateral bracing, and the top flanges are continuously braced once composite.':"Supports are always braced. Cb is computed for each unbraced length by the edition's method; the top flange is taken as continuously braced once the deck is composite."}</p>
   </div></details>
-  ${LFD?`<details class="grp"><summary>Distribution factors</summary><div class="gbody"><div class="fields">
+  ${TUB?`<details class="grp"><summary>Distribution factors</summary><div class="gbody"><div class="fields">
+    ${field('df.Ng','Number of tubs Nb','')}${field('df.roadway','Roadway width, curb to curb','ft')}
+    ${field('df.skew','Skew angle θ','deg')}<span></span>
+    ${field('df.overrideM','Moment DF override','lanes')}${field('df.overrideV','Shear DF override','lanes')}
+  </div><p class="hint">Table 4.6.2.2.2b-1 for multiple box sections: 0.05 + 0.85NL/Nb + 0.425/NL lanes per tub, with 0.5 ≤ NL/Nb ≤ 1.5, used for moment and shear (Table 4.6.2.2.3a-1). NL = roadway ÷ 12, as an integer. Fatigue uses one lane, not divided by 1.2. The 6.11.2.3 conditions are listed with the distribution factors in the results.</p></div></details>`:LFD?`<details class="grp"><summary>Distribution factors</summary><div class="gbody"><div class="fields">
     ${sel('df.girder','Girder',[['interior','Interior'],['exterior','Exterior']])}
     ${field('df.S','Stringer spacing S','ft')}
     ${field('df.Ng','Number of stringers','')}${field('df.roadway','Roadway width, curb to curb','ft')}
@@ -4266,7 +4963,19 @@ function renderRail(){
   ${check('df.skewShear','Apply the skew correction for support shear (Table 4.6.2.2.3c-1) along the whole girder')}
   ${model.df.table?check('df.useTable','Use the imported lane-fraction table ('+model.df.table.x.length+' points)'):''}
   <p class="hint">Number of lanes = roadway width ÷ 12 (0 = assume two or more). Exterior girders use the larger of the lever rule (one lane), e × interior (two or more lanes) and the rigid-section reactions. Moment skew reduction applies for 30° ≤ θ ≤ 60°. Leave overrides at 0 to use these formulas.</p></div></details>`}
-  ${LFD?'':`<details class="grp"><summary>Flange lateral bending</summary><div class="gbody">
+  ${TUB?`<details class="grp"><summary>Flange lateral bending</summary><div class="gbody">
+    ${check('flb.on','Include deck overhang brackets and an entered top flange fℓ during deck placement')}
+    ${model.flb.on?`<div class="fields">${field('flb.conTop','Deck placement, top flanges, added','ksi')}<span></span></div>
+    ${check('flb.bracket','Deck overhang bracket loads on the exterior web (C6.10.3.4.1)')}
+    ${model.flb.bracket?`<div class="fields">
+      ${field('flb.bo','Overhang, flange CL to deck edge','ft')}${field('flb.tso','Overhang slab thickness (0 = ts)','in')}
+      ${field('flb.share','Share of overhang slab on brackets','')}${field('flb.forms','Overhang forms','k/ft')}
+      ${field('flb.screed','Screed rail','k/ft')}${field('flb.rail','Railing','k/ft')}
+      ${field('flb.walk','Walkway','k/ft')}${field('flb.fm','Finishing machine, per girder','kip')}
+      ${field('flb.bh','Bracket horizontal projection','in')}${field('flb.bv','Bracket vertical depth (0 = vertical web depth)','in')}
+    </div>`:''}`:''}
+    <p class="hint">Tub top flanges bend laterally between top lateral panel points under the horizontal component of the inclined web shear and, on the exterior web, the overhang brackets: Mℓ = FℓLb²/12, plus PℓLb/8 for the finishing machine, factored as for deck placement and amplified per 6.10.1.6 where needed. After the deck hardens the top flanges are continuously braced, and the box flange carries no lateral bending (fℓ = 0, 6.11.4 and 6.11.8).</p>
+  </div></details>`:LFD?'':`<details class="grp"><summary>Flange lateral bending</summary><div class="gbody">
     ${check('flb.on','Include flange lateral bending, fℓ (6.10.1.6)')}
     ${model.flb.on?`<p class="hint">Factored first-order fℓ in the discretely braced bottom flange, for example from skew, discontinuous cross-frames or wind; the top flange is continuously braced once composite. Compression-flange values are amplified per 6.10.1.6-4 where Lb exceeds the limit of 6.10.1.6-2.</p>
     <div class="fields">
@@ -4282,7 +4991,7 @@ function renderRail(){
       ${field('flb.bh','Bracket horizontal projection','in')}${field('flb.bv','Bracket vertical depth (0 = D)','in')}
     </div><p class="hint">Fℓ = P tan α with tan α = horizontal ÷ vertical. Mℓ = FℓLb²/12 for the uniform loads plus PℓLb/8 for the finishing machine at mid-length, on both flanges, factored 1.25 on the overhang concrete and 1.5 on the forms, screed, railing, walkway and finishing machine, or 1.4 on everything; both combinations are checked. The default share of 0.5 follows the NSBA handbook examples. Brackets are removed once the deck hardens.${model.df.girder!=='exterior'?' <b>The girder is set as interior; brackets normally load only the fascia girder.</b>':''}</p>`:''}`:''}
   </div></details>`}
-  <details class="grp"><summary>Deck placement sequence</summary><div class="gbody">
+  ${TUB?'':`<details class="grp"><summary>Deck placement sequence</summary><div class="gbody">
     ${check('pour.on','Analyze a deck placement sequence (6.10.3.4.1)')}
     ${model.pour.on?`<label class="f">Pours, one per line: from (ft), to (ft), casting order
       <textarea class="braces" id="in-pours" data-kind="pours" spellcheck="false" placeholder="0 90 1">${(model.pour.pours||[]).map(q=>q.from+' '+q.to+' '+q.order).join('\n')}</textarea></label>
@@ -4294,7 +5003,7 @@ function renderRail(){
     ${check('pour.useFinal','Use the locked-in DC1 from the sequence in the final design checks')}
     ${check('pour.checkSingle','Also check the whole deck placed at once')}
     <p class="hint">Pours with the same order are cast together. Each stage adds the wet concrete of its pours to a girder that is composite where earlier pours have hardened. The construction load acts on the current pour. The rest of DC1 (steel, forms) is on the steel alone.</p>`:''}
-  </div></details>
+  </div></details>`}
   ${LFD?`<details class="grp"><summary>Fatigue</summary><div class="gbody"><div class="fields">
     ${field('fatigue.adtt','ADTT, one direction','trucks/day')}
     ${sel('fatigue.road','Type of road',[['major','Freeway, expressway, major highway or street'],['other','Other highway or street']])}
@@ -4317,7 +5026,7 @@ function renderRail(){
   <p class="hint">Fatigue truck with 30 ft rear spacing and IM = 15%, one-lane DF with multiple presence removed. The infinite-life check (Fatigue I) is used where (ADTT)SL exceeds the Table 6.6.1.2.3-2 value for the detail; otherwise Fatigue II with the finite-life resistance.</p></div></details>`}
   <details class="grp"><summary>Constructibility and deflection</summary><div class="gbody"><div class="fields">
     ${field('construction.cl','Construction live load','k/ft')}<span></span>
-    ${field('deflection.NL','Design lanes','')}${field('deflection.Ng','Girders in cross-section','')}
+    ${field('deflection.NL','Design lanes','')}${field('deflection.Ng',TUB?'Tubs in cross-section':'Girders in cross-section','')}
     ${field('deflection.ratio','Deflection limit L /','')}
   </div>${check('deflection.on','Check live-load deflection (optional criterion, 2.5.2.6.2)')}
   <p class="hint">${LFD?'Noncomposite dead load and construction load factored by 1.3 (10.61). Deflection: truck or lane with impact, all lanes loaded with the 3.12 reduction, spread equally over all stringers (10.6.4).':'Deck placed in one pour on the noncomposite steel; the larger of 1.4(DC1 + CL) and 1.25DC1 + 1.5CL (3.4.2.1). Deflection uses all lanes loaded with multiple presence spread over all girders, truck alone or 25% truck plus lane.'}</p></div></details>
@@ -4401,6 +5110,7 @@ function onRailClick(ev){
   if(t.id==='addSpan'){ model.spans.push(model.spans[model.spans.length-1]||100); const last=model.ranges[model.ranges.length-1]; if(last) last.to=model.spans.reduce((a,b)=>a+ +b,0); }
   else if(t.dataset.delspan!=null){ model.spans.splice(+t.dataset.delspan,1); const T=model.spans.reduce((a,b)=>a+ +b,0); model.ranges=model.ranges.filter(r=>r.from<T); if(model.ranges.length) model.ranges[model.ranges.length-1].to=T; }
   else if(t.id==='addPlate'){ const n=nextId('G'); model.sections.push({id:n,name:'New plate girder',type:'plate',bt:16,tt:1,D:54,tw:0.5625,bb:18,tb:1.25,do:0}); }
+  else if(t.id==='addTub'){ const b=model.sections[model.sections.length-1]||{}; model.sections.push({id:nextId('T'),name:'New tub section',type:'tub',bt:b.bt??18,tt:b.tt??1,D:b.D??72,tw:b.tw??0.5625,bb:b.bb??84,tb:b.tb??1,do:0}); }
   else if(t.id==='addRolled'){ const n=nextId('R'); model.sections.push({id:n,name:'Rolled beam',type:'rolled',shape:'W33x130',...W_SHAPES['W33x130'],do:0}); }
   else if(t.dataset.delsec!=null){ if(model.sections.length<2) return; const id=model.sections[+t.dataset.delsec].id; model.sections.splice(+t.dataset.delsec,1); model.ranges.forEach(r=>{if(r.sec===id) r.sec=model.sections[0].id;}); }
   else if(t.id==='addRng'){ const last=model.ranges[model.ranges.length-1]; model.ranges.push({from:last?last.to:0,to:L,sec:model.sections[0].id}); }
@@ -4412,8 +5122,17 @@ function onRailClick(ev){
   renderRail(); schedule();
 }
 function nextId(p){let i=1;while(model.sections.some(s=>s.id===p+i))i++;return p+i;}
+// girder-type switch: keep the current input and bring back the last input of the other type (or its default)
+function switchKind(k){
+  if(kindOf(model)===k) return;
+  saveModel();
+  const m=storedModel(k); model=m?migrate(m):defaultModel(k);
+  selI=null; $('impBox').hidden=true; $('errBox').hidden=true; fillReport(); renderRail(); syncEdition(); run(); refreshIO(true);
+}
 function syncEdition(){
-  document.querySelectorAll('.edsel button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.ed===String(model.code.edition))));
+  const tub=model.kind==='tub';
+  document.querySelectorAll('.edselEd button').forEach(b=>{ b.setAttribute('aria-pressed',String(b.dataset.ed===String(model.code.edition))); b.disabled=tub&&b.dataset.ed!=='10'; b.title=b.disabled?'Tub girders are checked to the LRFD 10th Edition only':''; });
+  document.querySelectorAll('.kindsel button').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.kind===(tub?'tub':'i'))));
   const s=$('in-code.edition'); if(s) s.value=String(model.code.edition);
 }
 
@@ -4424,7 +5143,7 @@ function schedule(){ clearTimeout(timer); $('status').textContent='Updating…';
 let resModel=null, resKey=null; // the exact input the current results were computed from
 const modelKey=m=>JSON.stringify(Object.assign({},m,{report:undefined}));
 function run(){
-  try{ localStorage.setItem('lgc-model-v1',JSON.stringify(model)); }catch(e){}
+  saveModel();
   refreshIO();
   clearTimeout(otherTimer); resOther=null;
   try{
@@ -4436,9 +5155,10 @@ function run(){
     if(selI==null||selI>=res.pois.length){ selI=govPoint(); }
     renderAll();
     $('status').textContent=`${edName(res.ed)} · ${res.pois.length} points · ${res.checks.length.toLocaleString('en-US')} checks · ${res.ms} ms`;
+    $('cmpCard').hidden=res.kind==='tub';
     $('cmpTitle').textContent=res.ed==='LFD'?'LFR vs LRFR':'9th vs 10th edition';
     $('cmpStatus').textContent=res.ed==='LFD'?'Running AASHTO LRFD 10th Edition…':'Running the other edition…'; $('cmpTbl').innerHTML=''; $('cmpNotes').innerHTML='';
-    otherTimer=setTimeout(()=>{ try{ const m2=structuredClone(model); m2.code.edition=res.ed==='LFD'?'10':(res.ed===10?'9':'10'); resOther=LGCheck.run(m2); renderCompare(); }catch(e){ $('cmpStatus').textContent='Could not run the comparison: '+e.message; } },60);
+    if(res.kind!=='tub') otherTimer=setTimeout(()=>{ try{ const m2=structuredClone(model); m2.code.edition=res.ed==='LFD'?'10':(res.ed===10?'9':'10'); resOther=LGCheck.run(m2); renderCompare(); }catch(e){ $('cmpStatus').textContent='Could not run the comparison: '+e.message; } },60);
   }catch(e){
     $('errBox').hidden=false; $('errBox').textContent=e.message; $('status').textContent='Not run'; $('warnBox').hidden=true;
     res=null; resModel=null; resKey=null; ['ratios','verdict'].forEach(id=>$(id).innerHTML=''); $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
@@ -4456,7 +5176,10 @@ function applyLabels(){
   { const LV=resLive(), RL=res.ratingLoad;
     $('ratingStatus').textContent=L?`MBE LFR (6B), ${res.labels.vehicle}, ${fmt(res.rating.tons,0)} tons`:LV.permit==='only'?'MBE 6A.4.5 permit rating':(RL?'MBE LRFR factors, '+RL.name:'MBE LRFR, HL-93 design load')+(LV.permit==='include'?' · permit rating, MBE 6A.4.5':''); }
   $('dfHead').textContent=L?'Wheel-load distribution, 3.23':'Live-load distribution factors, 4.6.2.2';
-  $('plHead').textContent=L?'Proportion limits, 10.48 and 10.49':'Cross-section proportion limits, 6.10.2';
+  const TB=res.kind==='tub';
+  $('plHead').textContent=L?'Proportion limits, 10.48 and 10.49':TB?'Cross-section proportion limits, 6.11.2':'Cross-section proportion limits, 6.10.2';
+  $('dfHead').textContent=L?'Wheel-load distribution, 3.23':TB?'Live-load distribution factor, Table 4.6.2.2.2b-1, and 6.11.2.3 conditions':'Live-load distribution factors, 4.6.2.2';
+  $('segHead').hidden=TB; $('segTbl').closest('.tbl-wrap').hidden=TB;
   $('segHead').textContent=L?'Unbraced lengths, Cb per 10.48.4.1 (Group I, bottom flange)':'Unbraced lengths, bottom flange in negative flexure';
   $('deflHead').textContent=L?'Live-load deflection, 10.6':'Live-load deflection, 2.5.2.6.2';
   $('pourHint').textContent=L?'Moments are unfactored DC1 per girder. Checks use γ = 1.3 (10.61) and appear in the constructibility tile and the governing-checks table with a stage label.':'Moments are unfactored DC1 per girder. Checks are factored per 3.4.2.1 and appear in the constructibility tile and the governing-checks table with a stage label.';
@@ -4709,6 +5432,14 @@ function renderProps(){
     $('propTbl').innerHTML=h+'</tbody>';
     renderPropsCommon(); return;
   }
+  if(res.kind==='tub'){
+    let h=`<thead><tr><th class="l">Sec</th><th>d in</th><th>A in²</th><th>I steel</th><th>I 3n</th><th>I n</th><th>I s+r</th><th>Mp+ k-ft</th><th>Dp/Dt</th><th class="l">Pos. compact</th><th>bfi/tf</th><th>λ, 6.9.4.2.2b</th><th>be, box in</th><th>I s+r, be</th><th>Dc neg in</th><th>rt top in</th><th>Rh +/−</th></tr></thead><tbody>`;
+    res.secTable.forEach(t=>{ const P=t.P, E=P.eff;
+      h+=`<tr><td class="l">${esc(t.id)}</td><td class="n">${fmt(P.g.d,2)}</td><td class="n">${fmt(P.s.A,2)}</td><td class="n">${fmt(P.s.I,0)}</td><td class="n">${fmt(P.s3n.I,0)}</td><td class="n">${fmt(P.sn.I,0)}</td><td class="n">${fmt(P.sr.I,0)}</td>
+      <td class="n">${fmt(P.pl.Mp,0)}</td><td class="n">${fmt(P.pl.Dp/P.pl.Dt,3)}</td><td class="l">${P.compactBase?'Yes':'No'}</td><td class="n">${fmt(E.lamF,1)}</td><td class="n">${fmt(E.lamR,1)}</td><td class="n">${E.compact?'full, '+fmt(P.g.bb,2):fmt(E.be,2)}</td><td class="n">${fmt(P.srE.I,0)}</td><td class="n">${fmt(P.DcNeg,2)}</td><td class="n">${fmt(P.rtTopNC,2)}</td><td class="n">${fmt(P.RhPos,3)} / ${fmt(P.RhNeg,3)}</td></tr>`; });
+    $('propTbl').innerHTML=h+'</tbody>';
+    renderPropsCommon(); return;
+  }
   let h=`<thead><tr><th class="l">Sec</th><th>d in</th><th>A in²</th><th>I steel</th><th>I 3n</th><th>I n</th><th>I s+r</th><th>Mp+ k-ft</th><th>Dp/Dt</th><th class="l">Pos. compact</th><th>Mp− k-ft</th><th>Dc neg in</th><th>λrw</th><th>Rb</th><th class="l">A6</th><th>rt in</th><th>Rh +/−</th></tr></thead><tbody>`;
   res.secTable.forEach(t=>{ const P=t.P;
     h+=`<tr><td class="l">${esc(t.id)}</td><td class="n">${fmt(P.g.d,2)}</td><td class="n">${fmt(P.s.A,2)}</td><td class="n">${fmt(P.s.I,0)}</td><td class="n">${fmt(P.s3n.I,0)}</td><td class="n">${fmt(P.sn.I,0)}</td><td class="n">${fmt(P.sr.I,0)}</td>
@@ -4781,6 +5512,16 @@ function renderDF(){
     $('dfTbl').innerHTML=`<thead><tr><th class="l">Stringer</th><th>S ft</th><th>Lanes</th><th>Moment, wheels</th><th>= lanes</th><th class="l">Governs</th><th>Shear, wheels</th><th>End shear, wheels</th><th>One lane, wheels</th>${D.ext?'<th>Lever rule</th><th>Minimum</th>':''}</tr></thead><tbody>
       <tr><td class="l">${D.ext?'Exterior':'Interior'}</td><td class="n">${fmt(D.S,2)}</td><td class="n">${D.NL}</td><td class="n">${fmt(D.wM,3)}</td><td class="n">${fmt(D.DFm,3)}</td><td class="l">${D.overM?'override':esc(D.gov)}</td><td class="n">${fmt(D.wV,3)}</td><td class="n">${fmt(D.wEnd,3)}${D.overEnd?' (override)':''}</td><td class="n">${fmt(D.w1,3)}</td>${D.ext?`<td class="n">${fmt(D.lever,3)}</td><td class="n">${D.min!=null?fmt(D.min,3):'—'}</td>`:''}</tr></tbody>`;
     $('dfNote').innerHTML=['Wheel-load fractions per Article 3.23 for a concrete deck on steel stringers; one lane of HS loading = two wheel lines. The end-shear value applies to an axle at '+(D.endAtPiers?'any support':'the girder ends')+' (3.23.1.2); other axles use the shear fraction. The one-lane value is used for the "over 2,000,000 cycles" single-truck fatigue case.', ...(D.notes||[])].join(' ');
+    return;
+  }
+  if(res.kind==='tub'){
+    const D=res.tub.DF, R=res.tub.restrictions, ovM=+resModel.df.overrideM>0, ovV=+resModel.df.overrideV>0;
+    $('dfTbl').innerHTML=`<thead><tr><th class="l">Girder</th><th>Lanes NL</th><th>Tubs Nb</th><th>NL/Nb</th><th>Moment</th><th>Shear</th><th>Fatigue M, V</th><th class="l">Formula</th></tr></thead><tbody>
+      <tr><td class="l">Each tub</td><td class="n">${D.NL}</td><td class="n">${D.Nb}</td><td class="n">${fmt(D.ratio,2)}</td><td class="n">${fmt(D.M,3)}${ovM?' (override '+fmt(+resModel.df.overrideM,3)+')':''}</td><td class="n">${fmt(D.V,3)}${ovV?' (override '+fmt(+resModel.df.overrideV,3)+')':''}</td><td class="n">${fmt(D.MF,3)}</td><td class="l">${esc(D.govM)}</td></tr>
+      ${R.items.map(q=>`<tr><td class="l ${q.ok?'ok':'bad'}" style="white-space:nowrap">${q.ok?'Met':'Not met'}</td><td class="l" colspan="7" style="white-space:normal">6.11.2.3: ${esc(q.txt)}</td></tr>`).join('')}</tbody>`;
+    $('dfNote').innerHTML=[ (ovM||ovV)?'Overrides are set and replace the formula values in the checks.':'', ...D.warn.map(w=>'Outside range: '+w+'.'),
+      R.ok?'All 6.11.2.3 conditions are met: the distribution factor applies, and St. Venant torsion and cross-section distortion stresses may be neglected.':'Not all 6.11.2.3 conditions are met: the distribution factor is still applied here, but a refined analysis is required (4.6.2.2.2b), and positive flexure is checked as noncompact.',
+      'Values are lanes per tub and include multiple presence. The fatigue value is the formula with NL = 1, not divided by 1.2, as in NSBA Design Example 5.'].filter(Boolean).join(' ');
     return;
   }
   const D=res.dfSpan||[]; const ext=model.df.girder==='exterior';
@@ -4880,8 +5621,29 @@ function liveNotes(){
     out.push(`<li><b>Permit rating.</b> MBE 6A.4.5, RF = (φc φs φ R − γDC DC − γDW DW) / (γL (LL + IM)) with γDC ${fmt(+model.factors.gDC,2)} and γDW ${fmt(+model.factors.gDW,2)}. ${P.typeName}: γL ${fmt(P.gR,2)}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+' and each vehicle\'s GVW / axle length (the largest over the listed vehicles)':''}${P.type==='escorted'&&P.crawl?' (1.10 increased by 1.05 at crawl speed, MBE 6A.4.5.4.2c)':''}. ${P.single?'One lane loaded, with the 1.2 multiple presence factor divided out (6A.4.5.4.2b).':'Multi-lane distribution factors (6A.4.5.4.2a).'} IM ${P.crawl?'neglected at crawl speed (6A.4.5.5)':Math.round(P.IMrate*100)+'%'}. Service II rated with γL 1.0. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads.</li>`); }
   return out;
 }
+function renderMethodTub(){
+  $('methodNotes').innerHTML=[
+   `<li><b>Scope.</b> Straight, continuous composite tub girders with a full-length top lateral bracing system, checked to Article 6.11 of the AASHTO LRFD 10th Edition. One tub is analyzed as a line girder, with the Table 4.6.2.2.2b-1 distribution factor when the 6.11.2.3 conditions are met. St. Venant torsion, distortion, curvature and skew effects are not computed.</li>`,
+   `<li><b>Section properties.</b> Two top flanges, two inclined webs and the box flange. D, Dc, Dcp and Dn are measured along the web (6.11.2.1.1); each web contributes Iow = cos²θ twD³/12 about its own centroid. The slab soffit sits the haunch above the top of the webs. Mp by the plastic neutral axis with the webs as their horizontal width per unit height; longitudinal deck steel is neglected in Mp.</li>`,
+   `<li><b>Analysis and live load.</b> As for I-girders: a stiffness analysis with DC1 on the steel tub, DC2 and DW on the 3n section and live load on the n section; HL-93 with the 90% double-truck negative-moment loading, IM 33%; fatigue truck with IM 15%. Live-load deflection uses all lanes with multiple presence spread over all tubs.</li>`,
+   `<li><b>Shear lag (6.11.1.1).</b> The box flange is fully effective where its width is at most one-fifth of the effective span, taken as the distance between permanent-load contraflexure points. Where it is wider, a warning is given and positive flexure is checked as noncompact.</li>`,
+   `<li><b>Strength I, positive flexure (6.11.7).</b> Compact sections (6.11.6.2.2: Fy ≤ 70 ksi, D/tw ≤ 150, 6.11.2.3 met, box flange fully effective, 2Dcp/tw ≤ 3.76√(E/Fyc)) use Mn with the Dp/Dt reduction, never more than 1.3RhMy in continuous spans (6.11.7.1.2), plus the ductility limit Dp ≤ 0.42Dt. Otherwise the top flanges are checked against RbRhFyc and the box flange against RhFytΔ with Δ = 1.0.</li>`,
+   `<li><b>Strength I, negative flexure (6.11.8).</b> Box flange in compression: compact when λf ≤ λpf, Fnc = RbRhFycΔ; otherwise Fnc = RbRhFycΔ Myce/Myc (6.11.8.2.2b), with the effective width of 6.9.4.2.2b (Fcr = Fyc), Myc and Myce from D6.2.3 on the steel and deck-steel section under the factored dead-load moments, and Rb with bfc = be/2. Top flanges in tension: Fnt = RhFyt, continuously braced. The box flange is unstiffened longitudinally; no torsional shear, so Δ = 1.0.</li>`,
+   `<li><b>Shear (6.11.9).</b> Each web carries Vui = Vu / (2 cos θ). Stiffened interior panels use tension-field action with bfc = be/2 and bft = half the box flange (6.10.9.3.2); end panels and panels wider than 3D are limited to Vcr.</li>`,
+   `<li><b>Service II (6.11.4).</b> Both flanges ≤ 0.95RhFyf with fℓ = 0, web bend-buckling with Dc along the web, and the box flange in compression ≤ min(0.9Ek/λf², Fyc) with k = 4. With the uncracked option the deck is taken as effective in negative flexure only where its Service II tension is at most 2fr (6.10.4.2.1).</li>`,
+   `<li><b>Fatigue.</b> Category B box-flange-to-web and top-flange-to-web welds, C′ cross-frame connection plates and stiffeners on the box flange and the top flanges, B butt-weld splices at section changes, C stud welds, and the 6.10.5.3 web shear limit for stiffened interior panels, per web. Details in permanent compression of at least twice the fatigue tension are not checked.</li>`,
+   `<li><b>Constructibility (6.11.3).</b> Noncomposite tub under the deck weight and construction load placed at once, the larger of 1.4(DC + CL) and 1.25DC + 1.5CL (3.4.2.1). Top flanges to 6.10.3.2 with Rb = 1.0 and no lateral-torsional buckling with full-length top lateral bracing; their first-order lateral bending comes from the horizontal component of the inclined web shear and from the overhang brackets over the panel length, amplified per 6.10.1.6. Box flange in compression: fbu ≤ φf min(0.9Ek/λf², Fyc) with k = 4 and web bend-buckling (6.11.3.2-1, -2); in tension fbu ≤ φfRhFyfΔ (6.11.3.2-3). Web shear ≤ φvVcr.</li>`,
+   `<li><b>Proportion limits (6.11.2).</b> D/tw ≤ 150, web inclination ≤ 1 : 2.5, top flange bf/2tf ≤ 12, bf ≥ D/6 and tf ≥ 1.1tw, box flange bfi/tf ≤ 90 in compression (130 in tension only, with a note above 90) and tf ≥ 0.5 in.</li>`,
+   `<li><b>Load rating.</b> MBE LRFR as for I-girders, RF = (φc φs φ R − γDC DC − γDW DW) / (γLL (LL + IM)), inventory and operating, Strength I and Service II.</li>`,
+   `<li><b>Benchmark.</b> Checked against NSBA Steel Bridge Design Handbook Design Example 5 (10th Ed.). Section properties agree within 0.1%; Mp at Section 2-2 is 1% lower because the example mixes along-the-web and vertical lever arms. With this tool's analysis, moments are within about 3% of the example's, and the ratios at Sections 2-2, 2-1 and 1-3 agree within that margin (for example box flange at the pier 0.981 vs 0.983, pier shear 0.864 vs 0.863, end shear 0.711 vs 0.707).</li>`,
+   `<li><b>Differences from Design Example 5.</b> Every point along the girder is checked, not only the example's sections, so the example input shows a few ratios at or just above 1.0 at points the example did not check: the 1 1/2 in. box flange near the flange transition at 212.5 ft, the unstiffened web just before Field Splice 1, and the slender 1 1/8 in. box flange at Service II at 130 ft. Constructibility also checks 1.4(DC + CL), which governs web bend-buckling at midspan. Live-load deflection here spreads all lanes over both tubs; the example's 3.32 in. is not reproduced (its basis is not stated).</li>`,
+   `<li><b>Not checked.</b> Curved or skewed tubs, single tubs, partial or no top lateral bracing (global lateral-torsional buckling during deck placement), longitudinally stiffened box flanges, a deck placement sequence, pedestrian loads, torsional shear, internal cross-frame, top lateral, diaphragm, bearing and stiffener design, shear connectors, splices, and wind.</li>`,
+   `<li>This is an independent implementation for design study and checking. Verify governing results against your approved design software before use.</li>`
+  ].join('');
+}
 function renderMethod(){
   if(resLFD()){ renderMethodLFD(); return; }
+  if(res.kind==='tub'){ renderMethodTub(); return; }
   $('methodNotes').innerHTML=[
    `<li><b>Analysis.</b> Stiffness analysis with 10 to 40 elements per span, refined at supports, section breaks, stiffener panel ends, cross-frames and their quarter points. DC1 on the steel section, DC2 and DW on the long-term (3n) composite section, live load on the short-term (n) composite section. Uncracked composite stiffness throughout (6.10.1.5).</li>`,
    `<li><b>Live load.</b> Exact influence lines from support-displacement shapes. HL-93 truck with rear spacing 14 to 30 ft, both directions, tandem, and 0.64 klf lane on the adverse parts of the influence line; 90% of two trucks with at least 50 ft between them plus 90% lane in negative-moment regions. Axles that do not contribute to the extreme being sought are neglected (3.6.1.3.1), for strength, service and deflection. IM 33% on truck and tandem. Fatigue truck with 30 ft rear spacing and IM 15% (3.6.1.4), taken as the whole truck because the stress range comes from one real vehicle passage.</li>`,
@@ -4912,8 +5674,8 @@ function select(i,scroll){
 function importText(txt,name){
   try{
     const imp=MDXParse.parseMDX(txt);
-    const m=migrate(imp.model); m.code.edition=String(model.code.edition); m.fatigue=structuredClone(model.fatigue); m.deflection=structuredClone(model.deflection);
-    model=m; selI=null; renderRail(); syncEdition(); run(); fillReport();
+    const m=migrate(imp.model); const prevTub=model.kind==='tub'; if(!prevTub){ m.code.edition=String(model.code.edition); m.fatigue=structuredClone(model.fatigue); m.deflection=structuredClone(model.deflection); }
+    saveModel(); model=m; selI=null; renderRail(); syncEdition(); run(); fillReport();
     const items=[...(imp.notes||[]),...(imp.warnings||[])];
     $('impBox').hidden=false;
     $('impBox').innerHTML=`<b>Imported ${esc(name||'file')}</b>${imp.meta&&imp.meta.id?' · '+esc(imp.meta.id):''}. Geometry, sections, loads, bracing and stiffeners come from the file; fatigue traffic, deflection settings and the edition were kept from the inputs. Check them in the rail.${items.length?`<ul>${items.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`:''} <button id="impClose" style="margin-top:6px">Dismiss</button>`;
@@ -4940,7 +5702,7 @@ function fillReport(){ const r=model.report||{}; let ini=''; try{ ini=localStora
   document.querySelectorAll('#repCard [data-rep]').forEach(el=>{ const k=el.dataset.rep; el.value=r[k]!=null?r[k]:(k==='designedBy'?ini:k==='date'?new Date().toISOString().slice(0,10):''); }); }
 $('repCard').addEventListener('input',e=>{ const k=e.target.dataset.rep; if(!k) return; model.report=Object.assign({},model.report,{[k]:e.target.value});
   if(k==='designedBy') try{ localStorage.setItem('lgc-initials',e.target.value); }catch(_){}
-  try{ localStorage.setItem('lgc-model-v1',JSON.stringify(model)); }catch(_){} });
+  saveModel(); });
 let dlCap=null; if(window.claude&&window.claude.use) window.claude.use('downloads').then(d=>{ dlCap=d; }).catch(()=>{});
 async function saveFile(name,bytes){
   if(dlCap){ try{ await dlCap.save({filename:name,data:new Blob([bytes],{type:'application/pdf'})}); return 'saved'; }catch(e){ if(e&&e.code==='declined') return 'declined'; } }
@@ -4969,7 +5731,8 @@ renderRail(); syncEdition();
 $('rail').addEventListener('change',onRailInput);
 $('rail').addEventListener('input',ev=>{ if((ev.target.tagName==='INPUT'&&(ev.target.classList.contains('n')||ev.target.dataset.pv!=null))||['text','stf','pours'].includes(ev.target.dataset.kind)&&ev.target.tagName==='TEXTAREA') onRailInput(ev); });
 $('rail').addEventListener('click',onRailClick);
-document.querySelector('.edsel').addEventListener('click',e=>{ const b=e.target.closest('button[data-ed]'); if(!b) return; model.code.edition=b.dataset.ed; renderRail(); syncEdition(); run(); });
+document.querySelector('.edselEd').addEventListener('click',e=>{ const b=e.target.closest('button[data-ed]'); if(!b||b.disabled) return; model.code.edition=b.dataset.ed; renderRail(); syncEdition(); run(); });
+document.querySelector('.kindsel').addEventListener('click',e=>{ const b=e.target.closest('button[data-kind]'); if(!b) return; switchKind(b.dataset.kind); });
 $('btnRun').addEventListener('click',run);
 $('ratios').addEventListener('click',e=>{ const b=e.target.closest('button.pr'); if(!b||!res) return;
   let i=b.dataset.i!==''?+b.dataset.i:null;
@@ -4982,7 +5745,7 @@ $('impBox').addEventListener('click',e=>{ if(e.target.id==='impClose') $('impBox
 $('mdxFile').addEventListener('change',e=>{ const f=e.target.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>importText(r.result,f.name); r.readAsText(f); e.target.value=''; });
 document.addEventListener('dragover',e=>{ e.preventDefault(); });
 document.addEventListener('drop',e=>{ e.preventDefault(); const f=e.dataTransfer&&e.dataTransfer.files[0]; if(!f) return; const r=new FileReader(); r.onload=()=>{ const t=String(r.result); if(/^\s*\{/.test(t)) loadModelText(t,f.name); else importText(t,f.name); }; r.readAsText(f); });
-$('example').addEventListener('change',e=>{ const k=e.target.value; if(!k) return; const ed=String(model.code.edition); model=withDeckWeight(migrate(EXAMPLES[k]())); model.code.edition=ed; selI=null; fillReport(); $('impBox').hidden=true; renderRail(); syncEdition(); run(); e.target.value=''; });
+$('example').addEventListener('change',e=>{ const k=e.target.value; if(!k) return; const ed=String(model.code.edition); saveModel(); model=withDeckWeight(migrate(EXAMPLES[k]())); if(model.kind!=='tub') model.code.edition=ed; selI=null; fillReport(); $('impBox').hidden=true; renderRail(); syncEdition(); run(); e.target.value=''; });
 $('resTbl').addEventListener('click',e=>{ const tr=e.target.closest('tr[data-i]'); if(tr) select(+tr.dataset.i,false); });
 $('btnJson').addEventListener('click',()=>{ refreshIO(true); $('ioCard').scrollIntoView({block:'start'}); });
 $('btnCloseJson').addEventListener('click',()=>{ $('jsonCard').hidden=true; });
@@ -4994,7 +5757,7 @@ function loadModelText(txt,what){
   try{
     const m=JSON.parse(txt);
     if(!m||!Array.isArray(m.spans)||!Array.isArray(m.sections)||!Array.isArray(m.ranges)) throw new Error('this is not a saved Steel Line Girder input (it needs spans, sections and ranges).');
-    model=migrate(m); selI=null; $('impBox').hidden=true; $('errBox').hidden=true;
+    saveModel(); model=migrate(m); selI=null; $('impBox').hidden=true; $('errBox').hidden=true;
     fillReport(); renderRail(); syncEdition(); run(); refreshIO(true); ioStatus('Loaded '+(what||'input')+'.');
   }catch(e){ ioStatus('Could not load '+(what||'that input')+': '+e.message); }
 }
