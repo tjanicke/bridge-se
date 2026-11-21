@@ -187,6 +187,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <option value="pg3">3-span plate girder 120-150-120</option>
       <option value="rb2">2-span rolled beam W36x150, 70-70</option>
       <option value="a1">MBE Example A1, 65 ft cover-plated W33x130</option>
+      <option value="a1p">MBE Example A1 with its 220 k escorted permit</option>
     </select>
     <label class="btn" for="mdxFile" title="Read a line girder rating output (.out or .txt text file): geometry, sections, loads, bracing and stiffeners">Import other file</label>
     <input type="file" id="mdxFile" accept=".out,.OUT,.txt" hidden>
@@ -882,7 +883,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         return { name: String(v.name || '').trim() || 'Permit ' + (k + 1), w, s: sp, gvw, al, ratio: al > 0 ? gvw / al : Infinity, g: permitGamma(type, adtt, al > 0 ? gvw / al : Infinity) };
       });
       const gR = vehicles.length ? Math.max(...vehicles.map(v => v.g)) * (type === 'escorted' && crawl ? 1.05 : 1) : 0;
-      out.perm = { vehicles, type, typeName: PERMIT_TYPES[type], adtt, crawl, lane: P.lane !== false, gDesign: +P.gDesign > 0 ? +P.gDesign : 1.35, gR, IMrate: crawl ? 0 : 0.33, single: type !== 'routine' };
+      const imR = P.im != null && P.im !== '' && +P.im >= 0 ? +P.im / 100 : 0.33; // rating IM: 33%, or reduced for the riding surface (MBE C6A.4.4.3)
+      out.perm = { vehicles, type, typeName: PERMIT_TYPES[type], adtt, crawl, lane: P.lane !== false, gDesign: +P.gDesign > 0 ? +P.gDesign : 1.35, gR, IMrate: crawl ? 0 : imR, single: type !== 'routine' };
     }
     return out;
   }
@@ -1988,11 +1990,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     }
     if (L.permit !== 'none') {
       const P = L.perm;
-      const pl = { kind: 'permit', name: 'Permit', gS: P.gDesign, gSv: 1.0, limS: 'Strength II', vehicles: P.vehicles, lane: P.lane, IM: 0.33, single: false,
+      const pl = { kind: 'permit', name: 'Permit', gS: P.gDesign, gSv: 1.0, limS: 'Strength II', vehicles: P.vehicles, lane: P.lane, IM: 0.33, single: P.single,
         rate: { inv: P.gR, op: P.gR, sInv: 1.0, sOp: 1.0 } };
       const pd = runCase(m, ed, ctx, pl);
-      // special permits are rated with one lane loaded (multiple presence removed) and, at crawl speed, without impact
-      const pr = P.single || P.crawl ? runCase(m, ed, ctx, Object.assign({}, pl, { single: P.single, IM: P.IMrate })) : pd;
+      // special permits use one lane loaded (multiple presence removed) for design and rating; the rating IM may be reduced
+      const pr = P.IMrate !== 0.33 ? runCase(m, ed, ctx, Object.assign({}, pl, { IM: P.IMrate })) : pd;
       const rmap = new Map(pr.checks.map(c => [keyOf(c), c]));
       const pc = pd.checks.filter(c => c.lim === 'Strength II' || c.lim === 'Service II');
       pc.forEach(c => { c.permit = true; const q = rmap.get(keyOf(c)); c.RFp = q ? q.RFinv : undefined; c.rfNAp = q ? q.rfNA : false; c.ratingP = q ? q.rating : null; delete c.RFinv; delete c.RFop; });
@@ -3431,7 +3433,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       F.h3(LFD ? 'Load factor rating (MBE 6B), ' + R.vehicle + ', ' + fx(R.tons, 0) + ' tons'
         : (res.live && res.live.permit === 'only' ? 'Permit load rating (MBE 6A.4.5)' : (RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'Design load rating (MBE LRFR), HL-93') + (PM ? '; permit rating (MBE 6A.4.5)' : '')));
       F.table([{ h: 'Rating level', w: 2 }, { h: 'Governing check', w: 3.6 }, { h: 'Location, ft', w: 1.3 }, { h: 'Sec', w: 0.6 }, { h: 'RF', w: 0.8, a: 'r' }].concat(hasT ? [{ h: 'Tons', w: 1, a: 'r' }] : []), rr);
-      if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ', ' + res.controlling.c.what + ' at x = ' + fx(res.controlling.c.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : '33%') + '.', { size: 8.6 });
+      if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ', ' + res.controlling.c.what + ' at x = ' + fx(res.controlling.c.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '.', { size: 8.6 });
     }
     // warnings
     if (res.warnings && res.warnings.length) { F.h3('Warnings'); F.bullets(res.warnings.map(w => w.kind + ': ' + w.text), { color: AMB }); }
@@ -3971,7 +3973,7 @@ const baseCommon={
  deflection:{on:true,NL:3,Ng:5,ratio:800},
  factors:{gDC:1.25,gDW:1.50,gLinv:1.75,gLop:1.35,gSinv:1.30,gSop:1.00,phiC:1.0,phiS:1.0},
  options:{limit13My:true,serviceUncracked:false,appendixA6:true}, mesh:0,
- live:{design:'hl93',permit:'none',ped:{width:null,clear:null,dfVeh:null,noVehicle:false,mpf:true},permits:{type:'routine',adtt:null,crawl:false,lane:true,gDesign:1.35,vehicles:[]}}
+ live:{design:'hl93',permit:'none',ped:{width:null,clear:null,dfVeh:null,noVehicle:false,mpf:true},permits:{type:'routine',adtt:null,crawl:false,lane:true,gDesign:1.35,im:null,vehicles:[]}}
 };
 const EXAMPLES={
  mdx:()=>structuredClone(window.LG_EXAMPLES.mdx),
@@ -3987,6 +3989,12 @@ const EXAMPLES={
    {id:'G3',name:'Pier',type:'plate',bt:20,tt:1.75,D:60,tw:0.625,bb:22,tb:2.25,do:90}],
   ranges:[{from:0,to:96,sec:'G1'},{from:96,to:150,sec:'G3'},{from:150,to:240,sec:'G2'},{from:240,to:294,sec:'G3'},{from:294,to:390,sec:'G1'}],stiffeners:[]}),
  a1:()=>structuredClone(window.LG_EXAMPLES.a1),
+ // MBE Example A1 permit load rating: 220 k special permit, single trip, escorted; IM 20% for minor surface deviations
+ a1p:()=>{const m=structuredClone(window.LG_EXAMPLES.a1); m.name='MBE Example A1 with its 220 k escorted permit';
+  m.live={design:'hl93',permit:'include',ped:{width:null,clear:null,dfVeh:null,noVehicle:false,mpf:true},
+   permits:{type:'escorted',adtt:1000,crawl:false,lane:true,gDesign:1.35,im:20,
+    vehicles:[{name:'MBE A1 permit, 220 k',w:'10, 18, 18, 23, 23, 23, 21, 21, 21, 21, 21',s:'9, 4, 4, 4, 4, 10, 4, 4, 4, 4'}]}};
+  return m;},
  rb2:()=>{const m={...structuredClone(baseCommon),name:'2-span rolled beam',spans:[70,70],
   sections:[{id:'R1',name:'W36x150',type:'rolled',shape:'W36x150',...W_SHAPES['W36x150'],do:0}],
   ranges:[{from:0,to:140,sec:'R1'}],stiffeners:[]};
@@ -4075,8 +4083,8 @@ function liveHint(){
       :(p.noVehicle?'Vehicles are kept off by permanent barriers: no maintenance vehicle; rated for the pedestrian load.':'Clear deck width under 7 ft: no maintenance vehicle; rated for the pedestrian load.'));
     out.push('Deflection under the pedestrian load ≤ L/360 and vertical frequency > 3.0 Hz (Guide Spec 5 and 6). Fatigue is wind-induced for pedestrian bridges (Guide Spec 3.5) and is not checked here.'); }
   if(L.perm){ const P=L.perm, n=P.vehicles.length;
-    out.push(`Permit design: Strength II, γLL ${fmt(P.gDesign,2)}, IM 33%, the design distribution factors; Service II with γLL 1.0.`);
-    out.push(`Permit rating (MBE 6A.4.5): γL ${n?fmt(P.gR,2):'–'}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+(n>1?', largest of the vehicles':''):(P.type==='escorted'&&P.crawl?' (1.10 × 1.05 at crawl speed)':'')}${P.single?', one lane loaded with the 1.2 multiple presence factor removed':', multi-lane distribution'}, IM ${P.crawl?'0 (crawl speed)':'33%'}.`+(P.lane?' 0.2 k/ft lane load added for negative moment and for spans over 200 ft.':''));
+    out.push(`Permit design: Strength II, γLL ${fmt(P.gDesign,2)}, IM 33%, ${P.single?'one lane loaded with the 1.2 multiple presence factor removed (special permit)':'the multi-lane distribution factors (routine permit)'}; Service II with γLL 1.0.`);
+    out.push(`Permit rating (MBE 6A.4.5): γL ${n?fmt(P.gR,2):'–'}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+(n>1?', largest of the vehicles':''):(P.type==='escorted'&&P.crawl?' (1.10 × 1.05 at crawl speed)':'')}${P.single?', one lane loaded with the 1.2 multiple presence factor removed':', multi-lane distribution'}, IM ${P.crawl?'0 (crawl speed)':Math.round(P.IMrate*100)+'%'}.`+(P.lane?' 0.2 k/ft lane load added for negative moment and for spans over 200 ft.':''));
     if(n) out.push(P.vehicles.map(v=>`${v.name}: ${fmt(v.gvw,1)} k on ${fmt(v.al,1)} ft${isFinite(v.ratio)?' (GVW/AL '+fmt(v.ratio,2)+')':''}`).join('; ')+'.'); }
   return out;
 }
@@ -4113,7 +4121,8 @@ function liveGroup(){
     <div class="fields one">${sel('live.permits.type','Permit type, for rating',PERMIT_OPTS)}</div>
     <div class="fields">
       ${field('live.permits.gDesign','γLL, Strength II design','')}
-      ${P.type==='routine'?field('live.permits.adtt','ADTT, one direction','',`placeholder="${model.fatigue.adtt||0} (fatigue)"`):'<span></span>'}
+      ${P.type==='routine'?field('live.permits.adtt','ADTT, one direction','',`placeholder="${model.fatigue.adtt||0} (fatigue)"`):''}
+      ${P.crawl&&P.type!=='routine'?'':field('live.permits.im','Rating IM, % (MBE C6A.4.4.3)','',`placeholder="33"`)}
     </div>${P.type!=='routine'?check('live.permits.crawl','Crawl speed, 10 mph or less (rating without impact)'):''}
     ${check('live.permits.lane','Add 0.2 k/ft lane load for negative moment and spans over 200 ft (MBE 6A.4.5.4.1)')}`:''}
     ${ped||pm?`<p class="hint" id="liveHint">${liveHint().map(esc).join('<br>')}</p>`:''}
@@ -4362,7 +4371,7 @@ function onRailInput(ev){
       const w=haunchRange(model).lo;
       model.loads.dc1=+Math.max(0,(+model.loads.dc1||0)+(t.checked?-w:w)).toFixed(6);
     }
-    const blankNull=['deck.btrib','live.ped.width','live.ped.clear','live.ped.dfVeh','live.permits.adtt','live.permits.gDesign'].includes(t.dataset.path);
+    const blankNull=['deck.btrib','live.ped.width','live.ped.clear','live.ped.dfVeh','live.permits.adtt','live.permits.gDesign','live.permits.im'].includes(t.dataset.path);
     set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(blankNull&&t.value.trim()===''?null:nv())));
     if((t.dataset.path.startsWith('live.')||t.dataset.path.startsWith('df.')||t.dataset.path==='fatigue.adtt')&&$('liveHint')) refreshLive();
     if(t.dataset.path==='code.edition') syncEdition();
@@ -4370,7 +4379,7 @@ function onRailInput(ev){
       if($('deckHint')) $('deckHint').textContent=deckHint();
       if(t.dataset.path==='deck.beff'&&$('in-deck.btrib')) $('in-deck.btrib').placeholder=`= effective (${model.deck.beff})`;
     }
-    if(['code.edition','loads.selfWeight','loads.deckAuto','loads.haunchAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode','live.design','live.permit','live.permits.type','live.ped.noVehicle','live.ped.mpf'].includes(t.dataset.path)) renderRail();
+    if(['code.edition','loads.selfWeight','loads.deckAuto','loads.haunchAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode','live.design','live.permit','live.permits.type','live.permits.crawl','live.ped.noVehicle','live.ped.mpf'].includes(t.dataset.path)) renderRail();
   }
   else if(t.dataset.span!=null){ model.spans[+t.dataset.span]=nv(); }
   else if(t.dataset.pv!=null){ const v=model.live.permits.vehicles[+t.dataset.pv]; if(v) v[t.dataset.k]=t.value; refreshLive(); }
@@ -4867,8 +4876,8 @@ function liveNotes(){
     out.push(`<li><b>Pedestrian bridge.</b> AASHTO LRFD Guide Specifications for the Design of Pedestrian Bridges (2009, with the 2015 interim revisions). Pedestrian load 90 psf over ${fmt(p.width,2)} ft = ${fmt(p.w,3)} k/ft on this girder, placed on the adverse parts of each influence line, without dynamic load allowance (3.1). ${p.veh?`Maintenance vehicle ${p.veh} (Table 3.2-1, clear deck ${p.clear>0?fmt(p.clear,1)+' ft':'not given, so over 10 ft'}): ${fmt(0.2*p.W,0)} k and ${fmt(0.8*p.W,0)} k axles 14 ft apart, both directions, alone and never with the pedestrian load, without dynamic load allowance (3.2); distribution ${p.dfUser?'entered as '+fmt(p.dfVeh,3):'by the lever rule, '+fmt(p.lever,3)+' of the vehicle'+(p.mpf>1?' × 1.2 multiple presence = '+fmt(p.dfVeh,3):'')}.`:'No maintenance vehicle ('+(p.noVehicle?'vehicles kept off by permanent barriers':'clear deck under 7 ft')+').'} Strength I and Service II use the pedestrian load or the vehicle, whichever governs at each point; Strength II, IV and V are not required (3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency from a Rayleigh estimate with dead load only (all spans down, and alternate spans up and down; the lower governs) must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the weight of all girders' dead load (6). Fatigue for pedestrian bridges is wind-induced (3.5, AASHTO Signs) and is not checked; lateral frequency (1.3 Hz) and wind are outside a line-girder analysis.</li>`);
     out.push(`<li><b>Pedestrian load rating.</b> The Guide Specifications and the MBE give no pedestrian rating method. Ratings use the MBE LRFR factors (γLL ${fmt(+model.factors.gLinv,2)} inventory, ${fmt(+model.factors.gLop,2)} operating) with ${p.veh?'the '+p.veh+' maintenance vehicle as the rating load, and tons = RF × '+fmt(p.W/2,0)+' tons':'the 90 psf pedestrian load as the rating load'}.</li>`); }
   if(L.perm){ const P=L.perm;
-    out.push(`<li><b>Permit trucks, design.</b> Strength II with γLL ${fmt(P.gDesign,2)} (Table 3.4.1-1), each permit vehicle run in both directions with IM 33% and the design distribution factors${P.lane?', plus a 0.2 k/ft lane load for negative moment and for spans over 200 ft (MBE 6A.4.5.4.1)':''}. Service II with γLL 1.0 (MBE Table 6A.4.2.2-1). ${L.permit==='only'?'Permit only: the HL-93 checks, fatigue and live-load deflection are not run.':'Every criterion reports the larger of the design live load and the permit.'}</li>`);
-    out.push(`<li><b>Permit rating.</b> MBE 6A.4.5, RF = (φc φs φ R − γDC DC − γDW DW) / (γL (LL + IM)) with γDC ${fmt(+model.factors.gDC,2)} and γDW ${fmt(+model.factors.gDW,2)}. ${P.typeName}: γL ${fmt(P.gR,2)}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+' and each vehicle\'s GVW / axle length (the largest over the listed vehicles)':''}${P.type==='escorted'&&P.crawl?' (1.10 increased by 1.05 at crawl speed, MBE 6A.4.5.4.2c)':''}. ${P.single?'One lane loaded, with the 1.2 multiple presence factor divided out (6A.4.5.4.2b).':'Multi-lane distribution factors (6A.4.5.4.2a).'} IM ${P.crawl?'neglected at crawl speed (6A.4.5.5)':'33%'}. Service II rated with γL 1.0. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads.</li>`); }
+    out.push(`<li><b>Permit trucks, design.</b> Strength II with γLL ${fmt(P.gDesign,2)} (Table 3.4.1-1), each permit vehicle run in both directions with IM 33% and ${P.single?'one lane loaded with the 1.2 multiple presence factor removed, as a special permit crosses (MBE 6A.4.5.4.2b; LRFD 4.6.2.2.5 with no other traffic)':'the multi-lane distribution factors, as routine permits mix with traffic'}${P.lane?', plus a 0.2 k/ft lane load for negative moment and for spans over 200 ft (MBE 6A.4.5.4.1)':''}. Service II with γLL 1.0 (MBE Table 6A.4.2.2-1). ${L.permit==='only'?'Permit only: the HL-93 checks, fatigue and live-load deflection are not run.':'Every criterion reports the larger of the design live load and the permit.'}</li>`);
+    out.push(`<li><b>Permit rating.</b> MBE 6A.4.5, RF = (φc φs φ R − γDC DC − γDW DW) / (γL (LL + IM)) with γDC ${fmt(+model.factors.gDC,2)} and γDW ${fmt(+model.factors.gDW,2)}. ${P.typeName}: γL ${fmt(P.gR,2)}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+' and each vehicle\'s GVW / axle length (the largest over the listed vehicles)':''}${P.type==='escorted'&&P.crawl?' (1.10 increased by 1.05 at crawl speed, MBE 6A.4.5.4.2c)':''}. ${P.single?'One lane loaded, with the 1.2 multiple presence factor divided out (6A.4.5.4.2b).':'Multi-lane distribution factors (6A.4.5.4.2a).'} IM ${P.crawl?'neglected at crawl speed (6A.4.5.5)':Math.round(P.IMrate*100)+'%'}. Service II rated with γL 1.0. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads.</li>`); }
   return out;
 }
 function renderMethod(){
