@@ -85,6 +85,8 @@ textarea.braces{min-height:64px;font:12px var(--f-mono)}
 .minitable th{text-align:left;font-weight:500;color:var(--muted);padding:2px 3px;font-size:11px}
 .minitable td{padding:2px 3px}
 .minitable input,.minitable select{padding:4px 5px;font-size:12px}
+.fields.one{grid-template-columns:minmax(0,1fr)}
+.pv{border:1px solid var(--line);border-radius:6px;padding:8px;display:grid;gap:6px;margin:6px 0}.pvh{display:flex;gap:6px;align-items:center}.pvh input{flex:1;min-width:0}.pv input[data-k="w"],.pv input[data-k="s"]{font-family:var(--f-mono)}
 .sectbl{table-layout:fixed}.sectbl td.hint{font-size:11.5px;line-height:1.25;padding-right:6px}.sectbl th{font-size:10.5px;white-space:nowrap}
 .xbtn{padding:3px 7px;font-size:12px;line-height:1}
 .card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
@@ -111,6 +113,7 @@ textarea.braces{min-height:64px;font:12px var(--f-mono)}
 .bg-ok{background:var(--ok)}.bg-warn{background:var(--warn)}.bg-bad{background:var(--bad)}
 .verdict{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}
 .rf{border:1px solid var(--line);border-radius:8px;padding:12px 14px;display:flex;flex-direction:column;gap:2px;background:var(--bg)}
+.rf.ctrl{outline:2px solid var(--accent, currentColor);outline-offset:-2px}
 .rf .lbl{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--muted)}
 .rf .val{font-family:var(--f-display);font-size:1.9rem;font-weight:700;line-height:1;font-variant-numeric:tabular-nums}
 .rf .sub{font-size:12px;color:var(--muted)}
@@ -836,6 +839,64 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   function dfMoment1(S, L, ts, Kg) { return 0.06 + Math.pow(S / 14, 0.4) * Math.pow(S / L, 0.3) * Math.pow(Kg / (12 * L * ts ** 3), 0.1); }
   const MPF = n => (n <= 1 ? 1.2 : n === 2 ? 1.0 : n === 3 ? 0.85 : 0.65);
 
+  // ---------- live load options: HL-93, pedestrian bridges (AASHTO Guide Spec 2009 with 2015 interims), permit trucks ----------
+  const H_TRUCK = { H5: 10, H10: 20 }; // total weight W, kips; axles 0.2W and 0.8W at 14 ft (Guide Spec Fig. 3.2-1)
+  // parse "12, 20, 20" or "12 20 20" into numbers
+  const numList = v => String(v == null ? '' : v).split(/[\s,;]+/).filter(Boolean).map(Number);
+  // MBE Table 6A.4.5.4.2a-1: permit live load factor
+  function permitGamma(type, adtt, ratio) {
+    if (type === 'escorted') return 1.10;
+    if (type === 'single') return 1.20;
+    if (type === 'multi') return 1.40;
+    const col = ratio < 2 ? 0 : ratio <= 3 ? 1 : 2;
+    const rows = [[100, [1.30, 1.20, 1.15]], [1000, [1.35, 1.25, 1.20]], [5000, [1.40, 1.35, 1.30]]];
+    const a = Math.max(100, Math.min(5000, +adtt || 0));
+    for (let k = 0; k < rows.length - 1; k++) {
+      const [a0, g0] = rows[k], [a1, g1] = rows[k + 1];
+      if (a <= a1) return g0[col] + (g1[col] - g0[col]) * (a - a0) / (a1 - a0);
+    }
+    return rows[2][1][col];
+  }
+  const PERMIT_TYPES = { routine: 'Routine or annual permit, mixes with traffic', escorted: 'Special permit, single trip, escorted (no other vehicles)', single: 'Special permit, single trip, mixes with traffic', multi: 'Special permit, multiple trips (< 100), mixes with traffic' };
+  function liveOpts(m) {
+    const L = m.live || {}, d = m.df || {};
+    const out = { design: L.design === 'ped' ? 'ped' : 'hl93', permit: L.permit === 'include' || L.permit === 'only' ? L.permit : 'none' };
+    if (out.design === 'ped') {
+      const p = L.ped || {}, S = +d.S || 0, ext = d.girder === 'exterior', de = +d.de || 0;
+      const width = +p.width > 0 ? +p.width : (ext ? S / 2 + de : S);
+      const clear = +p.clear > 0 ? +p.clear : (+d.roadway > 0 ? +d.roadway : 0);
+      const veh = p.noVehicle ? null : (clear > 0 && clear < 7 ? null : clear > 0 && clear <= 10 ? 'H5' : 'H10');
+      // lever rule for one vehicle, 6 ft wheel gage, hinges at the adjacent girders: exterior wheel 2 ft from the rail face
+      const lever = ext ? [2 - de, 8 - de].reduce((a, xi) => a + (xi < S ? 0.5 * (S - xi) / S : 0), 0) : (S > 0 ? Math.max(0.5, (S - 3) / S) : 1);
+      const mpf = p.mpf === false ? 1 : 1.2;
+      const dfVeh = +p.dfVeh > 0 ? +p.dfVeh : lever * mpf;
+      out.ped = { width, w: 0.09 * width, clear, veh, W: veh ? H_TRUCK[veh] : 0, lever, mpf, dfVeh, dfUser: +p.dfVeh > 0, ext, noVehicle: !!p.noVehicle };
+    }
+    if (out.permit !== 'none') {
+      const P = L.permits || {};
+      const type = PERMIT_TYPES[P.type] ? P.type : 'routine';
+      const adtt = P.adtt != null && P.adtt !== '' ? +P.adtt : +((m.fatigue || {}).adtt) || 0;
+      const crawl = !!P.crawl && type !== 'routine';
+      const vehicles = (P.vehicles || []).map((v, k) => {
+        const w = numList(v.w), sp = numList(v.s), gvw = w.reduce((a, b) => a + b, 0), al = sp.reduce((a, b) => a + b, 0);
+        return { name: String(v.name || '').trim() || 'Permit ' + (k + 1), w, s: sp, gvw, al, ratio: al > 0 ? gvw / al : Infinity, g: permitGamma(type, adtt, al > 0 ? gvw / al : Infinity) };
+      });
+      const gR = vehicles.length ? Math.max(...vehicles.map(v => v.g)) * (type === 'escorted' && crawl ? 1.05 : 1) : 0;
+      out.perm = { vehicles, type, typeName: PERMIT_TYPES[type], adtt, crawl, lane: P.lane !== false, gDesign: +P.gDesign > 0 ? +P.gDesign : 1.35, gR, IMrate: crawl ? 0 : 0.33, single: type !== 'routine' };
+    }
+    return out;
+  }
+  // patterned uniform load on the adverse parts of an influence line (pedestrian load, permit lane load)
+  function uniformEnv(IL, h, w) { let lp = 0, ln = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; } return { max: lp * w * h, min: ln * w * h }; }
+  // one vehicle given by axle weights (k) and spacings (ft), run in both directions
+  function axleEnv(IL, h, w, sp) {
+    const st = v => Math.round(v / h);
+    const go = (ws, ss) => { const offs = [0]; ss.forEach(v => offs.push(offs[offs.length - 1] + st(v))); return movingF(IL, ws, offs); };
+    let mx = 0, mn = 0;
+    for (const f of [go(w, sp), go(w.slice().reverse(), sp.slice().reverse())]) for (let i = 0; i < f.length; i++) { if (f[i] > mx) mx = f[i]; if (f[i] < mn) mn = f[i]; }
+    return { max: mx, min: mn };
+  }
+
   // fatigue detail constants (Table 6.6.1.2.3-1 / 6.6.1.2.5-1, -3)
   const FAT = { A: [250e8, 24], B: [120e8, 16], "B'": [61e8, 12], C: [44e8, 10], "C'": [44e8, 12], D: [22e8, 7], E: [11e8, 4.5], "E'": [3.9e8, 2.6] };
   function fatigueResistance(cat, adttSL, n, life) {
@@ -897,6 +958,24 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
   // assemble stiffness for deflections (EI in k-ft²) and solve unit loads at given nodes
+  // nodal displacements [v0, θ0, v1, θ1, …] under nodal loads P (kips, downward +); ft and radians, downward negative
+  function staticDeflection(x, EI, supNodes, P) {
+    const nn = x.length, nd = 2 * nn;
+    const K = Array.from({ length: nd }, () => new Float64Array(nd));
+    for (let e = 0; e < nn - 1; e++) {
+      const L = x[e + 1] - x[e], c = EI[e] / L ** 3;
+      const k = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]];
+      const dof = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+      for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) K[dof[i]][dof[j]] += c * k[i][j];
+    }
+    const fixed = new Set(supNodes.map(i => 2 * i));
+    const free = []; for (let i = 0; i < nd; i++) if (!fixed.has(i)) free.push(i);
+    const A = free.map(i => Float64Array.from(free.map(j => K[i][j])));
+    const B = free.map(dof => Float64Array.of(dof % 2 === 0 ? -(P[dof / 2] || 0) : 0));
+    const X = solveDense(A, B);
+    const u = new Float64Array(nd); free.forEach((dof, r) => { u[dof] = X[r][0]; });
+    return u;
+  }
   function deflectionShapes(x, EI, supNodes, loadNodes) {
     const nn = x.length, nd = 2 * nn;
     const K = Array.from({ length: nd }, () => new Float64Array(nd));
@@ -995,6 +1074,20 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       ['Fyt', 'Fyw', 'Fyb', 'Ix', 'J', 'A', 'do', 'haunch'].forEach(k => { if (s[k] != null && s[k] !== '' && !(+s[k] >= 0)) errs.push(t + k + ' cannot be negative.'); });
     });
     (m.stiffeners || []).forEach(r => { if (!(+r.do > 0)) errs.push('Stiffener panel ' + r.from + '–' + r.to + ' ft needs a spacing greater than zero.'); });
+    const lv = m.live || {};
+    if (String(m.code && m.code.edition) !== 'LFD') {
+      if (lv.design === 'ped' && lv.ped) { const pd = lv.ped; ['width', 'clear', 'dfVeh'].forEach(k => { if (pd[k] != null && pd[k] !== '' && !(+pd[k] >= 0)) errs.push('Pedestrian ' + k + ' cannot be negative.'); }); }
+      if (lv.permit === 'include' || lv.permit === 'only') {
+        const vs = (lv.permits && lv.permits.vehicles) || [];
+        if (!vs.length) errs.push('Add at least one permit vehicle, or set Permit trucks to None.');
+        vs.forEach((v, k) => {
+          const nm = 'Permit vehicle ' + (String(v.name || '').trim() || k + 1) + ': ', w = numList(v.w), sp = numList(v.s);
+          if (!w.length || w.some(q => !(q > 0) || !isFinite(q))) errs.push(nm + 'axle weights must be numbers greater than zero.');
+          else if (sp.length !== w.length - 1) errs.push(nm + (w.length - 1) + ' axle spacing' + (w.length === 2 ? ' is' : 's are') + ' needed for ' + w.length + ' axles (got ' + sp.length + ').');
+          else if (sp.some(q => !(q > 0) || !isFinite(q))) errs.push(nm + 'axle spacings must be greater than zero.');
+        });
+      }
+    }
     if (errs.length) throw new Error('Input error. ' + errs.join(' '));
   }
 
@@ -1163,19 +1256,38 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     return { m, t0, ed, eta, phiF, phiV, spans, supX, Ltot, N, deck, Fy, braces, stf, stiffPos, pc, pourList, x, nn, ne, nodeAt, secById, props, secAt, eSec, supNodes, EI1, EI3, EIn, sh1, sh3, shn, selfW, swF, wSW, wDC1, dc1, dc2, dw, uni, cl, clr, h, ng, xg, Rg, spanOf, dfT, nearIdx, IM, IMf };
   }
 
-  function run(m) {
-    const ed0 = String(m.code && m.code.edition);
-    if (ed0 === 'LFD') return runLFD(m);
-    const ed = ed0 === '9' ? 9 : 10;
-    const ctx = prepare(m, ed);
+  // one live load case through every LRFD check. llc: { kind: 'hl93' | 'ped' | 'H' | 'permit', name, gS (strength γLL),
+  // gSv (Service II γLL), limS (strength limit-state name), rate: {inv, op, sInv, sOp} (rating γLL; default the model's factors) }
+  function runCase(m, ed, ctx, llc) {
     const { t0, eta, phiF, phiV, spans, supX, Ltot, N, deck, Fy, braces, stf, stiffPos, pc, pourList, x, nn, ne, nodeAt, secById, props, secAt, eSec, supNodes, EI1, EI3, EIn, sh1, sh3, shn, selfW, swF, wSW, wDC1, dc1, dc2, dw, uni, cl, clr, h, ng, xg, Rg, spanOf, dfT, nearIdx, IM, IMf } = ctx;
     const fat = m.fatigue || {};
     const lanesTruck = +fat.lanes || 2;
     const pFac = lanesTruck <= 1 ? 1.0 : lanesTruck === 2 ? 0.85 : 0.80;
-    const adttSL = (+fat.adtt || 0) * pFac;
+    const adttSL = llc.kind === 'hl93' ? (+fat.adtt || 0) * pFac : 0; // fatigue only with HL-93 (pedestrian bridges: Guide Spec 3.5)
     const life = +fat.life || 75;
 
     const pois = [], dfSpan = [];
+    // live load envelope at a point, per lane (HL-93, permit) or per girder (pedestrian, maintenance vehicle)
+    const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
+    const llEnv = (IL, neg, si, forShear) => {
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
+      const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
+      if (llc.kind === 'ped' || llc.kind === 'H') {
+        const pd = llc.ped;
+        if (llc.kind === 'ped') { const u = uniformEnv(IL, h, pd.w); take(u.max, u.min, 'PL 90 psf'); }
+        if (pd.veh) { const t = axleEnv(IL, h, [0.2 * pd.W, 0.8 * pd.W], [14]); take(t.max * pd.dfVeh, t.min * pd.dfVeh, pd.veh); }
+        return out;
+      }
+      if (llc.kind === 'permit') {
+        // MBE 6A.4.5.4.1: 0.2 klf lane load with the permit for negative moment in continuous spans and for spans over 200 ft
+        const ln = llc.lane ? uniformEnv(IL, h, 0.2) : null, long = spans[si] > 200;
+        const lMax = ln && long ? ln.max : 0, lMin = ln && (long || (!forShear && spans.length > 1)) ? ln.min : 0;
+        llc.vehicles.forEach(v => { const t = axleEnv(IL, h, v.w, v.s); take(t.max * (1 + llc.IM) + lMax, t.min * (1 + llc.IM) + lMin, v.name); });
+        return out;
+      }
+      return NONE;
+    };
     const KgSpan = spans.map((L, si) => {
       let sum = 0;
       for (let e = 0; e < ne; e++) { const a = Math.max(x[e], supX[si]), b = Math.min(x[e + 1], supX[si + 1]); if (b > a) { const P = props[eSec[e]]; sum += deck.n * (P.s.I + P.s.A * P.eg ** 2) * (b - a); } }
@@ -1185,14 +1297,15 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const s = x[i];
       const { IMl, IVl, IVr } = influenceAt(ctx, s);
       const neg = uni.M[i] < -1e-9;
-      const Lm = vehEnvelope(IMl, h, 'hl93', IM, neg);
-      const Lvl = i > 0 ? vehEnvelope(IVl, h, 'hl93', IM, false) : { max: 0, min: 0 };
-      const Lvr = i < nn - 1 ? vehEnvelope(IVr, h, 'hl93', IM, false) : { max: 0, min: 0 };
-      const Fm = vehEnvelope(IMl, h, 'fatigue', IMf);
-      const Fvl = i > 0 ? vehEnvelope(IVl, h, 'fatigue', IMf) : { max: 0, min: 0 };
-      const Fvr = i < nn - 1 ? vehEnvelope(IVr, h, 'fatigue', IMf) : { max: 0, min: 0 };
-
       const si = spanOf(s), frac = (s - supX[si]) / spans[si];
+      const Lm = llEnv(IMl, neg, si, false);
+      const Lvl = i > 0 ? llEnv(IVl, false, si, true) : { max: 0, min: 0 };
+      const Lvr = i < nn - 1 ? llEnv(IVr, false, si, true) : { max: 0, min: 0 };
+      const hasF = adttSL > 0;
+      const Fm = hasF ? vehEnvelope(IMl, h, 'fatigue', IMf) : NONE;
+      const Fvl = hasF && i > 0 ? vehEnvelope(IVl, h, 'fatigue', IMf) : { max: 0, min: 0 };
+      const Fvr = hasF && i < nn - 1 ? vehEnvelope(IVr, h, 'fatigue', IMf) : { max: 0, min: 0 };
+
       const adj = []; if (i > 0) adj.push(eSec[i - 1]); if (i < ne && !adj.includes(eSec[i])) adj.push(eSec[i]);
       let Ldf = spans[si];
       if (neg && spans.length > 1) { let best = 1, bd = Infinity; for (let k = 1; k < supX.length - 1; k++) { const d = Math.abs(supX[k] - s); if (d < bd) { bd = d; best = k; } } Ldf = (spans[best - 1] + spans[best]) / 2; }
@@ -1212,6 +1325,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         if (dfT.MF && dfT.MF.length === dfT.x.length && !(+fat.dfM > 0)) DFmF = dfT.MF[k];
         if (dfT.VF && dfT.VF.length === dfT.x.length && !(+fat.dfV > 0)) DFvF = dfT.VF[k];
       }
+      if (llc.kind === 'ped' || llc.kind === 'H') { DFm = 1; DFv = 1; } // envelope is already per girder
+      else if (llc.kind === 'permit' && llc.single) { DFm = DFmF; DFv = DFvF; } // MBE 6A.4.5.4.2b: one lane, multiple presence removed
       // stress cycles per truck passage (Table 6.6.1.2.5-2 / -1)
       let nCyc = 1.0;
       if (spans.length > 1) for (let k = 1; k < supX.length - 1; k++) { const near = Math.max(0.1 * spans[k - 1], 0.1 * spans[k]); if (Math.abs(s - supX[k]) <= Math.min(0.1 * (s < supX[k] ? spans[k - 1] : spans[k]), near) + 1e-6) nCyc = 1.5; }
@@ -1230,7 +1345,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // ---- live-load deflection (optional, 2.5.2.6.2)
     const dset = m.deflection || {};
     let deflection = null;
-    if (dset.on !== false) {
+    if (llc.kind === 'hl93' && dset.on !== false) {
       const loadNodes = [];
       spans.forEach((L, i) => { for (let q = 0.3; q <= 0.701; q += 0.05) loadNodes.push(nodeAt(supX[i] + q * L)); });
       const uniq = [...new Set(loadNodes)];
@@ -1247,6 +1362,36 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
       deflection.forEach(d => { d.ratio = d.delta / d.limit; d.dfD = dfD; });
+    }
+    // ---- pedestrian bridges: deflection under unfactored pedestrian load ≤ L/360 (Guide Spec 5); vertical frequency (Guide Spec 6)
+    let vibration = null;
+    if (llc.kind === 'ped') {
+      const loadNodes = [];
+      spans.forEach((L, i) => { for (let q = 0.3; q <= 0.701; q += 0.05) loadNodes.push(nodeAt(supX[i] + q * L)); });
+      const uniq = [...new Set(loadNodes)];
+      const EIk = eSec.map(id => ES * props[id].sn.I / 144);
+      const U = deflectionShapes(x, EIk, supNodes, uniq);
+      deflection = spans.map((L, si) => ({ span: si + 1, L, delta: 0, x: 0, limit: L * 12 / 360, kind: 'PL' }));
+      uniq.forEach((nd, k) => {
+        const IL = new Float64Array(ng); let e = 0;
+        for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; }
+        const dd = uniformEnv(IL, h, llc.ped.w).max, si = spanOf(x[nd]);
+        if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
+      });
+      deflection.forEach(d => { d.ratio = d.delta / d.limit; d.dfD = 1; });
+      // Rayleigh estimate from dead-load deflected shapes (all spans down, and alternate spans up/down); the lower governs
+      const wAdd = (+m.loads.dc2 || 0) + (+m.loads.dw || 0);
+      const Pn = new Float64Array(nn); for (let e = 0; e < ne; e++) { const half = (wDC1[e] + wAdd) * (x[e + 1] - x[e]) / 2; Pn[e] += half; Pn[e + 1] += half; }
+      const freq = alt => {
+        const sg = new Float64Array(nn); for (let i = 0; i < nn; i++) sg[i] = alt && spanOf(x[i]) % 2 ? -1 : 1;
+        const u = staticDeflection(x, EIk, supNodes, Array.from(Pn, (v, i) => v * sg[i]));
+        let a = 0, b = 0; for (let i = 0; i < nn; i++) { const d = u[2 * i]; a += Pn[i] * d * sg[i]; b += Pn[i] * d * d; }
+        return b > 0 ? Math.sqrt(32.174 * Math.abs(a) / b) / (2 * Math.PI) : Infinity;
+      };
+      const f1 = freq(false), f2 = spans.length > 1 ? freq(true) : Infinity, f = Math.min(f1, f2);
+      const Ng = Math.max(1, Math.round(+m.df.Ng || 0)) || 4;
+      const Wg = Pn.reduce((a, v) => a + v, 0), W = Wg * Ng, Wreq = 180 * Math.exp(-0.35 * f);
+      vibration = { f, fAll: f1, fAlt: f2, Wg, Ng, W, Wreq, fmin: 3.0, ratio: Math.min(3.0 / f, Wreq / W), ok: f > 3.0 || W >= Wreq };
     }
 
     // ---- deck placement sequence (6.10.3.4.1): staged stiffness, locked-in DC1
@@ -1265,7 +1410,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     });
     // design demand with max/min permanent factors chosen to be adverse (3.4.1), η applied (1.3.2)
     const gp = (v, gmax, gmin) => (v >= 0 ? gmax : gmin);
-    const strengthDemand = (D, L) => eta * (gp(D.DC, 1.25, 0.9) * D.DC + gp(D.DW, 1.5, 0.65) * D.DW + 1.75 * L);
+    const strengthDemand = (D, L) => eta * (gp(D.DC, 1.25, 0.9) * D.DC + gp(D.DW, 1.5, 0.65) * D.DW + llc.gS * L);
 
     // ---- unbraced segments
     const segs = unbracedSegments(ctx);
@@ -1361,7 +1506,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         const st = compStress(P, p, 'bot', p.LLneg, S);
         const D = { DC: -st.DC, DW: -st.DW }, L = -st.LL; // compression positive
         const f = strengthDemand(D, L);
-        const M = eta * (gp(-(p.MDC1 + p.MDC2), 1.25, 0.9) * (p.MDC1 + p.MDC2) + gp(-p.MDW, 1.5, 0.65) * p.MDW + 1.75 * p.LLneg);
+        const M = eta * (gp(-(p.MDC1 + p.MDC2), 1.25, 0.9) * (p.MDC1 + p.MDC2) + gp(-p.MDW, 1.5, 0.65) * p.MDW + llc.gS * p.LLneg);
         return { i, f, M, P, id, Rb: P.Rb, Rh: P.RhNeg, Fyc: P.F.b, Fyw: P.F.w, rt: P.rtNeg, S: P.sr.Sbot };
       })));
     }
@@ -1601,7 +1746,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         // ======== Service II permanent deformations (6.10.4.2.2) — η = 1.0
         for (const [LL, sign] of [[p.LLpos, '+'], [p.LLneg, '−']]) {
           const top = compStress(P, p, 'top', LL, SV), bot = compStress(P, p, 'bot', LL, SV);
-          const fT = top.DC + top.DW + 1.3 * top.LL, fB = bot.DC + bot.DW + 1.3 * bot.LL;
+          const fT = top.DC + top.DW + llc.gSv * top.LL, fB = bot.DC + bot.DW + llc.gSv * bot.LL;
           const Rh = LL >= 0 ? P.RhPos : P.RhNeg;
           [['top', top, fT, P.F.t, fB], ['bottom', bot, fB, P.F.b, fT]].forEach(([nm, c, ff, Fyf, fo]) => {
             if (Math.abs(c.LL) < 1e-9) return;
@@ -1768,13 +1913,18 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // φcφs ≥ 0.85 (6A.4.2.1-3); φs = 1.0 for shear (C6A.4.2.4)
     const F = m.factors, phiC = +F.phiC || 1, phiS = +F.phiS || 1;
     const phiFlex = Math.max(0.85, phiC * phiS), phiShear = Math.max(0.85, phiC);
+    const RT = llc.rate || { inv: +F.gLinv, op: +F.gLop, sInv: +F.gSinv, sOp: +F.gSop };
     allChecks.forEach(c => {
+      // the live load case behind every check
+      if (c.lim === 'Strength I' && llc.limS && c.cat !== 'ductility') c.lim = llc.limS;
+      if (c.lim === 'Strength I' || c.lim === llc.limS) c.gLL = llc.gS; else if (c.lim === 'Service II') c.gLL = llc.gSv;
+      c.llName = llc.name;
       if (!c.rating) return;
       const r = c.rating;
       const cap = r.service ? r.cap : (c.cat === 'shear' ? phiShear : phiFlex) * r.cap;
       const gDC = r.service ? 1.0 : +F.gDC, gDW = r.service ? 1.0 : +F.gDW;
       const num = cap - (gDC * r.DC + gDW * r.DW);
-      const gi = r.service ? +F.gSinv : +F.gLinv, go = r.service ? +F.gSop : +F.gLop;
+      const gi = r.service ? RT.sInv : RT.inv, go = r.service ? RT.sOp : RT.op;
       c.RFinv = r.L > 1e-9 ? num / (gi * r.L) : Infinity;
       c.RFop = r.L > 1e-9 ? num / (go * r.L) : Infinity;
       // display only: an RF above 10 where γL(LL+IM) < 0.1% of the resistance is shown as N/A;
@@ -1806,12 +1956,63 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const rmin = (pred, key) => allChecks.filter(c => c.rating && pred(c) && !Number.isNaN(c[key]) && c[key] !== Infinity).reduce((a, c) => (!a || c[key] < a[key] ? c : a), null);
     const rating = {
       flexure: rmin(c => c.cat === 'flexure', 'RFinv'), shear: rmin(c => c.cat === 'shear', 'RFinv'),
-      strength: rmin(c => c.lim === 'Strength I', 'RFinv'), service: rmin(c => c.lim === 'Service II' && c.rating, 'RFinv'),
-      strengthOp: rmin(c => c.lim === 'Strength I', 'RFop'), serviceOp: rmin(c => c.lim === 'Service II' && c.rating, 'RFop')
+      strength: rmin(c => c.lim === (llc.limS || 'Strength I'), 'RFinv'), service: rmin(c => c.lim === 'Service II' && c.rating, 'RFinv'),
+      strengthOp: rmin(c => c.lim === (llc.limS || 'Strength I'), 'RFop'), serviceOp: rmin(c => c.lim === 'Service II' && c.rating, 'RFop')
     };
     const secTable = m.sections.map(s => ({ id: s.id, name: s.name, P: props[s.id] }));
     return { ed, eta, x, supX, pois, checks: allChecks, summary, rating, deflection, proportions, secTable, braces, segs: segRes.map(r => ({ a: r.sg.a, b: r.sg.b, Lb: r.sg.Lb / 12, strength: r.strength, consTop: r.consTop, consBot: r.consBot })),
-      wSW, eSec, adttSL, dfSpan, pour, flOn, warnings: collectWarnings(), ms: Date.now() - t0 };
+      wSW, eSec, adttSL, dfSpan, pour, flOn, vibration, llc, warnings: collectWarnings(), ms: Date.now() - t0 };
+  }
+
+  // LRFD run: the design live load (HL-93 or pedestrian), plus permit trucks under Strength II when asked
+  function run(m) {
+    const ed0 = String(m.code && m.code.edition);
+    if (ed0 === 'LFD') return runLFD(m);
+    const ed = ed0 === '9' ? 9 : 10;
+    const ctx = prepare(m, ed);
+    const L = liveOpts(m);
+    const keyOf = c => [c.i, c.sec, c.lim, c.what, c.stage || ''].join('|');
+    const pedLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, gSv: 1.3, ped: L.ped } : null;
+    const designLL = pedLL || { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 };
+    let base = null;
+    if (L.permit !== 'only') base = runCase(m, ed, ctx, designLL);
+    // pedestrian bridges are rated for the maintenance vehicle (or the pedestrian load where vehicles are kept off)
+    if (base && L.ped) {
+      base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
+      if (L.ped.veh) {
+        const hr = runCase(m, ed, ctx, { kind: 'H', name: L.ped.veh, gS: 1.75, gSv: 1.3, ped: L.ped });
+        const map = new Map(hr.checks.map(c => [keyOf(c), c]));
+        base.checks.forEach(c => { const q = map.get(keyOf(c)); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
+        base.rating = hr.rating;
+      }
+    }
+    if (L.permit !== 'none') {
+      const P = L.perm;
+      const pl = { kind: 'permit', name: 'Permit', gS: P.gDesign, gSv: 1.0, limS: 'Strength II', vehicles: P.vehicles, lane: P.lane, IM: 0.33, single: false,
+        rate: { inv: P.gR, op: P.gR, sInv: 1.0, sOp: 1.0 } };
+      const pd = runCase(m, ed, ctx, pl);
+      // special permits are rated with one lane loaded (multiple presence removed) and, at crawl speed, without impact
+      const pr = P.single || P.crawl ? runCase(m, ed, ctx, Object.assign({}, pl, { single: P.single, IM: P.IMrate })) : pd;
+      const rmap = new Map(pr.checks.map(c => [keyOf(c), c]));
+      const pc = pd.checks.filter(c => c.lim === 'Strength II' || c.lim === 'Service II');
+      pc.forEach(c => { c.permit = true; const q = rmap.get(keyOf(c)); c.RFp = q ? q.RFinv : undefined; c.rfNAp = q ? q.rfNA : false; c.ratingP = q ? q.rating : null; delete c.RFinv; delete c.RFop; });
+      const rmin = pred => pc.filter(c => pred(c) && c.RFp != null && !Number.isNaN(c.RFp) && c.RFp !== Infinity).reduce((a, c) => (!a || c.RFp < a.RFp ? c : a), null);
+      const permit = { opts: P, strength: rmin(c => c.lim === 'Strength II'), service: rmin(c => c.lim === 'Service II') };
+      if (!base) { base = pd; base.checks = pd.checks.filter(c => !c.rating || c.permit); base.rating = {}; }
+      else { base.checks = base.checks.concat(pc); pc.forEach(c => { const q = base.pois[c.i]; if (q && q.checks && q.i === c.i) q.checks.push(c); }); }
+      base.permit = permit;
+      base.ms = Date.now() - ctx.t0;
+    }
+    base.live = L;
+    // headline values across every live load case
+    ['flexure', 'shear', 'fatigue', 'service', 'construct', 'ductility'].forEach(k => { const cs = base.checks.filter(c => c.cat === k && !Number.isNaN(c.ratio)); base.summary[k] = cs.length ? cs.reduce((a, c) => (c.ratio > a.ratio ? c : a)) : null; });
+    // controlling rating factor across the design-load (or maintenance vehicle) rating and the permit rating
+    const cands = [], R = base.rating || {};
+    if (R.strength) cands.push({ v: R.strength.RFinv, what: 'Inventory, ' + R.strength.lim, c: R.strength });
+    if (R.service) cands.push({ v: R.service.RFinv, what: 'Inventory, Service II', c: R.service });
+    if (base.permit) { const pp = base.permit; if (pp.strength) cands.push({ v: pp.strength.RFp, what: 'Permit, Strength II', c: pp.strength, permit: true }); if (pp.service) cands.push({ v: pp.service.RFp, what: 'Permit, Service II', c: pp.service, permit: true }); }
+    base.controlling = cands.length ? cands.reduce((a, q) => (q.v < a.v ? q : a)) : null;
+    return base;
   }
 
   // =====================================================================================
@@ -2554,7 +2755,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
 
-  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES };
+  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LGCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -2891,9 +3092,9 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
 
   // ---------------- MathCAD-style derivations ----------------
   // load factors on DC and DW: maximum or minimum (Table 3.4.1-2), whichever reproduces the engine's demand
-  function pickG(eta, DC, DW, LL, target) {
+  function pickG(eta, DC, DW, LL, target, gL = 1.75) {
     let best = [gpS(DC, 1.25, 0.9), gpS(DW, 1.5, 0.65)], bd = Infinity;
-    for (const a of [1.25, 0.9]) for (const b of [1.5, 0.65]) { const v = eta * (a * DC + b * DW + 1.75 * LL), d = Math.abs(Math.abs(v) - Math.abs(target)); if (d < bd - 1e-9) { bd = d; best = [a, b]; } }
+    for (const a of [1.25, 0.9]) for (const b of [1.5, 0.65]) { const v = eta * (a * DC + b * DW + gL * LL), d = Math.abs(Math.abs(v) - Math.abs(target)); if (d < bd - 1e-9) { bd = d; best = [a, b]; } }
     return best;
   }
   function demandLines(c, res, lines) {
@@ -2901,28 +3102,30 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const sym = u === 'k-ft' ? 'M' : u === 'k' ? 'V' : 'f';
     const D = u === 'k-ft' ? 'M_{u}' : u === 'k' ? 'V_{u}' : 'f_{bu}';
     let val = null;
+    const gL = c.gLL != null ? c.gLL : 1.75, gLs = fn(gL, 2).replace(/0$/, ''), gV = c.gLL != null ? c.gLL : 1.3, gVs = fn(gV, 2).replace(/0$/, '').replace(/\.0$/, '.0');
+    const tbl = c.permit ? 'Table 3.4.1-1, Strength II' : '3.4.1-1';
     if (!LFD && (k.t === 'posCompact' || k.t === 'negFlange' || k.t === 'shear')) {
       const eta = k.eta != null ? k.eta : res.eta;
       if (k.t === 'posCompact') {
-        const DC = cp.DC1 + cp.DC2; let [gDC, gDW] = pickG(eta, DC, cp.DW, cp.LL, c.demand - (k.flT || 0));
-        val = eta * (gDC * DC + gDW * cp.DW + 1.75 * cp.LL);
-        lines.push({ lhs: 'M_{u}', expr: 'η[γ_{DC}(M_{DC1} + M_{DC2}) + γ_{DW}M_{DW} + 1.75M_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC1) + ' + ' + sigF(cp.DC2) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + 1.75(' + sigF(cp.LL) + ')]', res: fx(val, 0), unit: 'k-ft', ref: '3.4.1-1' });
+        const DC = cp.DC1 + cp.DC2; let [gDC, gDW] = pickG(eta, DC, cp.DW, cp.LL, c.demand - (k.flT || 0), gL);
+        val = eta * (gDC * DC + gDW * cp.DW + gL * cp.LL);
+        lines.push({ lhs: 'M_{u}', expr: 'η[γ_{DC}(M_{DC1} + M_{DC2}) + γ_{DW}M_{DW} + ' + gLs + 'M_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC1) + ' + ' + sigF(cp.DC2) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + ' + gLs + '(' + sigF(cp.LL) + ')]', res: fx(val, 0), unit: 'k-ft', ref: tbl });
         if (k.flT) { lines.push({ lhs: 'M_{u} + f_{ℓ}S_{xt}/3', sub: fx(val, 0) + ' + ' + fx(k.flT, 0), res: fx(val + k.flT, 0), unit: 'k-ft', ref: '6.10.7.1.1-1' }); val += k.flT; }
       } else {
-        const [gDC, gDW] = pickG(eta, cp.DC, cp.DW, cp.LL, c.demand - (k.fl3 || 0)), L = cp.LL;
-        val = eta * (gDC * cp.DC + gDW * cp.DW + 1.75 * L);
+        const [gDC, gDW] = pickG(eta, cp.DC, cp.DW, cp.LL, c.demand - (k.fl3 || 0), gL), L = cp.LL;
+        val = eta * (gDC * cp.DC + gDW * cp.DW + gL * L);
         const s = k.t === 'shear' ? 'V' : 'f';
-        lines.push({ lhs: k.t === 'shear' ? 'V_{u}' : 'f_{bu}', expr: 'η[γ_{DC}' + s + '_{DC} + γ_{DW}' + s + '_{DW} + 1.75' + s + '_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + 1.75(' + sigF(L) + ')]', res: fx(val, dU(u)), unit: u, ref: '3.4.1-1' });
+        lines.push({ lhs: k.t === 'shear' ? 'V_{u}' : 'f_{bu}', expr: 'η[γ_{DC}' + s + '_{DC} + γ_{DW}' + s + '_{DW} + ' + gLs + s + '_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + ' + gLs + '(' + sigF(L) + ')]', res: fx(val, dU(u)), unit: u, ref: tbl });
         if (k.fl3) { lines.push({ lhs: 'f_{bu} + f_{ℓ}/3', sub: fx(val, 2) + ' + ' + fx(k.fl3, 2), res: fx(val + k.fl3, 2), unit: 'ksi', ref: '6.10.8.1.1-1' }); val += k.fl3; }
       }
     } else if (!LFD && k.t === 'svc2') {
-      val = cp.DC + cp.DW + 1.3 * cp.LL;
-      lines.push({ lhs: 'f_{f}', expr: 'f_{DC} + f_{DW} + 1.3f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + 1.3(' + sigF(cp.LL) + ')', res: fx(Math.abs(val), 2), unit: 'ksi', ref: 'Table 3.4.1-1' });
+      val = cp.DC + cp.DW + gV * cp.LL;
+      lines.push({ lhs: 'f_{f}', expr: 'f_{DC} + f_{DW} + ' + gVs + 'f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + ' + gVs + '(' + sigF(cp.LL) + ')', res: fx(Math.abs(val), 2), unit: 'ksi', ref: c.permit ? 'MBE Table 6A.4.2.2-1, permit' : 'Table 3.4.1-1' });
       val = Math.abs(val);
       if (k.fl2) { lines.push({ lhs: 'f_{f} + f_{ℓ}/2', sub: fx(val, 2) + ' + ' + fx(k.fl2, 2), res: fx(val + k.fl2, 2), unit: 'ksi', ref: '6.10.4.2.2-2' }); val += k.fl2; }
     } else if (!LFD && k.t === 'webBB' && k.comps) {
-      val = cp.DC + cp.DW + 1.3 * cp.LL;
-      lines.push({ lhs: 'f_{c}', expr: 'f_{DC} + f_{DW} + 1.3f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + 1.3(' + sigF(cp.LL) + ')', res: fx(val, 2), unit: 'ksi', ref: 'Table 3.4.1-1', note: null });
+      val = cp.DC + cp.DW + gV * cp.LL;
+      lines.push({ lhs: 'f_{c}', expr: 'f_{DC} + f_{DW} + ' + gVs + 'f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + ' + gVs + '(' + sigF(cp.LL) + ')', res: fx(val, 2), unit: 'ksi', ref: c.permit ? 'MBE Table 6A.4.2.2-1, permit' : 'Table 3.4.1-1', note: null });
     } else if (!LFD && k.t === 'webShearFat') {
       const a1 = Math.abs(k.VD + 1.75 * k.FV[0]), a2 = Math.abs(k.VD + 1.75 * k.FV[1]), FV = a1 >= a2 ? k.FV[0] : k.FV[1];
       val = Math.max(a1, a2);
@@ -3067,6 +3270,16 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
   }
 
   function ratingLines(c, res, model, lines) {
+    if (c.permit && c.ratingP && isFinite(c.RFp) && res.permit) {
+      const r = c.ratingP, P = res.permit.opts, F = model.factors || {}, phiC = +F.phiC || 1, phiS = +F.phiS || 1;
+      const pf = r.service ? 1 : (c.cat === 'shear' ? Math.max(0.85, phiC) : Math.max(0.85, phiC * phiS));
+      const gDC = r.service ? 1 : +F.gDC, gDW = r.service ? 1 : +F.gDW, g = r.service ? 1.0 : P.gR;
+      const num = pf * r.cap - gDC * r.DC - gDW * r.DW, RF = num / (g * r.L);
+      lines.push({ note: 'Permit load rating at this check (MBE 6A.4.5): ' + P.typeName + (P.single ? ', one lane loaded, multiple presence removed' : '') + (P.crawl ? ', crawl speed (no impact)' : '') });
+      if (close(RF, c.RFp, 0.003)) lines.push({ lhs: 'RF_{permit}', expr: '\\f{' + (r.service ? 'f_{R}' : 'φ_{c}φ_{s}φR_{n}') + ' − γ_{DC}DC − γ_{DW}DW}{γ_{L}(LL+IM)}', sub: '\\f{' + (r.service ? '' : fn(pf, 2) + '×') + sigF(r.cap) + ' − ' + fn(gDC, 2) + '(' + sigF(r.DC) + ') − ' + fn(gDW, 2) + '(' + sigF(r.DW) + ')}{' + fn(g, 2) + '(' + sigF(r.L) + ')}', res: fn(RF, 2), ref: r.service ? 'MBE 6A.6.4.2.2' : 'MBE Table 6A.4.5.4.2a-1' });
+      else lines.push({ lhs: 'RF_{permit}', res: frf(c.RFp, c.rfNAp), ref: 'MBE 6A.4.5' });
+      return;
+    }
     if (!c.rating || !isFinite(c.RFinv)) return;
     const r = c.rating, LFD = res.ed === 'LFD';
     lines.push({ note: 'Load rating at this check' });
@@ -3186,13 +3399,14 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.space(10);
     // ---- headline results
     const S = res.summary, CATS = LFD ? [['flexure', 'Flexure, Group I'], ['shear', 'Shear, Group I'], ['service', 'Overload (10.57)'], ['fatigue', 'Fatigue (10.3)'], ['construct', 'Constructibility (10.61)'], ['ductility', 'Ductility'], ['deflection', 'Live-load deflection'], ['proportions', 'Proportion limits']]
-      : [['flexure', 'Flexure, Strength I'], ['shear', 'Shear, Strength I'], ['service', 'Service II'], ['fatigue', 'Fatigue'], ['construct', 'Constructibility'], ['ductility', 'Ductility'], ['deflection', 'Live-load deflection'], ['proportions', 'Proportion limits']];
+      : [['flexure', 'Flexure'], ['shear', 'Shear'], ['service', 'Service II'], ['fatigue', 'Fatigue'], ['construct', 'Constructibility'], ['ductility', 'Ductility'], ['deflection', res.deflection && res.deflection[0] && res.deflection[0].kind === 'PL' ? 'Pedestrian deflection' : 'Live-load deflection'], ['proportions', 'Proportion limits']].concat(res.vibration ? [['vibration', 'Vibration']] : []);
     const rows = [];
     CATS.forEach(([k, lbl]) => {
+      if (k === 'vibration') { const v = res.vibration; const arr = [lbl, 'Vertical frequency (dead load only), ' + fn(v.Ng, 0) + ' girders, W = ' + fx(v.W, 0) + ' k', '—', '—', fn(v.f, 2) + ' Hz', v.f > 3 ? '> 3.0 Hz' : 'W ≥ ' + fx(v.Wreq, 0) + ' k', { t: fr(v.ratio), f: 'B', color: rCol(v.ratio) }, 'Guide Spec 6']; arr.ratio = v.ratio; rows.push(arr); return; }
       const s = S[k]; if (!s) return; const push = arr => { arr.ratio = s.ratio; rows.push(arr); };
-      if (k === 'deflection') { push([lbl, 'Span ' + s.span, '—', '—', fx(s.delta, 3) + ' in.', fx(s.limit, 3) + ' in.', { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, LFD ? '10.6.2' : '2.5.2.6.2']); return; }
+      if (k === 'deflection') { push([lbl, 'Span ' + s.span + (s.kind === 'PL' ? ', pedestrian load, L/360' : ''), '—', '—', fx(s.delta, 3) + ' in.', fx(s.limit, 3) + ' in.', { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, LFD ? '10.6.2' : s.kind === 'PL' ? 'Guide Spec 5' : '2.5.2.6.2']); return; }
       if (k === 'proportions') { const it = s.items.reduce((a, q) => (q.ratio > a.ratio ? q : a)); push([lbl, it.what, '—', s.sec, typeof it.val === 'number' ? fx(it.val, 2) : it.val, typeof it.lim === 'number' ? fx(it.lim, 2) : it.lim, { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, it.art]); return; }
-      push([lbl, s.lim + ': ' + s.what, 'Pt ' + s.label + ', ' + fx(s.x, 2), s.sec, fx(s.demand, dU(s.unit)) + ' ' + s.unit, fx(s.cap, dU(s.unit)) + ' ' + s.unit, { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, s.art]);
+      push([lbl, s.lim + (s.permit ? ' (permit)' : '') + ': ' + s.what, 'Pt ' + s.label + ', ' + fx(s.x, 2), s.sec, fx(s.demand, dU(s.unit)) + ' ' + s.unit, fx(s.cap, dU(s.unit)) + ' ' + s.unit, { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, s.art]);
     });
     const nOver = rows.filter(r => r.ratio > 1 + 1e-9).length;
     const worstR = rows.reduce((a, r) => Math.max(a, r.ratio), 0);
@@ -3202,14 +3416,22 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : 'All design criteria satisfied; highest ratio ' + hiTxt + '.', { font: 'B', size: 10, color: nOver ? RED : GRN });
     F.table([{ h: 'Criterion', w: 2.1 }, { h: 'Governing check', w: 3.4 }, { h: 'Location, ft', w: 1.2 }, { h: 'Sec', w: 0.6 }, { h: 'Demand', w: 1.3, a: 'r' }, { h: 'Capacity', w: 1.3, a: 'r' }, { h: 'Ratio', w: 0.8, a: 'r' }, { h: 'Article', w: 1.2 }], rows);
     // rating
-    const R = res.rating;
-    if (R.strength) {
-      const rr = [];
-      const row = (lbl, c, key, tons) => { if (!c) return; rr.push([lbl, c.what, 'Pt ' + c.label + ', ' + fx(c.x, 2), c.sec, { t: frf(c[key]), f: 'B', color: rfCol(c[key]) }].concat(LFD ? [tons ? fx(c[key] * tons, 1) : '—'] : [])); };
+    const R = res.rating || {};
+    if (R.strength || res.permit) {
+      const rr = [], RL = res.ratingLoad, PM = res.permit;
+      const row = (lbl, c, key, tons) => { if (!c) return; rr.push([lbl, c.what, 'Pt ' + c.label + ', ' + fx(c.x, 2), c.sec, { t: frf(c[key]), f: 'B', color: rfCol(c[key]) }, tons ? fx(c[key] * tons, 1) : '—']); };
       if (LFD) { row('Inventory, Group I', R.strength, 'RFinv', R.tons); row('Operating, Group I', R.strengthOp, 'RFop', R.tons); row('Inventory, overload', R.service, 'RFinv', R.tons); row('Operating, overload', R.serviceOp, 'RFop', R.tons); }
-      else { row('Inventory, Strength I', R.strength, 'RFinv'); row('Operating, Strength I', R.strengthOp, 'RFop'); row('Inventory, Service II', R.service, 'RFinv'); row('Operating, Service II', R.serviceOp, 'RFop'); }
-      F.h3(LFD ? 'Load factor rating (MBE 6B), ' + R.vehicle + ', ' + fx(R.tons, 0) + ' tons' : 'Design load rating (MBE LRFR), HL-93');
-      F.table([{ h: 'Rating level', w: 2 }, { h: 'Governing check', w: 3.6 }, { h: 'Location, ft', w: 1.3 }, { h: 'Sec', w: 0.6 }, { h: 'RF', w: 0.8, a: 'r' }].concat(LFD ? [{ h: 'Tons', w: 1, a: 'r' }] : []), rr);
+      else {
+        const T = RL && RL.tons;
+        row('Inventory, Strength I', R.strength, 'RFinv', T); row('Operating, Strength I', R.strengthOp, 'RFop', T); row('Inventory, Service II', R.service, 'RFinv', T); row('Operating, Service II', R.serviceOp, 'RFop', T);
+        if (PM) { row('Permit, Strength II', PM.strength, 'RFp'); row('Permit, Service II', PM.service, 'RFp'); }
+      }
+      const hasT = LFD || (RL && RL.tons);
+      if (!LFD && !hasT) rr.forEach(r => r.length = 5);
+      F.h3(LFD ? 'Load factor rating (MBE 6B), ' + R.vehicle + ', ' + fx(R.tons, 0) + ' tons'
+        : (res.live && res.live.permit === 'only' ? 'Permit load rating (MBE 6A.4.5)' : (RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'Design load rating (MBE LRFR), HL-93') + (PM ? '; permit rating (MBE 6A.4.5)' : '')));
+      F.table([{ h: 'Rating level', w: 2 }, { h: 'Governing check', w: 3.6 }, { h: 'Location, ft', w: 1.3 }, { h: 'Sec', w: 0.6 }, { h: 'RF', w: 0.8, a: 'r' }].concat(hasT ? [{ h: 'Tons', w: 1, a: 'r' }] : []), rr);
+      if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ', ' + res.controlling.c.what + ' at x = ' + fx(res.controlling.c.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : '33%') + '.', { size: 8.6 });
     }
     // warnings
     if (res.warnings && res.warnings.length) { F.h3('Warnings'); F.bullets(res.warnings.map(w => w.kind + ': ' + w.text), { color: AMB }); }
@@ -3228,8 +3450,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         if (ld.haunchAuto) { const ws = LGCheck.haunchWeights(model).map(h => h.w), lo = Math.min(...ws), hi = Math.max(...ws);
           parts.push('haunch × top flange width = ' + (hi - lo < 1e-9 ? fn(lo, 3) : fn(lo, 3) + ' to ' + fn(hi, 3)) + ' k/ft'); }
         return parts.length ? 'DC1 ' + parts.join(' + ') + ' + ' + fn(+ld.dc1 || 0, 3) + ' k/ft additional' : 'DC1 ' + fn(+ld.dc1 || 0, 3) + ' k/ft'; })() + (ld.selfWeight !== false ? ' + steel self weight' : '') + ', DC2 ' + fn(+ld.dc2 || 0, 3) + ', DW ' + fn(+ld.dw || 0, 3) + ' k/ft'],
-      ['Live load', LFD ? (R.vehicle || 'HS20') + ' truck or lane, impact per 3.8.2' : 'HL-93, IM 33%; fatigue truck IM 15%'],
-      ['Fatigue traffic', (model.fatigue && model.fatigue.adtt ? 'ADTT ' + model.fatigue.adtt + (LFD ? ', case ' + res.fatigueCase : ', (ADTT)SL ' + fx(res.adttSL, 0)) : 'not checked')],
+      ['Live load', LFD ? (R.vehicle || 'HS20') + ' truck or lane, impact per 3.8.2' : (() => { const L = res.live || {}, out = [];
+        if (L.permit !== 'only') out.push(L.ped ? 'Pedestrian bridge (AASHTO Guide Spec 2009, 2015 interims): 90 psf × ' + fn(L.ped.width, 2) + ' ft = ' + fn(L.ped.w, 3) + ' k/ft' + (L.ped.veh ? '; ' + L.ped.veh + ' maintenance vehicle alone, distribution ' + fn(L.ped.dfVeh, 3) : '; no maintenance vehicle') + '; no impact' : 'HL-93, IM 33%; fatigue truck IM 15%');
+        if (L.perm) out.push('Permit (Strength II, γLL ' + fn(L.perm.gDesign, 2) + ', IM 33%): ' + L.perm.vehicles.map(v => v.name + ' ' + v.w.join('-') + ' k at ' + v.s.join('-') + ' ft').join('; ') + (L.perm.lane ? '; 0.2 k/ft lane for negative moment and spans over 200 ft' : ''));
+        return out.join('. '); })()],
+      ['Fatigue traffic', res.live && res.live.ped ? 'not checked: pedestrian bridge (Guide Spec 3.5)' : res.live && res.live.permit === 'only' ? 'not checked: permit only' : (model.fatigue && model.fatigue.adtt ? 'ADTT ' + model.fatigue.adtt + (LFD ? ', case ' + res.fatigueCase : ', (ADTT)SL ' + fx(res.adttSL, 0)) : 'not checked')],
       ['Cross-frames', (res.braces || []).length + ' locations'],
       ['Sections', res.secTable.map(t => t.id).join(', ')],
       ['Rating factors', LFD ? 'A1 = ' + R.factors.A1 + ', A2 = ' + R.factors.A2inv + ' / ' + R.factors.A2op : 'φc = ' + ((model.factors || {}).phiC || 1) + ', φs = ' + ((model.factors || {}).phiS || 1) + ', γDC = ' + ((model.factors || {}).gDC) + ', γDW = ' + ((model.factors || {}).gDW)],
@@ -3745,7 +3970,8 @@ const baseCommon={
  construction:{cl:0},
  deflection:{on:true,NL:3,Ng:5,ratio:800},
  factors:{gDC:1.25,gDW:1.50,gLinv:1.75,gLop:1.35,gSinv:1.30,gSop:1.00,phiC:1.0,phiS:1.0},
- options:{limit13My:true,serviceUncracked:false,appendixA6:true}, mesh:0
+ options:{limit13My:true,serviceUncracked:false,appendixA6:true}, mesh:0,
+ live:{design:'hl93',permit:'none',ped:{width:null,clear:null,dfVeh:null,noVehicle:false,mpf:true},permits:{type:'routine',adtt:null,crawl:false,lane:true,gDesign:1.35,vehicles:[]}}
 };
 const EXAMPLES={
  mdx:()=>structuredClone(window.LG_EXAMPLES.mdx),
@@ -3780,6 +4006,8 @@ function migrate(m){
   if(!hadDeckOpt) m.loads.deckAuto=false;
   if(!hadHaunchOpt) m.loads.haunchAuto=false;
   if(m.Fy==null) m.Fy=50;
+  m.live=Object.assign({},b.live,m.live||{}); m.live.ped=Object.assign({},b.live.ped,m.live.ped||{}); m.live.permits=Object.assign({},b.live.permits,m.live.permits||{});
+  if(!Array.isArray(m.live.permits.vehicles)) m.live.permits.vehicles=[];
   if(!Array.isArray(m.stiffeners)) m.stiffeners=[];
   if(!Array.isArray(m.pour.pours)) m.pour.pours=[];
   return m;
@@ -3799,7 +4027,15 @@ const SEC_COLORS=['#7b8f88','#5f86b8','#b98a3e','#8a6fb0','#4f9e8a','#b0605f'];
 const edName=e=>String(e)==='LFD'?'Standard Specifications 17th Edition (2002), Load Factor Design':String(e)==='9'?'AASHTO LRFD 9th Edition (2020)':'AASHTO LRFD 10th Edition (2024)';
 const isLFD=()=>String(model.code.edition)==='LFD';
 const resLFD=()=>res&&res.ed==='LFD';
-const limStr=()=>resLFD()?'Group I':'Strength I', limSvc=()=>resLFD()?'Overload':'Service II', llName=()=>resLFD()?res.labels.vehicle:'HL-93';
+const limStr=()=>resLFD()?'Group I':'Strength I', limSvc=()=>resLFD()?'Overload':'Service II';
+const resLive=()=>(res&&!resLFD()&&res.live)||{design:'hl93',permit:'none'};
+const llName=()=>{ if(resLFD()) return res.labels.vehicle; const L=resLive(); if(L.permit==='only') return 'Permit'; return L.ped?'PL'+(L.ped.veh?' / '+L.ped.veh:''):'HL-93'; };
+// one line describing the live loads behind the results
+function liveText(L){
+  const a=L.ped?'pedestrian load 90 psf'+(L.ped.veh?' or the '+L.ped.veh+' maintenance vehicle':'')+' (Guide Spec 2009/2015)':'HL-93';
+  const pv=L.perm?L.perm.vehicles.map(v=>v.name).join(', '):'';
+  return L.permit==='only'?'permit trucks only ('+pv+')':L.permit==='include'?a+', plus permit trucks ('+pv+') under Strength II':a;
+}
 const CATS_LFD=[
  {k:'flexure',lbl:'Flexure',sub:'Group I',color:'var(--c-flex)'},
  {k:'shear',lbl:'Shear',sub:'Group I',color:'var(--c-shear)'},
@@ -3809,7 +4045,7 @@ const CATS_LFD=[
  {k:'deflection',lbl:'Live-load deflection',sub:'10.6'},
  {k:'ductility',lbl:'Ductility',sub:'Dp/D′ ≤ 5'},
  {k:'proportions',lbl:'Proportion limits',sub:'10.48, 10.49'}];
-const cats=()=>resLFD()?CATS_LFD:CATS;
+const cats=()=>resLFD()?CATS_LFD:(res&&res.vibration?CATS.concat([{k:'vibration',lbl:'Vibration',sub:'Guide Spec 6'}]):CATS);
 const CATS=[
  {k:'flexure',lbl:'Flexure',sub:'Strength I',color:'var(--c-flex)'},
  {k:'shear',lbl:'Shear',sub:'Strength I',color:'var(--c-shear)'},
@@ -3828,6 +4064,61 @@ function field(path,label,unit,attrs=''){
 function check(path,label){ return `<label class="chk"><input type="checkbox" id="in-${path}" data-path="${path}" data-kind="bool" ${get(path)?'checked':''}> ${label}</label>`; }
 function sel(path,label,opts){ const v=String(get(path)??''); return `<label class="f">${label}<select id="in-${path}" data-path="${path}" data-kind="text">${opts.map(([o,t])=>`<option value="${o}" ${String(o)===v?'selected':''}>${t}</option>`).join('')}</select></label>`; }
 function get(path){return path.split('.').reduce((o,k)=>o==null?o:o[k],model);}
+// ---------- live load panel: HL-93 or pedestrian, and permit trucks ----------
+const PERMIT_OPTS=[['routine','Routine or annual (mixes with traffic)'],['escorted','Special, single trip, escorted'],['single','Special, single trip, mixes with traffic'],['multi','Special, multiple trips (< 100)']];
+function liveInfo(){ try { return LGCheck.liveOpts(model); } catch(e){ return {design:'hl93',permit:'none'}; } }
+function liveHint(){
+  const L=liveInfo(), out=[];
+  if(L.ped){ const p=L.ped;
+    out.push(`Pedestrian load 90 psf × ${fmt(p.width,2)} ft = ${fmt(p.w,3)} k/ft on this girder, patterned for the maximum effect, no impact (Guide Spec 3.1).`);
+    out.push(p.veh?`Maintenance vehicle ${p.veh} (clear deck ${p.clear>0?fmt(p.clear,1)+' ft':'not given'}): ${fmt(0.2*p.W,0)} k and ${fmt(0.8*p.W,0)} k axles at 14 ft, alone, no impact; distribution ${p.dfUser?fmt(p.dfVeh,3)+' (entered)':'lever rule '+fmt(p.lever,3)+(p.mpf>1?' × 1.2 = '+fmt(p.dfVeh,3):'')} (Guide Spec 3.2). Rated for the ${p.veh}.`
+      :(p.noVehicle?'Vehicles are kept off by permanent barriers: no maintenance vehicle; rated for the pedestrian load.':'Clear deck width under 7 ft: no maintenance vehicle; rated for the pedestrian load.'));
+    out.push('Deflection under the pedestrian load ≤ L/360 and vertical frequency > 3.0 Hz (Guide Spec 5 and 6). Fatigue is wind-induced for pedestrian bridges (Guide Spec 3.5) and is not checked here.'); }
+  if(L.perm){ const P=L.perm, n=P.vehicles.length;
+    out.push(`Permit design: Strength II, γLL ${fmt(P.gDesign,2)}, IM 33%, the design distribution factors; Service II with γLL 1.0.`);
+    out.push(`Permit rating (MBE 6A.4.5): γL ${n?fmt(P.gR,2):'–'}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+(n>1?', largest of the vehicles':''):(P.type==='escorted'&&P.crawl?' (1.10 × 1.05 at crawl speed)':'')}${P.single?', one lane loaded with the 1.2 multiple presence factor removed':', multi-lane distribution'}, IM ${P.crawl?'0 (crawl speed)':'33%'}.`+(P.lane?' 0.2 k/ft lane load added for negative moment and for spans over 200 ft.':''));
+    if(n) out.push(P.vehicles.map(v=>`${v.name}: ${fmt(v.gvw,1)} k on ${fmt(v.al,1)} ft${isFinite(v.ratio)?' (GVW/AL '+fmt(v.ratio,2)+')':''}`).join('; ')+'.'); }
+  return out;
+}
+// update the live load hint and the placeholders that show what a blank input uses, without redrawing the panel
+function refreshLive(){
+  const info=liveInfo(), ph=info.ped;
+  if($('liveHint')) $('liveHint').innerHTML=liveHint().map(esc).join('<br>');
+  if(ph){ const w=$('in-live.ped.width'), d=$('in-live.ped.dfVeh'), c=$('in-live.ped.clear');
+    if(w) w.placeholder=`${ph.ext?'S/2 + de':'S'} (${fmt(ph.ext?(+model.df.S||0)/2+(+model.df.de||0):+model.df.S||0,2)})`;
+    if(d) d.placeholder=`lever rule (${fmt(ph.lever*ph.mpf,3)})`;
+    if(c) c.placeholder=+model.df.roadway>0?'roadway ('+model.df.roadway+')':'over 10 ft'; }
+  const a=$('in-live.permits.adtt'); if(a) a.placeholder=`${model.fatigue.adtt||0} (fatigue)`;
+}
+function liveGroup(){
+  const L=model.live, ped=L.design==='ped', pm=L.permit!=='none', P=L.permits, info=liveInfo();
+  const vRows=P.vehicles.map((v,i)=>`<div class="pv"><div class="pvh"><input data-pv="${i}" data-k="name" value="${esc(v.name||'')}" aria-label="Permit vehicle ${i+1} name" placeholder="Permit ${i+1} name"><button class="xbtn" data-delpv="${i}" aria-label="Delete permit vehicle">×</button></div>
+    <label class="f">Axle weights, front to rear <span class="u">k</span><input data-pv="${i}" data-k="w" value="${esc(v.w||'')}" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="12, 20, 20"></label>
+    <label class="f">Axle spacings <span class="u">ft</span><input data-pv="${i}" data-k="s" value="${esc(v.s||'')}" inputmode="decimal" autocomplete="off" spellcheck="false" placeholder="14, 4.5"></label></div>`).join('');
+  const ph=info.ped||{};
+  return `<details class="grp" open><summary>Live load</summary><div class="gbody">
+    <div class="fields one">
+      ${sel('live.design','Design live load',[['hl93','HL-93 vehicular'],['ped','Pedestrian bridge (Guide Spec 2009/2015)']])}
+      ${sel('live.permit','Permit trucks',[['none','None'],['include','Include with the design live load'],['only','Permit only']])}
+    </div>
+    ${ped?`<div class="fields">
+      ${field('live.ped.width','Pedestrian width on this girder','ft',`placeholder="${ph.ext?'S/2 + de':'S'} (${fmt(ph.ext?(+model.df.S||0)/2+(+model.df.de||0):+model.df.S||0,2)})"`)}
+      ${field('live.ped.clear','Clear deck width (H5 or H10)','ft',`placeholder="${+model.df.roadway>0?'roadway ('+model.df.roadway+')':'over 10 ft'}"`)}
+      ${field('live.ped.dfVeh','Vehicle distribution factor','',`placeholder="lever rule (${fmt((ph.lever||0)*(ph.mpf||1),3)})"`)}<span></span>
+    </div>${check('live.ped.noVehicle','Vehicles kept off by permanent physical barriers (no maintenance vehicle)')}
+    ${check('live.ped.mpf','Apply the 1.2 single-lane multiple presence factor to the vehicle (3.6.1.1.2)')}`:''}
+    ${pm?`<p class="hint" style="margin:6px 0 2px">Permit vehicles: axle weights in kips and the spacings between them in ft, front to rear (each is also run reversed).</p>
+    ${vRows}
+    <div class="toolbar"><button id="addPermit">Add permit vehicle</button></div>
+    <div class="fields one">${sel('live.permits.type','Permit type, for rating',PERMIT_OPTS)}</div>
+    <div class="fields">
+      ${field('live.permits.gDesign','γLL, Strength II design','')}
+      ${P.type==='routine'?field('live.permits.adtt','ADTT, one direction','',`placeholder="${model.fatigue.adtt||0} (fatigue)"`):'<span></span>'}
+    </div>${P.type!=='routine'?check('live.permits.crawl','Crawl speed, 10 mph or less (rating without impact)'):''}
+    ${check('live.permits.lane','Add 0.2 k/ft lane load for negative moment and spans over 200 ft (MBE 6A.4.5.4.1)')}`:''}
+    ${ped||pm?`<p class="hint" id="liveHint">${liveHint().map(esc).join('<br>')}</p>`:''}
+  </div></details>`;
+}
 function dc1Label(){ const l=model.loads;
   if(!l.deckAuto&&!l.haunchAuto) return l.selfWeight?'DC1 added (deck, haunch, forms)':'DC1 total, incl. steel';
   const what=[!l.deckAuto&&'deck',!l.haunchAuto&&'haunch','forms','other concrete'].filter(Boolean).join(', ');
@@ -3903,6 +4194,7 @@ function renderRail(){
     ${check('options.serviceUncracked','Service II: uncracked composite section in negative flexure (6.10.4.2.1)')}
     <p class="hint">η applies to the Strength I design checks. Load ratings use MBE factors without η.</p>`}
   </div></details>
+  ${LFD?'':liveGroup()}
   <details class="grp" open><summary>Spans</summary><div class="gbody">
     <div class="fields">${spanRows}</div>
     <div class="toolbar"><button id="addSpan">Add span</button><span class="status">Total ${fmt(model.spans.reduce((a,b)=>a+ +b,0),1)} ft</span></div>
@@ -4070,15 +4362,18 @@ function onRailInput(ev){
       const w=haunchRange(model).lo;
       model.loads.dc1=+Math.max(0,(+model.loads.dc1||0)+(t.checked?-w:w)).toFixed(6);
     }
-    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(t.dataset.path==='deck.btrib'&&t.value.trim()===''?null:nv())));
+    const blankNull=['deck.btrib','live.ped.width','live.ped.clear','live.ped.dfVeh','live.permits.adtt','live.permits.gDesign'].includes(t.dataset.path);
+    set(t.dataset.path, k==='bool'?t.checked:(k==='text'?t.value:(blankNull&&t.value.trim()===''?null:nv())));
+    if((t.dataset.path.startsWith('live.')||t.dataset.path.startsWith('df.')||t.dataset.path==='fatigue.adtt')&&$('liveHint')) refreshLive();
     if(t.dataset.path==='code.edition') syncEdition();
     if(['deck.ts','deck.beff','deck.btrib','deck.haunch','loads.wc'].includes(t.dataset.path)){
       if($('deckHint')) $('deckHint').textContent=deckHint();
       if(t.dataset.path==='deck.beff'&&$('in-deck.btrib')) $('in-deck.btrib').placeholder=`= effective (${model.deck.beff})`;
     }
-    if(['code.edition','loads.selfWeight','loads.deckAuto','loads.haunchAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode'].includes(t.dataset.path)) renderRail();
+    if(['code.edition','loads.selfWeight','loads.deckAuto','loads.haunchAuto','df.girder','flb.on','flb.bracket','pour.on','lfd.composite','lfd.vehicle','lfd.cbMode','live.design','live.permit','live.permits.type','live.ped.noVehicle','live.ped.mpf'].includes(t.dataset.path)) renderRail();
   }
   else if(t.dataset.span!=null){ model.spans[+t.dataset.span]=nv(); }
+  else if(t.dataset.pv!=null){ const v=model.live.permits.vehicles[+t.dataset.pv]; if(v) v[t.dataset.k]=t.value; refreshLive(); }
   else if(t.dataset.sec!=null){
     const s=model.sections[+t.dataset.sec], k=t.dataset.k;
     if(k==='id'){ const old=s.id; s.id=t.value.trim()||old; model.ranges.forEach(r=>{if(r.sec===old)r.sec=s.id;}); }
@@ -4102,6 +4397,8 @@ function onRailClick(ev){
   else if(t.id==='addRng'){ const last=model.ranges[model.ranges.length-1]; model.ranges.push({from:last?last.to:0,to:L,sec:model.sections[0].id}); }
   else if(t.dataset.delrng!=null){ model.ranges.splice(+t.dataset.delrng,1); }
   else if(t.id==='suggestPours'){ if(!res) return; model.pour.pours=suggestPours(); }
+  else if(t.id==='addPermit'){ model.live.permits.vehicles.push({name:'',w:'',s:''}); }
+  else if(t.dataset.delpv!=null){ model.live.permits.vehicles.splice(+t.dataset.delpv,1); }
   else return;
   renderRail(); schedule();
 }
@@ -4147,7 +4444,8 @@ function applyLabels(){
   document.querySelectorAll('.lblSvc').forEach(e=>e.textContent=limSvc());
   document.querySelectorAll('.lblStr').forEach(e=>e.textContent=limStr());
   document.querySelectorAll('.lblLL').forEach(e=>e.textContent=llName());
-  $('ratingStatus').textContent=L?`MBE LFR (6B), ${res.labels.vehicle}, ${fmt(res.rating.tons,0)} tons`:'MBE LRFR, HL-93 design load';
+  { const LV=resLive(), RL=res.ratingLoad;
+    $('ratingStatus').textContent=L?`MBE LFR (6B), ${res.labels.vehicle}, ${fmt(res.rating.tons,0)} tons`:LV.permit==='only'?'MBE 6A.4.5 permit rating':(RL?'MBE LRFR factors, '+RL.name:'MBE LRFR, HL-93 design load')+(LV.permit==='include'?' · permit rating, MBE 6A.4.5':''); }
   $('dfHead').textContent=L?'Wheel-load distribution, 3.23':'Live-load distribution factors, 4.6.2.2';
   $('plHead').textContent=L?'Proportion limits, 10.48 and 10.49':'Cross-section proportion limits, 6.10.2';
   $('segHead').textContent=L?'Unbraced lengths, Cb per 10.48.4.1 (Group I, bottom flange)':'Unbraced lengths, bottom flange in negative flexure';
@@ -4158,8 +4456,10 @@ function renderAll(){ applyLabels(); renderRatios(); renderVerdict(); renderElev
 
 // ---------- headline ratios ----------
 function catValue(r,k){
+  if(k==='vibration'){ const v=r.vibration; return v?{ratio:v.ratio, x:null, art:'Guide Spec 6', what:'Vertical frequency', lim:'Service I',
+    where:v.f>3?`f = ${fmt(v.f,2)} Hz > 3.0 Hz (dead load, ${v.Ng} girders, W = ${fmt(v.W,0)} k)`:`f = ${fmt(v.f,2)} Hz ≤ 3.0 Hz; W = ${fmt(v.W,0)} k ${v.W>=v.Wreq?'≥':'<'} 180e^(−0.35f) = ${fmt(v.Wreq,0)} k`}:null; }
   const s=r.summary[k]; if(!s) return null;
-  if(k==='deflection') return {ratio:s.ratio, x:s.x, where:`Span ${s.span} · δ = ${fmt(s.delta,2)} in. vs L/${model.deflection.ratio||800} = ${fmt(s.limit,2)} in.`, art:r.ed==='LFD'?'10.6.2':'2.5.2.6.2', what:r.ed==='LFD'?'L + I deflection':'LL + IM deflection'};
+  if(k==='deflection'){ const pl=s.kind==='PL'; return {ratio:s.ratio, x:s.x, where:`Span ${s.span} · δ = ${fmt(s.delta,2)} in. vs L/${pl?360:(model.deflection.ratio||800)} = ${fmt(s.limit,2)} in.`, art:r.ed==='LFD'?'10.6.2':pl?'Guide Spec 5':'2.5.2.6.2', what:r.ed==='LFD'?'L + I deflection':pl?'Pedestrian load deflection':'LL + IM deflection', lim:pl?'Service I, pedestrian load':null}; }
   if(k==='proportions'){ const it=s.items.reduce((a,q)=>q.ratio>a.ratio?q:a); return {ratio:s.ratio, x:null, where:`Section ${s.sec} · ${it.what}`, art:it.art, what:it.what}; }
   return {ratio:s.ratio, x:s.x, i:s.i, where:`${s.what} · Pt ${s.label} (x = ${fmt(s.x,1)} ft) · ${s.sec}`, art:s.art, what:s.what, lim:s.lim, c:s};
 }
@@ -4167,20 +4467,22 @@ function renderRatios(){
   let nOver=0, worst=null;
   const tiles=cats().map(C=>{
     const v=catValue(res,C.k);
-    if(C.k==='deflection'&&!model.deflection.on) return `<div class="pr na"><div class="top"><span class="lbl">${C.lbl}</span></div><div class="val">off</div><span class="sub">Optional criterion; turn on under Constructibility and deflection.</span></div>`;
-    if(!v) return `<div class="pr na"><div class="top"><span class="lbl">${C.lbl}</span></div><div class="val">—</div><span class="sub">${C.k==='fatigue'&&!(+model.fatigue.adtt>0)?'Enter ADTT to check fatigue.':'Not applicable.'}</span></div>`;
+    if(C.k==='deflection'&&!model.deflection.on&&!(res.deflection&&res.deflection[0]&&res.deflection[0].kind==='PL')) return `<div class="pr na"><div class="top"><span class="lbl">${C.lbl}</span></div><div class="val">off</div><span class="sub">Optional criterion; turn on under Constructibility and deflection.</span></div>`;
+    const LV=resLive();
+    const naWhy=C.k==='fatigue'&&LV.ped?'Pedestrian bridges: fatigue is wind-induced (Guide Spec 3.5) and is not checked here.':C.k==='fatigue'&&LV.permit==='only'?'Permit only: no fatigue truck.':C.k==='deflection'&&LV.permit==='only'?'Permit only: no deflection criterion.':C.k==='fatigue'&&!(+model.fatigue.adtt>0)?'Enter ADTT to check fatigue.':'Not applicable.';
+    if(!v) return `<div class="pr na"><div class="top"><span class="lbl">${C.lbl}</span></div><div class="val">—</div><span class="sub">${naWhy}</span></div>`;
     if(v.ratio>1+1e-9) nOver++;
     if(!worst||v.ratio>worst.ratio) worst={...v,C};
     const w=Math.min(v.ratio,1.5)/1.5*100;
     return `<button class="pr" data-x="${v.x??''}" data-i="${v.i??''}"><div class="top"><span class="lbl">${C.lbl}</span><span class="art">${esc(v.art)}</span></div>
       <div class="val ${rClass(v.ratio)}">${fmt(v.ratio,2)}<small>${rLabel(v.ratio)}</small></div>
       <div class="meter" aria-hidden="true"><i class="bg-${rClass(v.ratio)}" style="width:${w.toFixed(1)}%"></i><s style="left:${(100/1.5).toFixed(2)}%"></s></div>
-      <span class="sub">${esc(v.lim?v.lim+' · ':(C.sub+' · '))}${esc(v.where)}</span></button>`;
+      <span class="sub">${esc(v.lim?v.lim+(v.c&&v.c.permit?', permit':'')+' · ':(C.sub+' · '))}${esc(v.where)}</span></button>`;
   });
   $('ratios').innerHTML=tiles.join('');
   $('overall').innerHTML = nOver
-    ? `<b class="bad">${nOver} of ${cats().length} criteria exceed 1.0</b><span class="status">Worst: ${worst.C.lbl.toLowerCase()} ${fmt(worst.ratio,2)}. Checked to ${edName(res.ed)}.</span>`
-    : `<b class="ok">All design checks satisfied</b><span class="status">Highest ratio ${fmt(worst?worst.ratio:0,2)} (${worst?worst.C.lbl.toLowerCase():''}). Checked to ${edName(res.ed)}.</span>`;
+    ? `<b class="bad">${nOver} of ${cats().length} criteria exceed 1.0</b><span class="status">Worst: ${worst.C.lbl.toLowerCase()} ${fmt(worst.ratio,2)}${worst.c&&worst.c.permit?' (permit)':''}. Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`
+    : `<b class="ok">All design checks satisfied</b><span class="status">Highest ratio ${fmt(worst?worst.ratio:0,2)} (${worst?worst.C.lbl.toLowerCase():''}${worst&&worst.c&&worst.c.permit?', permit':''}). Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`;
 }
 
 function renderVerdict(){
@@ -4196,12 +4498,15 @@ function renderVerdict(){
     ) : '<p class="hint">No results.</p>';
     return;
   }
-  $('verdict').innerHTML = R.strength ? (
-    tile('Inventory, Strength I',R.strength,'RFinv',()=>'HL-93 rating factor')+
-    tile('Operating, Strength I',R.strengthOp,'RFop',()=>'HL-93 rating factor')+
-    tile('Inventory, Service II',R.service,'RFinv')+
-    tile('Operating, Service II',R.serviceOp,'RFop')
-  ) : '<p class="hint">No results.</p>';
+  const LV=resLive(), RL=res.ratingLoad, PM=res.permit;
+  const who=RL?(RL.tons?c=>`${RL.veh} rating factor · ${fmt(c.RFinv*RL.tons,1)} tons`:()=>'Pedestrian load rating factor'):()=>'HL-93 rating factor';
+  const whoOp=RL&&RL.tons?c=>`${RL.veh} rating factor · ${fmt(c.RFop*RL.tons,1)} tons`:who;
+  let h='';
+  if(LV.permit!=='only') h+= R.strength ? (tile('Inventory, Strength I',R.strength,'RFinv',who)+tile('Operating, Strength I',R.strengthOp,'RFop',whoOp)+tile('Inventory, Service II',R.service,'RFinv')+tile('Operating, Service II',R.serviceOp,'RFop')) : '';
+  if(PM){ const P=PM.opts, g=`γL ${fmt(P.gR,2)} · ${P.typeName}`;
+    h+=tile('Permit, Strength II',PM.strength,'RFp',()=>g)+tile('Permit, Service II',PM.service,'RFp',()=>'γL 1.0 · '+P.typeName); }
+  if(PM&&res.controlling){ const C=res.controlling; h=`<div class="rf ctrl"><span class="lbl">Controlling rating factor</span><span class="val ${rfClass(C.v)}">${fmt(C.v,2)}</span><span class="sub">${esc(C.what)} · ${esc(C.c.what)} · Pt ${C.c.label} (x = ${fmt(C.c.x,1)} ft)</span></div>`+h; }
+  $('verdict').innerHTML = h || '<p class="hint">No results.</p>';
 }
 
 // ---------- charts ----------
@@ -4266,7 +4571,7 @@ function chart(el, series, opts){
   }
 }
 const catMaxAt=(p,k)=>{ let m=NaN; p.checks.forEach(c=>{ if(c.cat===k&&!Number.isNaN(c.ratio)&&!(c.ratio<=m)) m=c.ratio; }); return m; };
-const rfMinAt=(p,pred,key='RFinv')=>{ let m=NaN; p.checks.forEach(c=>{ if(pred(c)&&!c.rfNA&&c[key]!=null&&!Number.isNaN(c[key])&&c[key]!==Infinity&&!(c[key]>=m)) m=c[key]; }); return m; };
+const rfMinAt=(p,pred,key='RFinv')=>{ let m=NaN; p.checks.forEach(c=>{ if(pred(c)&&!(key==='RFp'?c.rfNAp:c.rfNA)&&c[key]!=null&&!Number.isNaN(c[key])&&c[key]!==Infinity&&!(c[key]>=m)) m=c[key]; }); return m; };
 function renderCharts(){
   const P=res.pois;
   const RC=['flexure','shear','fatigue','service','construct'];
@@ -4289,7 +4594,8 @@ function renderCharts(){
     xs.push(p.x); vd.push(p.VDC1[side]+p.VDC2[side]+p.VDW[side]); vp.push(p.VLL[side][0]); vn.push(p.VLL[side][1]); }});
   chart($('chV'),[{x:xs,y:vd,color:'var(--dc)'},{x:xs,y:vp,color:'var(--ll-pos)'},{x:xs,y:vn,color:'var(--ll-neg)'}],{yl:'kip',aria:'Shear envelope',
     tip:i=>{const p=P[i]; return `<div class="r"><span>DC + DW, left / right</span><b>${fmt(p.VDC1[0]+p.VDC2[0]+p.VDW[0],1)} / ${fmt(p.VDC1[1]+p.VDC2[1]+p.VDW[1],1)}</b></div><div class="r"><span>${llName()} max</span><b>${fmt(Math.max(p.VLL[0][0],p.VLL[1][0]),1)}</b></div><div class="r"><span>${llName()} min</span><b>${fmt(Math.min(p.VLL[0][1],p.VLL[1][1]),1)}</b></div>`;}});
-  const rfF=P.map(p=>rfMinAt(p,c=>c.cat==='flexure')), rfV=P.map(p=>rfMinAt(p,c=>c.cat==='shear')), rfS=P.map(p=>rfMinAt(p,c=>c.lim===limSvc()));
+  const rk=resLive().permit==='only'?'RFp':'RFinv';
+  const rfF=P.map(p=>rfMinAt(p,c=>c.cat==='flexure',rk)), rfV=P.map(p=>rfMinAt(p,c=>c.cat==='shear',rk)), rfS=P.map(p=>rfMinAt(p,c=>c.lim===limSvc(),rk));
   chart($('chRF'),[{y:rfS,color:'var(--c-svc)',dash:'4 3',w:1.6},{y:rfV,color:'var(--c-shear)'},{y:rfF,color:'var(--c-flex)',w:2.2}],{yl:'RF inventory',aria:'Rating factor along girder',ymin:0,ymax:4,yfloor:4,ref:1,refLabel:'RF 1.0',nt:4,h:230,
     tip:i=>`<div class="r"><span>Flexure</span><b>${fmt(rfF[i],2)}</b></div><div class="r"><span>Shear</span><b>${fmt(rfV[i],2)}</b></div><div class="r"><span>${limSvc()}</span><b>${fmt(rfS[i],2)}</b></div>`});
 }
@@ -4554,11 +4860,23 @@ function renderMethodLFD(){
    `<li>This is an independent implementation for design study and checking. Verify governing results against your approved rating software before use.</li>`
   ].join('');
 }
+// method notes for the pedestrian and permit live loads, when used
+function liveNotes(){
+  const L=resLive(), out=[];
+  if(L.ped){ const p=L.ped;
+    out.push(`<li><b>Pedestrian bridge.</b> AASHTO LRFD Guide Specifications for the Design of Pedestrian Bridges (2009, with the 2015 interim revisions). Pedestrian load 90 psf over ${fmt(p.width,2)} ft = ${fmt(p.w,3)} k/ft on this girder, placed on the adverse parts of each influence line, without dynamic load allowance (3.1). ${p.veh?`Maintenance vehicle ${p.veh} (Table 3.2-1, clear deck ${p.clear>0?fmt(p.clear,1)+' ft':'not given, so over 10 ft'}): ${fmt(0.2*p.W,0)} k and ${fmt(0.8*p.W,0)} k axles 14 ft apart, both directions, alone and never with the pedestrian load, without dynamic load allowance (3.2); distribution ${p.dfUser?'entered as '+fmt(p.dfVeh,3):'by the lever rule, '+fmt(p.lever,3)+' of the vehicle'+(p.mpf>1?' × 1.2 multiple presence = '+fmt(p.dfVeh,3):'')}.`:'No maintenance vehicle ('+(p.noVehicle?'vehicles kept off by permanent barriers':'clear deck under 7 ft')+').'} Strength I and Service II use the pedestrian load or the vehicle, whichever governs at each point; Strength II, IV and V are not required (3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency from a Rayleigh estimate with dead load only (all spans down, and alternate spans up and down; the lower governs) must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the weight of all girders' dead load (6). Fatigue for pedestrian bridges is wind-induced (3.5, AASHTO Signs) and is not checked; lateral frequency (1.3 Hz) and wind are outside a line-girder analysis.</li>`);
+    out.push(`<li><b>Pedestrian load rating.</b> The Guide Specifications and the MBE give no pedestrian rating method. Ratings use the MBE LRFR factors (γLL ${fmt(+model.factors.gLinv,2)} inventory, ${fmt(+model.factors.gLop,2)} operating) with ${p.veh?'the '+p.veh+' maintenance vehicle as the rating load, and tons = RF × '+fmt(p.W/2,0)+' tons':'the 90 psf pedestrian load as the rating load'}.</li>`); }
+  if(L.perm){ const P=L.perm;
+    out.push(`<li><b>Permit trucks, design.</b> Strength II with γLL ${fmt(P.gDesign,2)} (Table 3.4.1-1), each permit vehicle run in both directions with IM 33% and the design distribution factors${P.lane?', plus a 0.2 k/ft lane load for negative moment and for spans over 200 ft (MBE 6A.4.5.4.1)':''}. Service II with γLL 1.0 (MBE Table 6A.4.2.2-1). ${L.permit==='only'?'Permit only: the HL-93 checks, fatigue and live-load deflection are not run.':'Every criterion reports the larger of the design live load and the permit.'}</li>`);
+    out.push(`<li><b>Permit rating.</b> MBE 6A.4.5, RF = (φc φs φ R − γDC DC − γDW DW) / (γL (LL + IM)) with γDC ${fmt(+model.factors.gDC,2)} and γDW ${fmt(+model.factors.gDW,2)}. ${P.typeName}: γL ${fmt(P.gR,2)}${P.type==='routine'?' from Table 6A.4.5.4.2a-1 at ADTT '+fmt(P.adtt,0)+' and each vehicle\'s GVW / axle length (the largest over the listed vehicles)':''}${P.type==='escorted'&&P.crawl?' (1.10 increased by 1.05 at crawl speed, MBE 6A.4.5.4.2c)':''}. ${P.single?'One lane loaded, with the 1.2 multiple presence factor divided out (6A.4.5.4.2b).':'Multi-lane distribution factors (6A.4.5.4.2a).'} IM ${P.crawl?'neglected at crawl speed (6A.4.5.5)':'33%'}. Service II rated with γL 1.0. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads.</li>`); }
+  return out;
+}
 function renderMethod(){
   if(resLFD()){ renderMethodLFD(); return; }
   $('methodNotes').innerHTML=[
    `<li><b>Analysis.</b> Stiffness analysis with 10 to 40 elements per span, refined at supports, section breaks, stiffener panel ends, cross-frames and their quarter points. DC1 on the steel section, DC2 and DW on the long-term (3n) composite section, live load on the short-term (n) composite section. Uncracked composite stiffness throughout (6.10.1.5).</li>`,
    `<li><b>Live load.</b> Exact influence lines from support-displacement shapes. HL-93 truck with rear spacing 14 to 30 ft, both directions, tandem, and 0.64 klf lane on the adverse parts of the influence line; 90% of two trucks with at least 50 ft between them plus 90% lane in negative-moment regions. Axles that do not contribute to the extreme being sought are neglected (3.6.1.3.1), for strength, service and deflection. IM 33% on truck and tandem. Fatigue truck with 30 ft rear spacing and IM 15% (3.6.1.4), taken as the whole truck because the stress range comes from one real vehicle passage.</li>`,
+   ...liveNotes(),
    `<li><b>Strength I.</b> Both moment signs are checked at every point with the permanent-load factors (max or min) that are adverse, times η. Positive flexure per 6.10.7 (compact: Mn with the Dp/Dt reduction and optional 1.3RhMy cap; noncompact: flange stresses). Negative flexure by Appendix A6 when the section qualifies, otherwise 6.10.8 FLB, LTB and tension-flange yielding. Shear per 6.10.9, with tension-field action in stiffened interior panels.</li>`,
    `<li><b>Service II.</b> 0.95RhFyf for both flanges and web bend-buckling fc ≤ Fcrw where required (6.10.4.2.2). Negative flexure uses the steel + rebar section unless the uncracked option is on.</li>`,
    `<li><b>Fatigue.</b> Stress ranges on the short-term composite section in both positive and negative flexure (6.6.1.2.1). Details: flange base metal or flange-to-web welds along the girder, cross-frame connection plate and stiffener welds at their locations, butt-weld splices at section changes, and stud welds on the top flange. Details in permanent compression of at least twice the maximum fatigue tension are not checked. Special fatigue requirement for webs at stiffened interior panels (6.10.5.3).</li>`,
@@ -4640,7 +4958,7 @@ fillReport();
 // ---------- wire up ----------
 renderRail(); syncEdition();
 $('rail').addEventListener('change',onRailInput);
-$('rail').addEventListener('input',ev=>{ if((ev.target.tagName==='INPUT'&&ev.target.classList.contains('n'))||['text','stf','pours'].includes(ev.target.dataset.kind)&&ev.target.tagName==='TEXTAREA') onRailInput(ev); });
+$('rail').addEventListener('input',ev=>{ if((ev.target.tagName==='INPUT'&&(ev.target.classList.contains('n')||ev.target.dataset.pv!=null))||['text','stf','pours'].includes(ev.target.dataset.kind)&&ev.target.tagName==='TEXTAREA') onRailInput(ev); });
 $('rail').addEventListener('click',onRailClick);
 document.querySelector('.edsel').addEventListener('click',e=>{ const b=e.target.closest('button[data-ed]'); if(!b) return; model.code.edition=b.dataset.ed; renderRail(); syncEdition(); run(); });
 $('btnRun').addEventListener('click',run);
