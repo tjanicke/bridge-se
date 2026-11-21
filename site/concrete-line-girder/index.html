@@ -171,7 +171,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     </div>
     <div>
       <span class="edlbl">Examples</span>
-      <select id="exsel" aria-label="Load an example" style="width:auto"></select>
+      <select id="exsel" aria-label="Load an example" style="width:auto;max-width:100%;min-width:0"></select>
     </div>
     <button id="themeSwitch" type="button" aria-label="Switch to dark mode">Dark mode</button>
   </div>
@@ -230,6 +230,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   const beta1 = fc => clamp(0.85 - 0.05 * (fc - 4), 0.65, 0.85);
   const wcE = fc => (fc <= 5 ? 0.145 : 0.140 + 0.001 * fc); // Table 3.5.1-1, for Ec only
   const Ec = (fc, wc) => 120000 * 1.0 * (wc || wcE(fc)) ** 2 * Math.pow(fc, 0.33); // Eq. 5.4.2.4-1
+  const EcStd = (fc, wc) => 33 * Math.pow((wc || 0.150) * 1000, 1.5) * Math.sqrt(fc * 1000) / 1000; // Standard Specs 8.7.1 / 9-8, ksi
+  const EP_STD = 28000; // Standard Specs 9.16.2.1.2
 
   // ---------- FE helpers (constant EI continuous beam) ----------
   function solveDense(A, B) {
@@ -467,6 +469,39 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     return { max: mx, min: mn };
   }
 
+  // ---------- Standard Specifications (2002) live load ----------
+  const impactStd = L => Math.min(0.3, 50 / (L + 125)); // 3.8.2.1
+  const HS_SCALE = { HS15: 0.75, HS20: 1, HS25: 1.25 };
+  // one lane of HS20 loading on an influence line, before impact, scale and distribution: the truck (rear axle spacing
+  // 14–30 ft, either direction, one truck per lane, 3.7.4 and 3.11.2) or the lane load (0.64 k/ft on the adverse parts
+  // with 18 k for moment or 26 k for shear, plus a second 18 k load in another span for negative moment, 3.7.1.2 and
+  // 3.11.3); optionally the alternate military loading, two 24 k axles 4 ft apart (3.7.4), which is not scaled
+  function hsEnvelope(IL, h, kind, gSpan, military) {
+    const st = v => Math.round(v / h);
+    let tMax = 0, tMin = 0, vMax = 14, vMin = 14;
+    for (let s2 = 14; s2 <= 30; s2++) {
+      for (const [w, o] of [[[8, 32, 32], [0, st(14), st(14 + s2)]], [[32, 32, 8], [0, st(s2), st(s2 + 14)]]]) {
+        const f = movingF(IL, w, o);
+        for (let i = 0; i < f.length; i++) { if (f[i] > tMax) { tMax = f[i]; vMax = s2; } if (f[i] < tMin) { tMin = f[i]; vMin = s2; } }
+      }
+    }
+    const P = kind === 'V' ? 26 : 18;
+    let sp = 0, sn = 0, pmax = 0;
+    const spanMin = new Map();
+    for (let j = 0; j < IL.length; j++) {
+      const v = IL[j];
+      if (v > 0) sp += v; else sn += v;
+      if (v > pmax) pmax = v;
+      const k = gSpan[j]; if (!spanMin.has(k) || v < spanMin.get(k)) spanMin.set(k, v);
+    }
+    const mins = [...spanMin.values()].filter(v => v < 0).sort((a, b) => a - b);
+    const two = kind === 'M' && mins.length > 1;
+    const lMax = 0.64 * h * sp + P * pmax, lMin = 0.64 * h * sn + P * ((mins[0] || 0) + (two ? mins[1] : 0));
+    let mMax = 0, mMin = 0;
+    if (military) { const f = movingF(IL, [24, 24], [0, st(4)]); for (let i = 0; i < f.length; i++) { if (f[i] > mMax) mMax = f[i]; if (f[i] < mMin) mMin = f[i]; } }
+    return { tMax, tMin, lMax, lMin, mMax, mMin, vMax, vMin, two };
+  }
+
   // one live load case through every check. llc: { kind: 'hl93' | 'ped' | 'H' | 'permit', name, gS (strength γLL),
   // limS (strength limit-state name), rate: {inv, op} (rating γLL) }
   function runCase(m, llc) {
@@ -505,14 +540,19 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const Ltot = supX[supX.length - 1];
     const d = +((m.strand && m.strand.d) || shp.strand || 0.5), sd = STRAND[d];
     if (!sd) throw new Error('Strand diameter must be 0.5 or 0.6 in.');
-    const Aps1 = sd.A, fpbt = sd.Fi / sd.A;
+    // Standard Specifications 17th Ed. (2002) load factor design: m.code === 'lfd' (llc.kind 'hs')
+    const lfd = llc.kind === 'hs', Lf = lfd ? llc.lfd : null;
+    const Aps1 = sd.A, fpbt = lfd ? 0.75 * FPU : sd.Fi / sd.A; // LFD 9.15.1: 0.75f′s for low-relaxation strand
     const fc = +m.beam.fc, fci = +m.beam.fci;
     if (!(fc > 0 && fci > 0)) throw new Error('Enter the beam concrete strengths f\'c and f\'ci.');
     const wcLoad = 0.150;
     const Eo = m.E || {}; // modulus overrides (benchmarks)
-    const Eci = Eo.Eci > 0 ? +Eo.Eci : Ec(fci, m.beam.wci), Eb = Eo.Eb > 0 ? +Eo.Eb : Ec(fc, m.beam.wc);
+    const EcX = (f, w) => (lfd ? EcStd(f, w) : Ec(f, w));
+    const Eci = Eo.Eci > 0 ? +Eo.Eci : EcX(fci, m.beam.wci), Eb = Eo.Eb > 0 ? +Eo.Eb : EcX(fc, m.beam.wc);
+    const EPx = lfd ? EP_STD : EP;
     const h = shp.h, A = shp.A, I = shp.I, yb = shp.yb, yt = h - yb, Sb = I / yb, St = I / yt;
-    const lt = 60 * d; // in., 5.9.4.3.1
+    const lt = (lfd ? 50 : 60) * d; // in., 5.9.4.3.1 (LFD 9.20.2.4: 50 diameters)
+    const sqp = f => Math.sqrt(f * 1000) / 1000; // √f′c with f′c in psi, returned in ksi
     const ext = m.ext != null ? +m.ext : (kind === 'deck' ? 0.5 : 0.625);
     const pierBrg = cont ? (m.pierBrg != null ? +m.pierBrg : 1.125) : 0;
     const H = m.H != null ? +m.H : 70;
@@ -526,7 +566,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       dk = { t: m.deck.tStruct > 0 ? +m.deck.tStruct : +m.deck.t, tw: +m.deck.t, fc: +m.deck.fc, fillet: m.deck.fillet != null ? +m.deck.fillet : 2, fy: 60, gap: m.deck.haunchInProps ? (+m.deck.haunchInProps > 0 && m.deck.haunchInProps !== true ? +m.deck.haunchInProps : (m.deck.fillet != null ? +m.deck.fillet : 2)) : 0 };
       if (!(dk.t > 0 && dk.fc > 0)) throw new Error('Enter the deck thickness and f\'c.');
       if (!(S > 0)) throw new Error('Enter the beam spacing.');
-      dk.E = Eo.Ed > 0 ? +Eo.Ed : Ec(dk.fc, m.deck.wc);
+      dk.E = Eo.Ed > 0 ? +Eo.Ed : EcX(dk.fc, m.deck.wc);
       const ovh = +m.overhang || 0;
       const beff = m.deck.beff > 0 ? +m.deck.beff : S * 12; // effective width, in.; blank = S (exterior beams use the interior width, BM 3.1.12)
       const n = dk.E / Eb; // slab transformed to beam concrete
@@ -594,8 +634,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     let dLT = 10 * fpbt * ApsT / A * gh * gst + 12 * gh * gst + 2.4;
     let dCorr = 0;
     if (kind === 'deck' && m.overlay && m.overlay.type && m.overlay.type !== 'concrete') { dCorr = h >= 42 ? 2.5 : h >= 33 ? 3.5 : 4.5; dLT += dCorr; }
-    const dT = dES + dLT, fpe = fpbt - dT, fpt = fpbt - dES;
-    const losses = { Fi, fpbt, dES, fcgp, Mb, ratio, dLT, dCorr, dT, fpe, fpt, pct: dT / fpbt * 100, gh, gst, Eci, Eb, Ep: EP, iterations: it + 1 };
+    let dT = dES + dLT, fpe = fpbt - dT, fpt = fpbt - dES; // LFD: replaced below by the 9.16.2 losses once the dead loads are known
+    let losses = { Fi, fpbt, dES, fcgp, Mb, ratio, dLT, dCorr, dT, fpe, fpt, pct: dT / fpbt * 100, gh, gst, Eci, Eb, Ep: EP, iterations: it + 1 };
 
     // ----- section geometry for strength -----
     const ttop = kind === 'deck' ? shp.tTop : shp.ttf, btop = kind === 'deck' ? shp.b : shp.btf; // DG 3.5: b = beam width
@@ -625,6 +665,27 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       res.phi = clamp(0.75 + 0.25 * (et - 0.002) / 0.003, 0.75, 1.0); res.et = et; res.dt = dt;
       return res;
     }
+    // Standard Specifications 9.17 (bonded strands only): f*su from 9-17, rectangular 9-13 when a ≤ t, flanged 9-14
+    // otherwise; b′ is the beam top flange under a composite deck (the web of the T the slab forms) and both side walls of a
+    // deck beam; reinforcement index limited to 0.36β1 (9.18.1, 9-22 / 9-23)
+    function flexLFD(Aeff, yps) {
+      if (!(Aeff > 0)) return { Mn: 0, c: 0, a: 0, fps: 0, dp: 0, phi: 1, case: '-', lfd: true };
+      const htot = comp ? h + dk.gap + dk.t : h, dp = htot - yps;
+      const b = comp ? cs.beff : btop, t = comp ? dk.t : ttop, bw = comp ? shp.btf : bweb, fcf = comp ? dk.fc : fc;
+      const b1 = beta1(fcf), gam = 0.28, rho = Aeff / (b * dp);
+      const fsu = FPU * (1 - gam / b1 * rho * FPU / fcf);
+      let a = Aeff * fsu / (0.85 * fcf * b), Mn, idx, cas, Asf = 0, Asr = Aeff;
+      if (a <= t + 1e-9) { idx = rho * fsu / fcf; Mn = Aeff * fsu * dp * (1 - 0.6 * idx); cas = 'rectangular'; }
+      else {
+        Asf = 0.85 * fcf * (b - bw) * t / fsu; Asr = Aeff - Asf; a = Asr * fsu / (0.85 * fcf * bw);
+        idx = Asr * fsu / (bw * dp * fcf);
+        Mn = Asr * fsu * dp * (1 - 0.6 * idx) + 0.85 * fcf * (b - bw) * t * (dp - 0.5 * t); cas = 'flanged';
+      }
+      const idxMax = 0.36 * b1, over = idx > idxMax + 1e-12;
+      if (over) Mn = (0.36 * b1 - 0.08 * b1 * b1) * fcf * (cas === 'rectangular' ? b : bw) * dp * dp + (cas === 'flanged' ? 0.85 * fcf * (b - bw) * t * (dp - 0.5 * t) : 0);
+      return { Mn: Mn / 12, a, c: a / b1, fps: fsu, dp, b1, fcc: fcf, Aeff, b, bw, t, rho, idx, idxMax, over, Asf, Asr, gam, phi: 1.0, case: cas, lfd: true };
+    }
+    const flexAt = lfd ? flexLFD : flexPos;
     // midspan flexure with all strands to set fps for ld (5.9.4.3.2)
     // strands credited in flexure: the flexural tension side (below mid-depth of the composite section) by default;
     // 'all' reproduces the DG 3.4 / 3.5 examples, which also credit top strands that lie in the compression zone
@@ -633,10 +694,6 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const flexFilt = allFlex ? null : (s => s.y < hHalf);
     const tens = allFlex ? strands : strands.filter(g => g.yC < hHalf);
     const ApsF = tens.reduce((a, g) => a + g.n * Aps1, 0), yF = tens.reduce((a, g) => a + g.n * Aps1 * g.yC, 0) / (ApsF || 1);
-    const fl0 = flexPos(ApsF, yF);
-    const kap = h > 24 ? 1.6 : 1.0;
-    const ldB = kap * (fl0.fps - 2 / 3 * fpe) * d, ldDb = 2.0 * (fl0.fps - 2 / 3 * fpe) * d;
-    if (dbInfo && Math.abs(dbInfo.ldDb - ldDb) > 1) { dbInfo.ldDb = ldDb; strands = firstStrands(); }
 
     // development / transfer at distance z (ft) from the beam end
     const harpF = m.harp > 0 ? +m.harp : 0.4; // hold-down points from each end, fraction of beam length
@@ -702,7 +759,40 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         return { M: g, V: g, MF: g / 1.2, VF: g / 1.2, C, D, K, W };
       };
     }
-    const mDefl = MPF(NL) * NL / Nb;
+    if (lfd) {
+      // Standard Specifications 3.23: fractions of a wheel line, returned as lanes (two wheel lines per lane)
+      const deL = m.de != null ? +m.de : (+m.overhang || 0) - (m.parapetWidth != null ? +m.parapetWidth : 1.417);
+      const wheels = n => { const a = []; for (let t = 0; t < n; t++) a.push(10 * t, 10 * t + 6); return a; }; // 6 ft gage, 4 ft between trucks
+      const leverInt = n => { let best = 0; for (let off = -10 * n - 6; off <= S; off += 0.05) { const v = wheels(n).reduce((a, q) => a + Math.max(0, 1 - Math.abs(q + off) / S), 0); if (v > best) best = v; } return best; };
+      const x0 = 2 - deL; // wheel 2 ft from the curb or rail face, measured inboard from the exterior beam
+      const leverExt = n => wheels(n).reduce((a, q) => { const xi = x0 + q; return a + (xi < S ? (S - xi) / S : 0); }, 0);
+      const W = m.edgeWidth > 0 ? +m.edgeWidth : Nb * (shp.b || 0) / 12;
+      dfFor = L => {
+        const o = { de: deL };
+        if (comp) {
+          let wInt, gInt;
+          if (NL >= 2) { if (S <= 14) { wInt = S / 5.5; gInt = 'S/5.5, two or more lanes (Table 3.23.1)'; } else { wInt = leverInt(NL); gInt = 'S > 14 ft: lever rule (Table 3.23.1 note)'; } }
+          else { if (S <= 10) { wInt = S / 7; gInt = 'S/7.0, one lane (Table 3.23.1)'; } else { wInt = leverInt(1); gInt = 'S > 10 ft: lever rule, one lane (Table 3.23.1 note)'; } }
+          o.wInt = wInt; o.wM = wInt; o.gov = gInt; o.wEnd = leverInt(NL);
+          if (ext_g) {
+            o.lever = leverExt(NL); o.wEnd = o.lever;
+            if (o.lever >= wInt) { o.wM = o.lever; o.gov = 'lever rule, wheel 2 ft from the curb (3.23.2.3.1.2)'; }
+            else o.gov = gInt + ' (exterior lever ' + o.lever.toFixed(3) + ' is less; 3.23.2.3.1.4: not less than an interior beam)';
+          }
+        } else {
+          const K = shp.K, C = W / L < 1 ? K * W / L : K, D = 5.75 - 0.5 * NL + 0.7 * NL * (1 - 0.2 * C) ** 2;
+          Object.assign(o, { K, C, D, W, wM: Math.min(S / D, 1), wEnd: Math.min(S / D, 1), gov: 'S/D, multi-beam deck (3.23.4.3)' });
+        }
+        o.wV = o.wM;
+        const ovr = m.lfdDF || {};
+        if (+ovr.M > 0) { o.wM = +ovr.M; o.gov = 'entered'; }
+        if (+ovr.V > 0) o.wV = +ovr.V; else if (+ovr.M > 0) o.wV = +ovr.M;
+        if (+ovr.end > 0) o.wEnd = +ovr.end;
+        o.M = o.wM / 2; o.V = o.wV / 2; o.MF = o.M; o.VF = o.V; o.Vend = o.wEnd / 2;
+        return o;
+      };
+    }
+    const mDefl = lfd ? (NL <= 2 ? 1 : NL === 3 ? 0.9 : 0.75) * NL / Nb : MPF(NL) * NL / Nb; // LFD: all lanes, 3.12.1 reduction, all beams equally
     if (comp && !ext_g) {
       const de0 = m.de != null ? +m.de : (+m.overhang || 0) - (m.parapetWidth != null ? +m.parapetWidth : 1.417);
       if ((+m.overhang || 0) > S / 2 + 1e-6 || de0 > 2.0833 + 1e-6) warn.push('The overhang exceeds S/2 or de exceeds 2 ft 1 in., so BM 3.1.12 treats this as an atypical bridge: choose the exterior-girder case to apply the exterior distribution factors and overhang dead load.');
@@ -761,6 +851,18 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       let e = 0; for (let j = 0; j < ng; j++) { while (e < xn.length - 2 && xg[j] > xn[e + 1]) e++; for (let k = 0; k < shapes.length; k++) Rg[k][j] = hermite(shapes[k], xn, e, xg[j]); }
     }
     const spanOf = s => { for (let i = 0; i < spans.length; i++) if (s <= supX[i + 1] + 1e-7) return i; return spans.length - 1; };
+    const gSpanArr = lfd ? Int16Array.from(xg, v => spanOf(v)) : null;
+    // LFD impact loaded lengths (3.8.2.2): span for positive moment, average of the spans at the nearest pier for negative
+    // moment, the point to the far reaction for shear
+    const nearPier = s => { let best = -1, bd = Infinity; for (let k = 1; k < supX.length - 1; k++) { const q = Math.abs(supX[k] - s); if (q < bd) { bd = q; best = k; } } return best; };
+    const LnegAt = s => { const k = cont ? nearPier(s) : -1; return k > 0 ? (spans[k - 1] + spans[k]) / 2 : spans[spanOf(s)]; };
+    const Lright = s => { for (const v of supX) if (v > s + 1e-6) return v - s; return spans[spans.length - 1]; };
+    const Lleft = s => { for (let k = supX.length - 1; k >= 0; k--) if (supX[k] < s - 1e-6) return s - supX[k]; return spans[0]; };
+    // 3.23.1.2: an axle at the end of the beam takes the simple-span deck reaction (lever rule); applied to the shear
+    // influence ordinate at the beam-end supports (the abutments when continuous)
+    const endX = cont ? [supX[0], supX[supX.length - 1]] : supX.slice();
+    const endJ = []; if (lfd) for (let j = 0; j < ng; j++) if (endX.some(v => Math.abs(xg[j] - v) < hgrid / 2)) endJ.push(j);
+    const scaleEnds = (ILa, r) => { if (Math.abs(r - 1) < 1e-12 || !endJ.some(j => Math.abs(ILa[j]) > 1e-9)) return ILa; const c = Float64Array.from(ILa); endJ.forEach(j => { c[j] *= r; }); return c; };
     // influence lines at s (continuous or simple spans)
     function IL(s, side) {
       const IM = new Float64Array(ng), IV = new Float64Array(ng);
@@ -804,11 +906,39 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const i = spanOf(s), b = beams[i];
       let u, L;
       if (dc1Comp) { u = s - supX[i]; L = spans[i]; } else { u = s - b.xa; L = b.Lnc; }
-      if (u < 0 || u > L) return { M: 0, V: 0 };
+      if (u < 0 || u > L) return { M: 0, V: 0, Ma: 0 };
       let M = loads.DC1 * u * (L - u) / 2, V = loads.DC1 * (L / 2 - u);
       if (!comp && nTies) { const LT = L / (nTies + 1); for (let k = 1; k <= nTies; k++) { const a = k * LT; M += PT * (u <= a ? u * (L - a) / L : a * (L - u) / L); V += PT * (u < a ? (L - a) / L : -a / L); } }
-      return { M, V };
+      return { M, V, Ma: (loads.DC1 - loads.beam) * u * (L - u) / 2 }; // Ma: DC1 placed after transfer (all but the beam and its ties)
     }
+
+    // Standard Specifications 9.16.2: ΔfS = SH + ES + CRc + CRs at midspan of the longest beam (low-relaxation strand);
+    // fcir with the strand force after elastic shortening and the beam weight on its length, iterated; or the lump sum
+    // of Table 9.16.2.2. The loss at transfer is ES.
+    function lfdLosses() {
+      const opt = Lf.losses === 'lump' ? 'lump' : 'refined';
+      const iB = beams.indexOf(Lb0), xm = supX[iB] + spans[iB] / 2;
+      let ES = 0, fcir = 0, it = 0;
+      for (; it < 50; it++) { const P = ApsT * (fpbt - ES); fcir = P / A + P * eC * eC / I - Mb * 12 * eC / I; const n2 = EPx / Eci * fcir; if (Math.abs(n2 - ES) < 1e-7) { ES = n2; break; } ES = n2; }
+      ES = Math.max(ES, 0);
+      const Ma = DC1at(xm).Ma, M2 = dl.DC2.M(xm) + dl.DW.M(xm);
+      const fcds = comp ? Ma * 12 * eC / I + M2 * 12 * (cs.yb - yC) / cs.I : (Ma + M2) * 12 * eC / I; // deck beams: DW on the noncomposite beam
+      const SH = Math.max(17 - 0.15 * H, 0), CRc = Math.max(12 * fcir - 7 * fcds, 0);
+      const CRs = Math.max(5 - 0.10 * ES - 0.05 * (SH + CRc), 0);
+      const tot = opt === 'lump' ? 45 : SH + ES + CRc + CRs;
+      dT = tot; fpe = fpbt - tot; fpt = fpbt - ES;
+      if (opt === 'lump' && fc < 5 - 1e-9) warn.push('Table 9.16.2.2 gives the 45 ksi lump-sum loss for pretensioned strand at f′c = 5,000 psi only; use the refined losses (9.16.2.1) for lower strengths.');
+      if (fpe < 0.5 * FPU) warn.push('Effective prestress ' + fpe.toFixed(1) + ' ksi is below 0.5f′s, so Equation 9-17 for f*su does not apply (9.17.4.1).');
+      return { lfd: true, method: opt, Fi: ApsT * fpbt, fpbt, dES: ES, fcir, fcgp: fcir, Mb, SH, CRc, CRs, fcds, Ma, M2, xm, eC, dT: tot, fpe, fpt, pct: tot / fpbt * 100, Eci, Eb, Ep: EPx, iterations: it + 1, dLT: tot - ES, dCorr: 0, ratio: (fpbt - ES) / fpbt };
+    }
+
+    // ----- Standard Specifications losses (9.16.2), after the dead loads are known -----
+    if (lfd) losses = lfdLosses();
+    // midspan flexure with all strands sets the strand stress for development (5.9.4.3.2; LFD 9.28.1)
+    const fl0 = flexAt(ApsF, yF);
+    const kap = lfd ? 1.0 : (h > 24 ? 1.6 : 1.0);
+    const ldB = kap * (fl0.fps - 2 / 3 * fpe) * d, ldDb = 2.0 * (fl0.fps - 2 / 3 * fpe) * d;
+    if (dbInfo && Math.abs(dbInfo.ldDb - ldDb) > 1) { dbInfo.ldDb = ldDb; strands = firstStrands(); }
 
     // ----- points of interest -----
     const pois = [];
@@ -826,8 +956,16 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // live load envelope per lane (HL-93, permit) or per girder (pedestrian load, maintenance vehicle)
     const perGirder = llc.kind === 'ped' || llc.kind === 'H', fatOn = llc.kind === 'hl93';
     const ZF = { max: 0, min: 0 };
-    function llEnv(ILa, dual, si, isMoment) {
+    function llEnv(ILa, dual, si, isMoment, s) {
       if (llc.kind === 'hl93') return hl93(ILa, hgrid, IMp, dual);
+      if (lfd) {
+        if (!isMoment) { const g = dfAt(spans[si]); ILa = scaleEnds(ILa, g.Vend / g.V); }
+        const e = hsEnvelope(ILa, hgrid, isMoment ? 'M' : 'V', gSpanArr, Lf.military), sc = Lf.scale;
+        const Ip = impactStd(isMoment ? spans[si] : Lright(s)), In = impactStd(isMoment ? LnegAt(s) : Lleft(s));
+        const mx = [sc * e.tMax, sc * e.lMax, e.mMax], mn = [sc * e.tMin, sc * e.lMin, e.mMin], nm = ['truck', 'lane', 'military'];
+        const iX = mx.indexOf(Math.max(...mx)), iN = mn.indexOf(Math.min(...mn));
+        return { max: mx[iX] * (1 + Ip), min: mn[iN] * (1 + In), dualGov: false, govMax: nm[iX], govMin: nm[iN], Ip, In, two: e.two && iN === 1, sMax: e.vMax, sMin: e.vMin };
+      }
       const out = { max: 0, min: 0, dualGov: false };
       const take = (a, b) => { if (a > out.max) out.max = a; if (b < out.min) out.min = b; };
       if (perGirder) {
@@ -846,6 +984,21 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const gSel = g => perGirder ? { M: 1, V: 1 } : (llc.kind === 'permit' && llc.single ? { M: g.MF, V: g.VF } : g);
 
     // ----- per-POI demands -----
+    // factored demands: LRFD Strength I/II with DC1 and DC2 factored separately (they can differ in sign near piers);
+    // LFD Group I, 1.3[βD·D + 1.67(L + I)] with βD = 1.0 and βL = 1.67 as tabulated (Table 3.22.1A)
+    function factorP(p) {
+      if (lfd) {
+        const M = p.MDC1 + p.MDC2 + p.MDW, V = p.VDC1 + p.VDC2 + p.VDW;
+        p.MuP = 1.3 * M + llc.gS * Math.max(p.MLLp, 0); p.MuN = 1.3 * M + llc.gS * Math.min(p.MLLn, 0);
+        p.VuP = 1.3 * V + llc.gS * Math.max(p.VLLp, 0); p.VuN = 1.3 * V + llc.gS * Math.min(p.VLLn, 0);
+        return;
+      }
+      const fac = (v, gmax, gmin, sign) => (Math.sign(v) === sign || v === 0 ? gmax : gmin) * v;
+      p.MuP = fac(p.MDC1, 1.25, 0.9, 1) + fac(p.MDC2, 1.25, 0.9, 1) + fac(p.MDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.MLLp, 0);
+      p.MuN = fac(p.MDC1, 1.25, 0.9, -1) + fac(p.MDC2, 1.25, 0.9, -1) + fac(p.MDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.MLLn, 0);
+      p.VuP = fac(p.VDC1, 1.25, 0.9, 1) + fac(p.VDC2, 1.25, 0.9, 1) + fac(p.VDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.VLLp, 0);
+      p.VuN = fac(p.VDC1, 1.25, 0.9, -1) + fac(p.VDC2, 1.25, 0.9, -1) + fac(p.VDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.VLLn, 0);
+    }
     pois.forEach(p => {
       const i = spanOf(p.x), b = beams[i];
       p.span = i + 1;
@@ -855,8 +1008,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       // on the beam? (piers: point between beam ends)
       let onBeam = !p.isPier && z >= -1e-9 && z <= b.Lb + 1e-9;
       if (p.isPier) { const bL = beams[spanOf(p.x - 1e-3)]; p.z = null; p.beam = null; } else { p.z = onBeam ? z : null; p.beam = b; }
-      const d1 = p.isPier ? { M: 0, V: 0 } : DC1at(p.x);
-      p.MDC1 = d1.M; p.VDC1 = d1.V;
+      const d1 = p.isPier ? { M: 0, V: 0, Ma: 0 } : DC1at(p.x);
+      p.MDC1 = d1.M; p.VDC1 = d1.V; p.MDC1a = d1.Ma;
       p.MDC2 = dl.DC2.M(p.x); p.MDW = dl.DW.M(p.x);
       const side = p.x >= Ltot - 1e-6 ? 'l' : 'r';
       p.VDC2 = dl.DC2.V(p.x, side); p.VDW = dl.DW.V(p.x, side);
@@ -868,27 +1021,24 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       p.g = gP; p.gNeg = gN;
       const il = IL(p.x, side);
       const si0 = spanOf(p.x), gPs = gSel(gP), gNs = gSel(gN);
-      const env = llEnv(il.IM, dualAt(p.x), si0, true), envV = llEnv(il.IV, false, si0, false);
+      const env = llEnv(il.IM, dualAt(p.x), si0, true, p.x), envV = llEnv(il.IV, false, si0, false, p.x);
       const fat = fatOn ? fatigueTruck(il.IM, hgrid, IMf) : ZF;
       p.MLLp = env.max * gPs.M; p.MLLn = env.min * gNs.M; p.dualGov = env.dualGov;
       p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V;
       p.MFLp = fat.max * gP.MF; p.MFLn = fat.min * gN.MF;
-      const fac = (v, gmax, gmin, sign) => (Math.sign(v) === sign || v === 0 ? gmax : gmin) * v;
-      // DC1 and DC2 factored separately (they can differ in sign near piers)
-      p.MuP = fac(p.MDC1, 1.25, 0.9, 1) + fac(p.MDC2, 1.25, 0.9, 1) + fac(p.MDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.MLLp, 0);
-      p.MuN = fac(p.MDC1, 1.25, 0.9, -1) + fac(p.MDC2, 1.25, 0.9, -1) + fac(p.MDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.MLLn, 0);
-      p.VuP = fac(p.VDC1, 1.25, 0.9, 1) + fac(p.VDC2, 1.25, 0.9, 1) + fac(p.VDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.VLLp, 0);
-      p.VuN = fac(p.VDC1, 1.25, 0.9, -1) + fac(p.VDC2, 1.25, 0.9, -1) + fac(p.VDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.VLLn, 0);
+      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax });
+      factorP(p);
     });
 
     // ----- release (lifting / storage) stresses -----
-    const fciT = 0.24 * Math.sqrt(fci), fciC = 0.65 * fci;
+    // LFD 9.15.2.1: 0.60f′ci; tension 7.5√f′ci with bonded reinforcement, else the lesser of 200 psi and 3√f′ci
+    const fciT = lfd ? (Lf.relTension === 'none' ? Math.min(0.2, 3 * sqp(fci)) : 7.5 * sqp(fci)) : 0.24 * Math.sqrt(fci), fciC = (lfd ? 0.60 : 0.65) * fci;
     const release = [];
     beams.forEach((b, bi) => {
       if (bi > 0 && beams.slice(0, bi).some(q => Math.abs(q.Lb - b.Lb) < 1e-6)) return; // identical beam already checked
       const Lb = b.Lb;
       let Lc, how;
-      if (m.lift && m.lift.atEnds) { Lc = 0; how = 'beam supported at its ends on the casting bed'; }
+      if ((m.lift && m.lift.atEnds) || (lfd && Lf.release !== 'lift')) { Lc = 0; how = 'at transfer, beam supported at its ends on the casting bed'; }
       else if (kind === 'deck') { Lc = m.lift && m.lift.Lc > 0 ? +m.lift.Lc : 3; how = 'temporary storage supports ' + Lc + ' ft from the ends (DG 3.5)'; }
       else if (m.lift && m.lift.Lc > 0) { Lc = +m.lift.Lc; how = 'lifting loops ' + Lc + ' ft from the ends (entered)'; }
       else if (shp.fam === 'IL') {
@@ -981,21 +1131,31 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         p.fatCracked = p.fbFat < -fFatT;
         // positive flexure with developed strands
         const dv = developed(z, Lb, flexFilt);
-        p.flex = flexPos(dv.Ae, dv.y);
+        p.flex = flexAt(dv.Ae, dv.y);
         p.Mr = p.flex.phi * p.flex.Mn;
         // minimum reinforcement (5.6.3.3)
         const fr = 0.24 * Math.sqrt(fc), fcpe = p.Fs / A + p.Fs * p.e / Sb;
         const Sc = Scb;
         p.Mcr = Math.max((1.6 * fr + 1.1 * fcpe) * Sc / 12 - p.MDC1 * (Sc / Sb - 1), Sc * fr / 12);
         p.minReq = Math.min(p.Mcr, 1.33 * Math.max(p.MuP, 0));
+        if (lfd) {
+          // 9.15.2.2: full live load in tension; compression (i) all loads, (ii) prestress + dead, (iii) LL + ½(prestress + dead)
+          p.fb3 = p.fbDL - p.fbLL; p.ftC = (p.ftA - p.ftB) + 0.5 * p.ftB;
+          if (comp) { p.fslabB = M2 * (cs.hc - cs.yb) / cs.I * cs.n; p.fslabC = (p.fslab - p.fslabB) + 0.5 * p.fslabB; }
+          delete p.fbFat; delete p.ftFat; p.fatCracked = false;
+          // 9.18.2.1: φMn ≥ 1.2M*cr, M*cr = (fr + fpe)Sc − Md/nc(Sc/Sb − 1), fr = 7.5√f′c; waived at 1.33 × required (9.18.2.2)
+          const frL = 7.5 * sqp(fc);
+          p.Mcr = (frL + fcpe) * Sc / 12 - p.MDC1 * (Sc / Sb - 1); p.fr = frL; p.fpeB = fcpe;
+          p.minReq = Math.min(1.2 * p.Mcr, 1.33 * Math.max(p.MuP, 0));
+        }
       }
       if (cont && p.MuN < -1e-6) {
         const sa = AsAt(p.x);
         p.As = sa;
-        p.fneg = flexNeg(sa.As, sa.ds); p.MrN = p.fneg.phi * p.fneg.Mn;
+        p.fneg = flexNeg(sa.As, sa.ds); if (lfd) p.fneg.phi = 0.9; p.MrN = p.fneg.phi * p.fneg.Mn;
         const fr = 0.24 * Math.sqrt(fc);
-        p.McrN = 0.75 * 1.6 * fr * cs.Sts / 12;
-        p.minReqN = Math.min(p.McrN, 1.33 * Math.abs(p.MuN));
+        p.McrN = lfd ? 7.5 * sqp(dk.fc) * cs.Sts / cs.n / 12 : 0.75 * 1.6 * fr * cs.Sts / 12; // LFD 8.17.1.1: deck concrete cracking at the top of the slab
+        p.minReqN = lfd ? Math.min(1.2 * p.McrN, 1.33 * Math.abs(p.MuN)) : Math.min(p.McrN, 1.33 * Math.abs(p.MuN));
       }
     });
 
@@ -1012,6 +1172,13 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         const sAllow = 700 * 0.75 / (bs * fss) - 2 * dc, sProv = +neg.s || 6;
         const dFth = 26 - 22 * fmin / 60;
         const item = { pier: k, x: supX[k], As: sa.As, ds: sa.ds, x_na: cr.x, Icr: cr.Icr, Sbc: cr.Sbc, Ms, fss, sAllow, sProv, crackRatio: sProv / sAllow, df, dFth, fatRatio: df / dFth };
+        if (lfd) {
+          // 8.16.8.4: fs ≤ z/(dcA)^⅓ ≤ 0.6fy, clear cover for dc not over 2 in., A = 2dc × s for one layer of bars;
+          // 8.16.8.3: stress range from the service live load plus impact ≤ 21 − 0.33fmin + 8(r/h), r/h = 0.3
+          const zc = Lf.z > 0 ? +Lf.z : 170, dcc = Math.min(cTop + 0.625, 2) + barD / 2, Aef = 2 * dcc * sProv;
+          const fsa = Math.min(zc / Math.cbrt(dcc * Aef), 36), dfL = cr.fsPerM(Math.abs(Math.min(p.MLLn, 0))), ff = 21 - 0.33 * fmin + 8 * 0.3;
+          Object.assign(item, { z: zc, dcc, Aef, fsa, fmin, crackRatio: fss / fsa, sAllow: fss > 0 ? Math.pow(zc / fss, 3) / (2 * dcc * dcc) : Infinity, df: dfL, dFth: ff, fatRatio: dfL / ff });
+        }
         // bottom flange compression at the transfer point from the pier end of each adjacent beam
         item.flange = [];
         [k - 1, k].forEach(bi => {
@@ -1025,7 +1192,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           const fA = ps.F / A + ps.F * ps.e / S2 - M1 / S2 - (M2 + MLn) / S2;
           const fB = ps.F / A + ps.F * ps.e / S2 - M1 / S2 - M2 / S2;
           const fF = 0.5 * (ps.F / A + ps.F * ps.e / S2 - M1 / S2 - M2 / S2) - 1.75 * MFn / S2;
-          item.flange.push({ x, z, F: ps.F, e: ps.e, Sbc: S2, fA, fB, fF, rA: fA / (0.6 * fc), rB: fB / (0.45 * fc), rF: fF / (0.4 * fc) });
+          if (lfd) { const fC = (fA - fB) + 0.5 * fB; item.flange.push({ x, z, F: ps.F, e: ps.e, Sbc: S2, fA, fB, fF: fC, rA: fA / (0.6 * fc), rB: fB / (0.4 * fc), rF: fC / (0.4 * fc) }); }
+          else item.flange.push({ x, z, F: ps.F, e: ps.e, Sbc: S2, fA, fB, fF, rA: fA / (0.6 * fc), rB: fB / (0.45 * fc), rF: fF / (0.4 * fc) });
         });
         pierChecks.push(item);
       }
@@ -1036,7 +1204,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const il = IL(x, 'r'); const gN = dfAt(spans[spanOf(x)]);
       const k = supX.reduce((bi, s, kk) => (Math.abs(s - x) < Math.abs(supX[bi] - x) ? kk : bi), 0);
       const gNn = (k > 0 && k < supX.length - 1) ? dfAt((spans[k - 1] + spans[k]) / 2) : gN;
-      q.MLLn = llEnv(il.IM, dualAt(x), spanOf(x), true).min * gSel(gNn).M; q.MFLn = fatOn ? fatigueTruck(il.IM, hgrid, IMf).min * gNn.MF : 0;
+      q.MLLn = llEnv(il.IM, dualAt(x), spanOf(x), true, x).min * gSel(gNn).M; q.MFLn = fatOn ? fatigueTruck(il.IM, hgrid, IMf).min * gNn.MF : 0;
       return q;
     }
 
@@ -1112,7 +1280,52 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         ends.push(rightPier ? supX[b.i + 1] - pierFace : b.xa + b.Lnc - padW / 2);
         b.critFace = ends;
       });
+      // Standard Specifications 9.20: Vc = min(Vci, Vcw) with d ≥ 0.8h, prestress over 50 strand diameters; Vs = Av fsy d/s
+      // ≤ 8√f′c b′d; horizontal shear 9.20.4 on the beam top flange with the stirrups as ties
+      const shearLFD = (p, xFace) => {
+        const b = p.beam, z = p.z, Lb = b.Lb, frac = clamp((p.x - b.xa) / b.Lnc, 0, 1), st = stirrupAt(frac);
+        const useNeg = cont && p.MuN < 0 && Math.abs(p.MuN) > Math.abs(p.MuP);
+        const Mu = useNeg ? Math.abs(p.MuN) : Math.abs(p.MuP);
+        const Vu = Math.max(Math.abs(p.VuP), Math.abs(p.VuN));
+        const rf = sqp(fc), ps = prestress(z, Lb, fpe);
+        let ny = 0, nn = 0; strands.forEach(g => { const q = strandState(g, z, Lb); ny += g.n * q.y; nn += g.n; });
+        const yAll = ny / nn, dP = hc - yAll, dRaw = useNeg ? AsAt(p.x).ds : dP, dS = Math.max(dRaw, 0.8 * hc);
+        const Vd = Math.abs(p.VDC1 + p.VDC2 + p.VDW), Md = Math.abs(p.MDC1 + p.MDC2 + p.MDW);
+        const Vi = Math.max(Vu - Vd, 0), Mmax = Math.max(Mu - Md, 1e-6);
+        let Mcr, fpeT, fdT, It, Yt;
+        if (!useNeg) {
+          It = comp ? cs.I : I; Yt = comp ? cs.yb : yb; fpeT = ps.F / A + ps.F * ps.e / Sb;
+          fdT = comp ? p.MDC1 * 12 / Sb + (p.MDC2 + p.MDW) * 12 / cs.Sb : (p.MDC1 + p.MDC2 + p.MDW) * 12 / Sb;
+          Mcr = It / Yt * (6 * rf + fpeT - fdT) / 12;
+        } else { // tension at the top of the deck: no prestress there, deck concrete
+          It = cs.I; Yt = cs.hc - cs.yb; fpeT = 0; fdT = -(p.MDC2 + p.MDW) * 12 * Yt / cs.I * cs.n;
+          Mcr = It / (Yt * cs.n) * (6 * sqp(dk.fc) - fdT) / 12;
+        }
+        Mcr = Math.max(Mcr, 0);
+        const Vci = Math.max(0.6 * rf * bv * dS + Vd + Vi * Mcr / Mmax, 1.7 * rf * bv * dS);
+        const yc = comp ? Math.min(cs.yb, h - ttop) : yb; // composite centroid, or the web–flange junction when it lies in the flange
+        const fpc = comp ? ps.F / A - ps.F * ps.e * (yc - yb) / I + p.MDC1 * 12 * (yc - yb) / I : ps.F / A;
+        let Vp = 0; strands.forEach(g => { if (!g.draped) return; const q = strandState(g, z, Lb); Vp += g.n * Aps1 * fpe * q.tr * Math.sin(Math.atan(q.slope)); });
+        const Vcw = (3.5 * rf + 0.3 * fpc) * bv * dS + Vp, Vc = Math.min(Vci, Vcw);
+        const Vs0 = st.Av * fyv * dS / st.s, VsMax = 8 * rf * bv * dS, Vs = Math.min(Vs0, VsMax), Vn = Vc + Vs;
+        const sReq = Vu / phiV - Vc > 0 ? st.Av * fyv * dS / (Vu / phiV - Vc) : Infinity;
+        const smax = Vs0 > 4 * rf * bv * dS ? Math.min(0.375 * hc, 12) : Math.min(0.75 * hc, 24);
+        const AvMin = 0.05 * bv * st.s / fyv; // 9-31: 50b′s/fsy with fsy in psi
+        let Vui = null, Vni = null, hs = null, iRatio = null, sTie = Infinity;
+        if (comp) {
+          const bvi = shp.btf, rough = Lf.hsSurface !== 'smooth', AvhMin = 0.05 * bvi * st.s / fyv, ties = st.Av >= AvhMin - 1e-12;
+          const vnh = ties && rough ? 350 + 240 * Math.max(0, 100 * (st.Av - AvhMin) / (bvi * st.s)) : (ties || rough ? 80 : 0); // psi
+          Vui = Vu; Vni = vnh * bvi * dP / 1000; sTie = Math.min(4 * shp.bw, 24);
+          hs = { bvi, d: dP, rough, ties, AvhMin, vnh, sTie, over500: Vu / phiV > 0.5 * bvi * dP };
+          iRatio = Vni > 0 ? Vui / (phiV * Vni) : 99;
+        }
+        return { x: p.x, z, frac, useNeg, Mu, Vu, MDC1: p.MDC1, MDC2: p.MDC2, MDW: p.MDW, MLLp: p.MLLp, MLLn: p.MLLn, VDC1: p.VDC1, VDC2: p.VDC2, VDW: p.VDW, VLLp: p.VLLp, VLLn: p.VLLn, dualGov: false, stSrc: st.src,
+          dv: dS, de: dRaw, Vp, es: null, beta: null, theta: 45, Vc, Vs, Vn, method: 'lfd', simp: { lfd: true, Vd, Vi, Md, Mmax, Mcr, fpeT, fdT, It, Yt, F: ps.F, e: ps.e, fpc, yc, Vci, Vcw, Vs0, VsMax, rf },
+          ratio: Vu / (phiV * Vn), Av: st.Av, s: st.s, sReq, smax, sRatio: Math.max(st.s / smax, st.s / sTie), AvMin, AvRatio: AvMin / st.Av, Vui, Vni, iRatio, hs,
+          Treq: null, Tmax: null, TreqUsed: null, Tprov: null, lRatio: null, phiF: 1, tags: p.tags, xFace };
+      };
       const shearAt = (p, xFace) => {
+        if (lfd) return shearLFD(p, xFace);
         const b = p.beam, z = p.z, Lb = b.Lb;
         const frac = clamp((p.x - b.xa) / b.Lnc, 0, 1);
         const st = stirrupAt(frac);
@@ -1189,6 +1402,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       beams.forEach(b => {
         // dv at the critical sections: iterate from 0.72h
         b.crit = b.critFace.map((xf, k) => {
+          if (lfd) { const xh = k === 0 ? xf + hc / 24 : xf - hc / 24, q0 = demandsAt(xh); q0.tags = ['critical section for shear']; return { x: xh, poi: q0 }; } // 9.20.1.4: h/2 from the face
           let dvv = 0.72 * hc, xc = xf;
           const at072 = m.opts && m.opts.critAt === '0.72h'; // DG 3.4 permits 0.72h from the face
           for (let itr = 0; itr < (at072 ? 0 : 3); itr++) {
@@ -1210,23 +1424,20 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const p = { x, tags: [] };
       const i = spanOf(x), b = beams[i];
       p.span = i + 1; p.beam = b; p.z = x - (b.xa - ext); p.isPier = false;
-      const d1 = DC1at(x); p.MDC1 = d1.M; p.VDC1 = d1.V;
+      const d1 = DC1at(x); p.MDC1 = d1.M; p.VDC1 = d1.V; p.MDC1a = d1.Ma;
       p.MDC2 = dl.DC2.M(x); p.MDW = dl.DW.M(x); p.VDC2 = dl.DC2.V(x, 'r'); p.VDW = dl.DW.V(x, 'r');
       const Lpos = spans[i];
       const k = supX.reduce((bi, s, kk) => (Math.abs(s - x) < Math.abs(supX[bi] - x) ? kk : bi), 0);
       const Lneg = cont && k > 0 && k < supX.length - 1 ? (spans[k - 1] + spans[k]) / 2 : Lpos;
       const gP = dfAt(Lpos), gN = dfAt(Lneg);
       const il = IL(x, 'r');
-      const env = llEnv(il.IM, dualAt(x), i, true), envV = llEnv(il.IV, false, i, false), gPs = gSel(gP), gNs = gSel(gN);
+      const env = llEnv(il.IM, dualAt(x), i, true, x), envV = llEnv(il.IV, false, i, false, x), gPs = gSel(gP), gNs = gSel(gN);
       p.MLLp = env.max * gPs.M; p.MLLn = env.min * gNs.M; p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V; p.dualGov = env.dualGov;
-      const fac = (v, gmax, gmin, sign) => (Math.sign(v) === sign || v === 0 ? gmax : gmin) * v;
-      p.MuP = fac(p.MDC1, 1.25, 0.9, 1) + fac(p.MDC2, 1.25, 0.9, 1) + fac(p.MDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.MLLp, 0);
-      p.MuN = fac(p.MDC1, 1.25, 0.9, -1) + fac(p.MDC2, 1.25, 0.9, -1) + fac(p.MDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.MLLn, 0);
-      p.VuP = fac(p.VDC1, 1.25, 0.9, 1) + fac(p.VDC2, 1.25, 0.9, 1) + fac(p.VDW, 1.5, 0.65, 1) + llc.gS * Math.max(p.VLLp, 0);
-      p.VuN = fac(p.VDC1, 1.25, 0.9, -1) + fac(p.VDC2, 1.25, 0.9, -1) + fac(p.VDW, 1.5, 0.65, -1) + llc.gS * Math.min(p.VLLn, 0);
+      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax });
+      factorP(p);
       p.g = gP; p.gNeg = gN;
-      const dvp = developed(p.z, b.Lb, flexFilt); p.flex = flexPos(dvp.Ae, dvp.y);
-      if (cont && p.MuN < 0) { const sa = AsAt(x); p.fneg = flexNeg(sa.As, sa.ds); }
+      const dvp = developed(p.z, b.Lb, flexFilt); p.flex = flexAt(dvp.Ae, dvp.y);
+      if (cont && p.MuN < 0) { const sa = AsAt(x); p.fneg = flexNeg(sa.As, sa.ds); if (lfd) p.fneg.phi = 0.9; }
       return p;
     }
 
@@ -1263,7 +1474,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         const ILd = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < xd.length - 2 && xg[j] > xd[e + 1]) e++; ILd[j] = -hermite(sh[k], xd, e, xg[j]) / EI * 12; }
         if (llc.kind === 'ped') { const dv = uniformEnv(ILd, hgrid, llc.ped.w).max, lim = spans[k] * 12 / 360; deflection.push({ span: k + 1, x: s, delta: dv, limit: lim, ratio: dv / lim, kind: 'PL' }); return; }
-        const dv = deflTruck(ILd, hgrid, IMp) * mDefl;
+        let dv;
+        if (lfd) { const e = hsEnvelope(ILd, hgrid, 'M', gSpanArr, false); dv = Lf.scale * Math.max(e.tMax, e.lMax) * (1 + impactStd(spans[k])) * mDefl; } // truck or lane, all lanes on all beams
+        else dv = deflTruck(ILd, hgrid, IMp) * mDefl;
         deflection.push({ span: k + 1, x: s, delta: dv, limit: spans[k] * 12 / 800, ratio: dv / (spans[k] * 12 / 800) });
       });
     }
@@ -1293,7 +1506,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const phiCS = Math.max(phiC * phiS, 0.85), gDW = rt.gDW > 0 ? +rt.gDW : 1.5;
     // MBE Table 6A.4.2.2-1 defaults; the owner may set others
     const gDC = rt.gDC > 0 ? +rt.gDC : 1.25, gLinv = rt.gLinv > 0 ? +rt.gLinv : 1.75, gLop = rt.gLop > 0 ? +rt.gLop : 1.35, gS3 = rt.gS3 > 0 ? +rt.gS3 : 0.8;
-    const rating = { phiC, phiS, phiCS, gDW, gDC, gLinv, gLop, gS3, rows: [] };
+    let rating = { phiC, phiS, phiCS, gDW, gDC, gLinv, gLop, gS3, rows: [] };
     const dlF = (v, sign) => (Math.sign(v) === sign || v === 0 ? gDC : 0.9) * v;
     const dwF = (v, sign) => (Math.sign(v) === sign || v === 0 ? gDW : 0.65) * v;
     const RF = (cap, dead, ll, gL) => (ll > 1e-9 ? (cap - dead) / (gL * ll) : Infinity);
@@ -1331,37 +1544,102 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     rating.inventory = invAll; rating.operating = opAll;
     rating.shearRated = doShear;
     rating.complete = doShear;
-    if (!doShear) notes.push('Shear is not rated: enter the deck-beam shear reinforcement from the IDOT base sheets to include it. The rating shown covers flexure and Service III only.');
+    if (!doShear && !lfd) notes.push('Shear is not rated: enter the deck-beam shear reinforcement from the IDOT base sheets to include it. The rating shown covers flexure and Service III only.');
+    if (lfd) {
+      // MBE 6B.5.3.3 (LFR, prestressed concrete): strength RF = (φRn − A1·D)/(A2·L(1 + I)), A1 = 1.3, A2 = 2.17 inventory and
+      // 1.3 operating; inventory service limits on concrete tension 6√f′c, compression 0.6f′c and 0.4f′c (with half the
+      // dead and prestress stresses), and strand tension 0.8f*y (0.9f*y at operating), f*y = 0.9f′s for low-relaxation strand
+      const A1 = 1.3, A2i = +Lf.A2inv > 0 ? +Lf.A2inv : 2.17, A2o = +Lf.A2op > 0 ? +Lf.A2op : 1.3, fyS = 0.9 * FPU, nP = EPx / Eb, ft6 = 6 * sqp(fc);
+      const Rr = { lfr: true, A1, A2inv: A2i, A2op: A2o, fyStar: fyS, nP, ft6, rows: [], phiC: 1, phiS: 1, phiCS: 1, gDW: 1.3, gDC: 1.3, gLinv: A2i, gLop: A2o };
+      const RFa = (cap, dead, ll, a2) => (ll > 1e-9 ? (cap - dead) / (a2 * ll) : Infinity);
+      pois.forEach(p => {
+        if (p.z != null && p.Mr != null && p.MLLp > 1e-6) {
+          const dead = A1 * (p.MDC1 + p.MDC2 + p.MDW);
+          Rr.rows.push({ lim: 'Strength flexure (+M)', x: p.x, span: p.span, cap: p.Mr, dead, ll: p.MLLp, inv: RFa(p.Mr, dead, p.MLLp, A2i), op: RFa(p.Mr, dead, p.MLLp, A2o) });
+          if (p.fbLL > 1e-9) Rr.rows.push({ lim: 'Concrete tension', basis: '6√f′c, bottom of beam', x: p.x, span: p.span, cap: ft6, dead: -p.fbDL, ll: p.fbLL, inv: (ft6 + p.fbDL) / p.fbLL, op: null });
+          const fl = p.ftA - p.ftB;
+          if (fl > 1e-9) {
+            Rr.rows.push({ lim: 'Concrete compression', basis: '0.6f′c, top of beam', x: p.x, span: p.span, cap: 0.6 * fc, dead: p.ftB, ll: fl, inv: (0.6 * fc - p.ftB) / fl, op: null });
+            Rr.rows.push({ lim: 'Concrete compression', basis: '0.4f′c with ½(prestress + dead), top of beam', x: p.x, span: p.span, cap: 0.4 * fc, dead: 0.5 * p.ftB, ll: fl, inv: (0.4 * fc - 0.5 * p.ftB) / fl, op: null });
+          }
+          const yps = yb - p.e;
+          const dS = comp ? nP * (p.MDC1a * 12 * p.e / I + (p.MDC2 + p.MDW) * 12 * (cs.yb - yps) / cs.I) : nP * (p.MDC1a + p.MDW) * 12 * p.e / I;
+          const lS = comp ? nP * p.MLLp * 12 * (cs.yb - yps) / cs.I : nP * p.MLLp * 12 * p.e / I;
+          if (lS > 1e-9) Rr.rows.push({ lim: 'Prestressing steel', basis: '0.8f*y inventory, 0.9f*y operating', x: p.x, span: p.span, cap: 0.8 * fyS, capOp: 0.9 * fyS, dead: fpe + dS, fpe, dS, ll: lS, inv: (0.8 * fyS - fpe - dS) / lS, op: (0.9 * fyS - fpe - dS) / lS });
+        }
+        if (p.MrN != null && p.MLLn < -1e-6) {
+          const dead = -A1 * (p.MDC1 + p.MDC2 + p.MDW);
+          Rr.rows.push({ lim: 'Strength flexure (−M)', x: p.x, span: p.span, cap: p.MrN, dead, ll: -p.MLLn, inv: RFa(p.MrN, dead, -p.MLLn, A2i), op: RFa(p.MrN, dead, -p.MLLn, A2o) });
+        }
+      });
+      shear.forEach(sq => {
+        const q = demandsAtCached(sq.x), sg = Math.abs(q.VuP) >= Math.abs(q.VuN) ? 1 : -1;
+        const VD = sg * A1 * (q.VDC1 + q.VDC2 + q.VDW), VL = sg > 0 ? Math.max(q.VLLp, 0) : -Math.min(q.VLLn, 0), cap = phiV * sq.Vn;
+        Rr.rows.push({ lim: 'Strength shear', x: sq.x, span: sq.span, cap, dead: VD, ll: VL, inv: RFa(cap, VD, VL, A2i), op: RFa(cap, VD, VL, A2o) });
+      });
+      Rr.rows.forEach(r => { r.na = rfDisplayNA(r.inv, (r.lim.startsWith('Strength') ? A2i : 1) * r.ll, r.cap); });
+      const gv = (lim, key) => Rr.rows.filter(r => r.lim === lim && r[key] != null && isFinite(r[key])).reduce((a, r) => (!a || r[key] < a[key] ? r : a), null);
+      Rr.summary = ['Strength flexure (+M)', 'Strength flexure (−M)', 'Strength shear', 'Concrete tension', 'Concrete compression', 'Prestressing steel'].map(lim => ({ lim, inv: gv(lim, 'inv'), op: gv(lim, 'op') })).filter(r => r.inv);
+      Rr.inventory = Rr.summary.reduce((a, r) => (!a || r.inv.inv < a.inv ? { inv: r.inv.inv, lim: r.lim, x: r.inv.x } : a), null);
+      Rr.operating = Rr.summary.filter(r => r.op).reduce((a, r) => (!a || r.op.op < a.op ? { op: r.op.op, lim: r.lim, x: r.op.x } : a), null);
+      Rr.shearRated = doShear; Rr.complete = doShear;
+      if (!doShear) notes.push('Shear is not rated: enter the deck-beam shear reinforcement to include it. The rating shown covers flexure and the service limits only.');
+      rating = Rr;
+    }
 
     // ----- design-check summary -----
     const checks = [];
     const worst = (arr, f) => arr.reduce((a, q) => { const v = f(q); return v != null && isFinite(v) && (!a || v > a.v) ? { v, q } : a; }, null);
     const add = (id, label, w, where, detail) => { if (w) checks.push({ id, label, ratio: w.v, where: where(w.q), detail: detail ? detail(w.q) : '', src: w.q }); };
     const beamPois = pois.filter(p => p.z != null);
-    add('release', 'Release / lifting stresses', worst(release, r => Math.max(r.ratioC, r.ratioT)), r => r.z.toFixed(2) + ' ft from beam end', r => 'top ' + r.ft.toFixed(3) + ', bottom ' + r.fb.toFixed(3) + ' ksi');
-    add('svc1', 'Service I compression', worst(beamPois, p => Math.max(p.ftA / (0.6 * fc), p.ftB / (0.45 * fc), comp ? p.fslab / (0.6 * dk.fc) : 0)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'top of beam ' + p.ftA.toFixed(3) + ' ksi (all loads), ' + p.ftB.toFixed(3) + ' ksi (permanent)');
-    add('svc3', 'Service III tension', worst(beamPois, p => -p.fb3 / fcT3), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'bottom ' + p.fb3.toFixed(3) + ' ksi; limit −' + fcT3.toFixed(3) + ' ksi');
-    if (fatOn) add('fatigue', 'Fatigue I concrete compression', worst(beamPois, p => p.ftFat / (0.4 * fc)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => p.ftFat.toFixed(3) + ' ksi' + (p.fatCracked ? ' (section cracked under Fatigue I; uncracked properties used)' : ''));
-    add('flexure', limS + ' flexure (+M)', worst(beamPois, p => (p.MuP > 0 ? p.MuP / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuP) + ', φMn ' + Math.round(p.Mr) + ' k-ft');
-    add('minreinf', 'Minimum reinforcement (+M)', worst(beamPois, p => (p.minReq > 0 ? p.minReq / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'min(Mcr, 1.33Mu) ' + Math.round(p.minReq) + ' k-ft');
-    if (cont) {
-      const np = pois.filter(p => p.MrN != null);
-      add('negflex', limS + ' flexure (−M)', worst(np, p => Math.abs(p.MuN) / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuN) + ', φMn ' + Math.round(p.MrN) + ' k-ft');
-      add('negmin', 'Minimum reinforcement (−M)', worst(np, p => p.minReqN / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft');
-      add('crack', 'Deck crack control at piers', worst(pierChecks, q => q.crackRatio), q => 'pier ' + q.pier, q => 'fss ' + q.fss.toFixed(1) + ' ksi, s ≤ ' + q.sAllow.toFixed(2) + ' in.');
-      if (fatOn) add('rebarfat', 'Deck reinforcement fatigue', worst(pierChecks, q => q.fatRatio), q => 'pier ' + q.pier, q => 'Δf ' + q.df.toFixed(2) + ' ≤ ' + q.dFth.toFixed(2) + ' ksi');
-      add('flangecomp', 'Bottom flange compression at piers', worst(pierChecks.flatMap(q => q.flange), f => Math.max(f.rA, f.rB, fatOn ? f.rF : 0)), f => 'x = ' + f.x.toFixed(2) + ' ft', f => 'Service I ' + f.fA.toFixed(2) + ' ksi, Fatigue I ' + f.fF.toFixed(2) + ' ksi');
+    if (lfd) {
+      const ct = Lf.corrosive ? 3 : 6, ftS = ct * sqp(fc), sl = comp ? dk.fc : 0;
+      add('release', 'Release stresses (9.15.2.1)', worst(release, r => Math.max(r.ratioC, r.ratioT)), r => r.z.toFixed(2) + ' ft from beam end', r => 'top ' + r.ft.toFixed(3) + ', bottom ' + r.fb.toFixed(3) + ' ksi');
+      add('svc1', 'Service compression (9.15.2.2)', worst(beamPois, p => Math.max(p.ftA / (0.6 * fc), p.ftB / (0.4 * fc), p.ftC / (0.4 * fc), comp ? Math.max(p.fslab / (0.6 * sl), p.fslabB / (0.4 * sl), p.fslabC / (0.4 * sl)) : 0)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'top of beam ' + p.ftA.toFixed(3) + ' (all loads), ' + p.ftB.toFixed(3) + ' (prestress + dead), ' + p.ftC.toFixed(3) + ' ksi (LL + ½)');
+      add('svc3', 'Service tension (9.15.2.2)', worst(beamPois, p => -p.fb3 / ftS), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'bottom ' + p.fb3.toFixed(3) + ' ksi; limit −' + ftS.toFixed(3) + ' ksi (' + ct + '√f′c)');
+      add('flexure', 'Group I flexure (+M)', worst(beamPois, p => (p.MuP > 0 ? p.MuP / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuP) + ', φMn ' + Math.round(p.Mr) + ' k-ft');
+      add('ductmax', 'Maximum prestressing steel (9.18.1)', worst(beamPois, p => (p.flex && p.flex.idxMax > 0 && p.MuP > 0 ? p.flex.idx / p.flex.idxMax : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'index ' + p.flex.idx.toFixed(3) + ' ≤ 0.36β1 = ' + p.flex.idxMax.toFixed(3));
+      add('minreinf', 'Minimum steel, 1.2M*cr (9.18.2)', worst(beamPois, p => (p.minReq > 0 ? p.minReq / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'min(1.2M*cr, 1.33Mu) ' + Math.round(p.minReq) + ' k-ft');
+      if (cont) {
+        const np = pois.filter(p => p.MrN != null);
+        add('negflex', 'Group I flexure (−M)', worst(np, p => Math.abs(p.MuN) / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuN) + ', φMn ' + Math.round(p.MrN) + ' k-ft');
+        add('negmin', 'Minimum reinforcement (−M) (8.17.1)', worst(np, p => p.minReqN / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft');
+        add('crack', 'Deck crack control at piers (8.16.8.4)', worst(pierChecks, q => q.crackRatio), q => 'pier ' + q.pier, q => 'fs ' + q.fss.toFixed(1) + ' ≤ ' + q.fsa.toFixed(1) + ' ksi (z = ' + q.z + ')');
+        if (Lf.rebarFatigue !== false) add('rebarfat', 'Deck reinforcement fatigue (8.16.8.3)', worst(pierChecks, q => q.fatRatio), q => 'pier ' + q.pier, q => 'range ' + q.df.toFixed(2) + ' ≤ ff ' + q.dFth.toFixed(2) + ' ksi');
+        add('flangecomp', 'Bottom flange compression at piers', worst(pierChecks.flatMap(q => q.flange), f => Math.max(f.rA, f.rB, f.rF)), f => 'x = ' + f.x.toFixed(2) + ' ft', f => 'all loads ' + f.fA.toFixed(2) + ', LL + ½ ' + f.fF.toFixed(2) + ' ksi');
+      }
+      if (doShear) {
+        add('shear', 'Group I shear (9.20)', worst(shear, q => q.ratio), q => 'x = ' + q.x.toFixed(2) + ' ft', q => 'Vu ' + q.Vu.toFixed(1) + ' k, φVn ' + (phiV * q.Vn).toFixed(1) + ' k');
+        add('stirrups', 'Stirrup spacing and minimum area (9.20.3)', worst(shear, q => Math.max(q.sRatio, q.AvRatio)), q => 'x = ' + q.x.toFixed(2) + ' ft', q => 's ' + q.s + ' in., smax ' + Math.min(q.smax, q.hs ? q.hs.sTie : Infinity).toFixed(1) + ' in.');
+        if (comp) add('interface', 'Horizontal shear (9.20.4)', worst(shear, q => q.iRatio), q => 'x = ' + q.x.toFixed(2) + ' ft', q => 'Vu ' + q.Vu.toFixed(1) + ' k, φVnh ' + (phiV * q.Vni).toFixed(1) + ' k');
+      }
+      if (m.checkDeflection) add('defl', 'Live-load deflection (L/800)', worst(deflection, q => q.ratio), q => 'span ' + q.span);
+    } else {
+      add('release', 'Release / lifting stresses', worst(release, r => Math.max(r.ratioC, r.ratioT)), r => r.z.toFixed(2) + ' ft from beam end', r => 'top ' + r.ft.toFixed(3) + ', bottom ' + r.fb.toFixed(3) + ' ksi');
+      add('svc1', 'Service I compression', worst(beamPois, p => Math.max(p.ftA / (0.6 * fc), p.ftB / (0.45 * fc), comp ? p.fslab / (0.6 * dk.fc) : 0)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'top of beam ' + p.ftA.toFixed(3) + ' ksi (all loads), ' + p.ftB.toFixed(3) + ' ksi (permanent)');
+      add('svc3', 'Service III tension', worst(beamPois, p => -p.fb3 / fcT3), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'bottom ' + p.fb3.toFixed(3) + ' ksi; limit −' + fcT3.toFixed(3) + ' ksi');
+      if (fatOn) add('fatigue', 'Fatigue I concrete compression', worst(beamPois, p => p.ftFat / (0.4 * fc)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => p.ftFat.toFixed(3) + ' ksi' + (p.fatCracked ? ' (section cracked under Fatigue I; uncracked properties used)' : ''));
+      add('flexure', limS + ' flexure (+M)', worst(beamPois, p => (p.MuP > 0 ? p.MuP / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuP) + ', φMn ' + Math.round(p.Mr) + ' k-ft');
+      add('minreinf', 'Minimum reinforcement (+M)', worst(beamPois, p => (p.minReq > 0 ? p.minReq / p.Mr : null)), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'min(Mcr, 1.33Mu) ' + Math.round(p.minReq) + ' k-ft');
+      if (cont) {
+        const np = pois.filter(p => p.MrN != null);
+        add('negflex', limS + ' flexure (−M)', worst(np, p => Math.abs(p.MuN) / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft', p => 'Mu ' + Math.round(p.MuN) + ', φMn ' + Math.round(p.MrN) + ' k-ft');
+        add('negmin', 'Minimum reinforcement (−M)', worst(np, p => p.minReqN / p.MrN), p => 'x = ' + p.x.toFixed(2) + ' ft');
+        add('crack', 'Deck crack control at piers', worst(pierChecks, q => q.crackRatio), q => 'pier ' + q.pier, q => 'fss ' + q.fss.toFixed(1) + ' ksi, s ≤ ' + q.sAllow.toFixed(2) + ' in.');
+        if (fatOn) add('rebarfat', 'Deck reinforcement fatigue', worst(pierChecks, q => q.fatRatio), q => 'pier ' + q.pier, q => 'Δf ' + q.df.toFixed(2) + ' ≤ ' + q.dFth.toFixed(2) + ' ksi');
+        add('flangecomp', 'Bottom flange compression at piers', worst(pierChecks.flatMap(q => q.flange), f => Math.max(f.rA, f.rB, fatOn ? f.rF : 0)), f => 'x = ' + f.x.toFixed(2) + ' ft', f => 'Service I ' + f.fA.toFixed(2) + ' ksi, Fatigue I ' + f.fF.toFixed(2) + ' ksi');
+      }
+      if (doShear) {
+        add('shear', limS + ' shear', worst(shear, s => s.ratio), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 'Vu ' + s.Vu.toFixed(1) + ' k, φVn ' + (phiV * s.Vn).toFixed(1) + ' k');
+        if (idotStir.length) add('idotstir', 'IDOT stirrup spacing limits (BM 3.4.4.2)', worst(idotStir, q => (q.inc ? Math.max(q.ratio, 1.0001) : q.ratio)), q => 'zone ' + q.zone + ' (' + q.from + '–' + q.to + ' L)', q => 's ' + q.s + ' in.; Table 3.4.4.2-1 allows ' + q.cap + ' in.' + (q.inc ? '; not a 3 in. increment' : ''));
+        add('stirrups', 'Stirrup spacing and minimum area', worst(shear, s => Math.max(s.sRatio, s.AvRatio)), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 's ' + s.s + ' in., smax ' + s.smax.toFixed(1) + ' in.');
+        if (comp) add('interface', 'Interface shear', worst(shear, s => s.iRatio), s => 'x = ' + s.x.toFixed(2) + ' ft');
+        add('longreinf', 'Longitudinal reinforcement (5.7.3.5)', worst(shear, s => s.lRatio), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 'T required ' + Math.round(s.Treq) + ' k' + (s.TreqUsed < s.Treq - 1e-6 ? '; used ' + Math.round(s.TreqUsed) + ' k, the force for the maximum moment alone (5.7.3.5: load bears on the compression face)' : '') + '; provided ' + Math.round(s.Tprov) + ' k');
+      }
+      if (llc.kind === 'ped') add('defl', 'Pedestrian load deflection (L/360)', worst(deflection, q => q.ratio), q => 'span ' + q.span, q => 'δ ' + q.delta.toFixed(2) + ' in., limit ' + q.limit.toFixed(2) + ' in. (Guide Spec 5)');
+      else if (m.checkDeflection && llc.kind === 'hl93') add('defl', 'Live-load deflection (L/800)', worst(deflection, q => q.ratio), q => 'span ' + q.span);
+      if (vibration) checks.push({ id: 'vib', label: 'Vertical frequency (Guide Spec 6)', ratio: vibration.ratio, where: 'f = ' + vibration.f.toFixed(2) + ' Hz' + (vibration.f > 3 ? ' > 3.0 Hz' : ' ≤ 3.0 Hz'), detail: 'dead load only, ' + Nb + ' beams, W = ' + Math.round(vibration.W) + ' k' + (vibration.f > 3 ? '' : (vibration.W >= vibration.Wreq ? ' ≥ ' : ' < ') + '180e^(−0.35f) = ' + Math.round(vibration.Wreq) + ' k'), src: vibration });
     }
-    if (doShear) {
-      add('shear', limS + ' shear', worst(shear, s => s.ratio), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 'Vu ' + s.Vu.toFixed(1) + ' k, φVn ' + (phiV * s.Vn).toFixed(1) + ' k');
-      if (idotStir.length) add('idotstir', 'IDOT stirrup spacing limits (BM 3.4.4.2)', worst(idotStir, q => (q.inc ? Math.max(q.ratio, 1.0001) : q.ratio)), q => 'zone ' + q.zone + ' (' + q.from + '–' + q.to + ' L)', q => 's ' + q.s + ' in.; Table 3.4.4.2-1 allows ' + q.cap + ' in.' + (q.inc ? '; not a 3 in. increment' : ''));
-      add('stirrups', 'Stirrup spacing and minimum area', worst(shear, s => Math.max(s.sRatio, s.AvRatio)), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 's ' + s.s + ' in., smax ' + s.smax.toFixed(1) + ' in.');
-      if (comp) add('interface', 'Interface shear', worst(shear, s => s.iRatio), s => 'x = ' + s.x.toFixed(2) + ' ft');
-      add('longreinf', 'Longitudinal reinforcement (5.7.3.5)', worst(shear, s => s.lRatio), s => 'x = ' + s.x.toFixed(2) + ' ft', s => 'T required ' + Math.round(s.Treq) + ' k' + (s.TreqUsed < s.Treq - 1e-6 ? '; used ' + Math.round(s.TreqUsed) + ' k, the force for the maximum moment alone (5.7.3.5: load bears on the compression face)' : '') + '; provided ' + Math.round(s.Tprov) + ' k');
-    }
-    if (llc.kind === 'ped') add('defl', 'Pedestrian load deflection (L/360)', worst(deflection, q => q.ratio), q => 'span ' + q.span, q => 'δ ' + q.delta.toFixed(2) + ' in., limit ' + q.limit.toFixed(2) + ' in. (Guide Spec 5)');
-    else if (m.checkDeflection && llc.kind === 'hl93') add('defl', 'Live-load deflection (L/800)', worst(deflection, q => q.ratio), q => 'span ' + q.span);
-    if (vibration) checks.push({ id: 'vib', label: 'Vertical frequency (Guide Spec 6)', ratio: vibration.ratio, where: 'f = ' + vibration.f.toFixed(2) + ' Hz' + (vibration.f > 3 ? ' > 3.0 Hz' : ' ≤ 3.0 Hz'), detail: 'dead load only, ' + Nb + ' beams, W = ' + Math.round(vibration.W) + ' k' + (vibration.f > 3 ? '' : (vibration.W >= vibration.Wreq ? ' ≥ ' : ' < ') + '180e^(−0.35f) = ' + Math.round(vibration.Wreq) + ' k'), src: vibration });
 
     // stop if any calculated check or rating is not a finite number
     const bad = [];
@@ -1379,13 +1657,28 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       section: { A, I, yb, yt, Sb, St, comp: cs },
       strands: strandSummary, losses, loads, df: { NL, Nb, mDefl, info: dfInfo, at: dfAt(spans[0]), override: !!ov },
       pois, release, releaseHow: release.how, releaseLc: release.Lc, pierChecks, shear, camber, deflection,
-      flexStrands: allFlex ? 'all' : 'tension', rating, checks, notes, shearChecked: doShear, shearMethod, idotStir, limits: { fciC, fciT, fc06: 0.6 * fc, fc045: 0.45 * fc, fcT3, fFat: 0.4 * fc, fFatT },
-      warn, notes, ms: Date.now() - t0, code: 'AASHTO LRFD 10th Edition (2024), IDOT Bridge Manual (Jan. 2025)', vibration, llc,
+      flexStrands: allFlex ? 'all' : 'tension', rating, checks, notes, shearChecked: doShear, shearMethod, idotStir, limits: lfd ? { lfd: true, fciC, fciT, fc06: 0.6 * fc, fc04: 0.4 * fc, fc045: 0.4 * fc, fcT3: (Lf.corrosive ? 3 : 6) * sqp(fc), ftK: Lf.corrosive ? 3 : 6, dk06: comp ? 0.6 * dk.fc : null, dk04: comp ? 0.4 * dk.fc : null } : { fciC, fciT, fc06: 0.6 * fc, fc045: 0.45 * fc, fcT3, fFat: 0.4 * fc, fFatT },
+      warn, notes, ms: Date.now() - t0, code: lfd ? 'AASHTO Standard Specifications 17th Ed. (2002), LFD' : 'AASHTO LRFD 10th Edition (2024), IDOT Bridge Manual (Jan. 2025)', vibration, llc, lfd: lfd ? Object.assign({}, Lf, { Ec: 'Standard Specs 8.7.1', Ep: EPx }) : null,
     };
   }
 
   // the design live load (HL-93 or pedestrian), plus permit trucks under Strength II when asked
+  function lfdOpts(m) {
+    const o = m.lfd || {};
+    const veh = HS_SCALE[o.vehicle] ? o.vehicle : 'HS20';
+    return { vehicle: veh, scale: HS_SCALE[veh], military: !!o.military, losses: o.losses === 'lump' ? 'lump' : 'refined', relTension: o.relTension === 'none' ? 'none' : 'bonded',
+      release: o.release === 'lift' ? 'lift' : 'ends', corrosive: !!o.corrosive, z: +o.z > 0 ? +o.z : 170, hsSurface: o.hsSurface === 'smooth' ? 'smooth' : 'rough', rebarFatigue: o.rebarFatigue !== false,
+      A2inv: +o.A2inv > 0 ? +o.A2inv : 2.17, A2op: +o.A2op > 0 ? +o.A2op : 1.3 };
+  }
   function run(m) {
+    if (m.code === 'lfd') {
+      const Lf = lfdOpts(m);
+      const base = runCase(m, { kind: 'hs', name: Lf.vehicle, gS: 1.3 * 1.67, limS: 'Group I', lfd: Lf });
+      base.live = { design: 'hs', permit: 'none', lfd: Lf };
+      base.ratingLoad = { name: Lf.vehicle + (Lf.military ? ' or alternate military' : '') + ' (MBE LFR)', tons: 36 * Lf.scale, veh: Lf.vehicle };
+      base.controlling = null;
+      return base;
+    }
     const errs = liveErrors(m);
     if (errs.length) throw new Error(errs.join(' '));
     const L = liveOpts(m);
@@ -1420,7 +1713,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     return base;
   }
 
-  const api = { rfDisplayNA, run, liveOpts, permitGamma, Ec, designLanes, buildStrands, rowY, DATA };
+  const api = { rfDisplayNA, run, liveOpts, lfdOpts, permitGamma, Ec, EcStd, designLanes, buildStrands, rowY, DATA };
   if (typeof module !== 'undefined') module.exports = api; else root.PPCHECK = api;
 })(this);
 </script>
@@ -1972,6 +2265,162 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
   }
   function wsGeneric(c) { return { L: [{ lhs: 'Result', sub: c.detail || c.where, res: fn(c.ratio, 3) }], demand: null, cap: null, ok: true, generic: true }; }
 
+  // ---------- Standard Specifications (LFD) worksheets ----------
+  let LFDR = false; // the run being reported is LFD
+  const sqk = f => Math.sqrt(f * 1000) / 1000;
+  function muLFD(p, sign, L) {
+    const D = p.MDC1 + p.MDC2 + p.MDW, LL = sign > 0 ? Math.max(p.MLLp, 0) : Math.min(p.MLLn, 0), v = 1.3 * D + 1.3 * 1.67 * LL;
+    L.push({ lhs: 'M_{u}', expr: '1.3[M_{D} + 1.67M_{L+I}]', sub: '1.3[' + sg(p.MDC1) + ' + ' + ng(p.MDC2) + ' + ' + ng(p.MDW) + ' + 1.67 × ' + ng(LL) + ']', res: fx(v, 0), unit: 'k-ft', ref: 'Table 3.22.1A, Group I' });
+    if (p.IMp != null) L.push({ note: 'M_{L+I} includes distribution and impact I = ' + fn(sign > 0 ? p.IMp : p.IMn, 3) + ' (3.8.2)' });
+    return v;
+  }
+  function wsFlexLFD(res, p) {
+    const L = [], F = p.flex;
+    L.push({ note: 'Demand' });
+    const Mu = muLFD(p, 1, L);
+    L.push({ note: 'Resistance, bonded strands (9.17); ' + (res.flexStrands === 'all' ? 'all developed strands' : 'developed strands below mid-depth') });
+    let ok = false;
+    if (F && F.Aeff > 0) {
+      L.push({ lhs: 'A*_{s}', sub: 'developed area at x = ' + fn(p.x, 2) + ' ft', res: fn(F.Aeff, 3), unit: 'in.²', ref: '9.28' });
+      L.push({ lhs: 'd', sub: 'top of ' + (res.comp ? 'deck' : 'beam') + ' to the centroid of A*_{s}', res: fn(F.dp, 2), unit: 'in.' });
+      L.push({ lhs: 'β_{1}', expr: '0.85 − 0.05(f′_{c} − 4) ≥ 0.65', sub: 'f′_{c} = ' + fn(F.fcc, 2) + ' ksi' + (res.comp ? ' (deck)' : ''), res: fn(F.b1, 3), ref: '8.16.2.7' });
+      const rho = F.Aeff / (F.b * F.dp);
+      L.push({ lhs: 'ρ*', expr: '\\f{A*_{s}}{bd}', sub: '\\f{' + fn(F.Aeff, 3) + '}{' + fn(F.b, 2) + ' × ' + fn(F.dp, 2) + '}', res: fn(rho, 6) });
+      const fsu = FPU * (1 - F.gam / F.b1 * rho * FPU / F.fcc);
+      L.push({ lhs: 'f*_{su}', expr: 'f′_{s}(1 − \\f{γ*}{β_{1}}\\f{ρ*f′_{s}}{f′_{c}})', sub: '270(1 − \\f{0.28}{' + fn(F.b1, 3) + '} × \\f{' + fn(rho, 6) + ' × 270}{' + fn(F.fcc, 2) + '})', res: fn(fsu, 3), unit: 'ksi', ref: '9-17' });
+      let Mn;
+      if (F.case === 'rectangular') {
+        const a = F.Aeff * fsu / (0.85 * F.fcc * F.b);
+        L.push({ lhs: 'a', expr: '\\f{A*_{s}f*_{su}}{0.85f′_{c}b}', sub: '\\f{' + fn(F.Aeff, 3) + ' × ' + fn(fsu, 2) + '}{0.85 × ' + fn(F.fcc, 2) + ' × ' + fn(F.b, 2) + '}', res: fn(a, 3) + ' ≤ t = ' + fn(F.t, 2), unit: 'in.', ref: '9.17.2' });
+        Mn = F.over ? null : F.Aeff * fsu * F.dp * (1 - 0.6 * rho * fsu / F.fcc) / 12;
+        if (Mn != null) L.push({ lhs: 'φM_{n}', expr: 'φA*_{s}f*_{su}d(1 − 0.6\\f{ρ*f*_{su}}{f′_{c}})', sub: '1.0 × ' + fn(F.Aeff, 3) + ' × ' + fn(fsu, 2) + ' × ' + fn(F.dp, 2) + ' × (1 − 0.6 × \\f{' + fn(rho, 6) + ' × ' + fn(fsu, 2) + '}{' + fn(F.fcc, 2) + '}) / 12', res: fx(Mn, 0), unit: 'k-ft', ref: '9-13' });
+      } else {
+        const Asf = 0.85 * F.fcc * (F.b - F.bw) * F.t / fsu, Asr = F.Aeff - Asf;
+        L.push({ lhs: 'A_{sf}', expr: '\\f{0.85f′_{c}(b − b′)t}{f*_{su}}', sub: '\\f{0.85 × ' + fn(F.fcc, 2) + ' × (' + fn(F.b, 2) + ' − ' + fn(F.bw, 2) + ') × ' + fn(F.t, 2) + '}{' + fn(fsu, 2) + '}', res: fn(Asf, 3), unit: 'in.²', ref: '9.17.3' });
+        L.push({ lhs: 'A_{sr}', expr: 'A*_{s} − A_{sf}', sub: fn(F.Aeff, 3) + ' − ' + fn(Asf, 3), res: fn(Asr, 3), unit: 'in.²', ref: '9-15' });
+        Mn = F.over ? null : (Asr * fsu * F.dp * (1 - 0.6 * Asr * fsu / (F.bw * F.dp * F.fcc)) + 0.85 * F.fcc * (F.b - F.bw) * F.t * (F.dp - 0.5 * F.t)) / 12;
+        if (Mn != null) L.push({ lhs: 'φM_{n}', expr: 'φ[A_{sr}f*_{su}d(1 − 0.6\\f{A_{sr}f*_{su}}{b′df′_{c}}) + 0.85f′_{c}(b − b′)t(d − 0.5t)]', sub: 'b′ = ' + fn(F.bw, 2) + ' in., t = ' + fn(F.t, 2) + ' in.', res: fx(Mn, 0), unit: 'k-ft', ref: '9-14' });
+      }
+      if (F.over) L.push({ lhs: 'φM_{n}', sub: 'reinforcement index ' + fn(F.idx, 3) + ' > 0.36β_{1} = ' + fn(F.idxMax, 3) + ': limited per 9-22 / 9-23', res: fx(p.Mr, 0), unit: 'k-ft', ref: '9.18.1' });
+      ok = F.over || (Mn != null && close(Mn, p.Mr) && close(fsu, F.fps));
+      if (!ok) { while (L.length && L[L.length - 1].lhs !== 'd') L.pop(); L.push({ lhs: 'φM_{n}', sub: F.case + ', f*_{su} = ' + fn(F.fps, 2) + ' ksi', res: fx(p.Mr, 0), unit: 'k-ft', ref: '9.17' }); }
+    }
+    return { L, demand: Mu, cap: p.Mr, ok: true, unit: 'k-ft' };
+  }
+  function wsFlexNegLFD(res, p) {
+    const L = [], F = p.fneg;
+    L.push({ note: 'Demand' });
+    const Mu = muLFD(p, -1, L);
+    L.push({ note: 'Resistance: deck reinforcement in tension, beam bottom flange in compression at the girder f′c (9.7.2.3), φ = 0.90 (8.16.1.2)' });
+    if (F && F.As > 0) {
+      L.push({ lhs: 'A_{s}', sub: 'top ' + fn(p.As.At, 2) + ' + bottom ' + fn(p.As.Ab, 2), res: fn(F.As, 2), unit: 'in.²' });
+      L.push({ lhs: 'd', sub: 'bottom of the beam to the centroid of A_{s}', res: fn(F.ds, 2), unit: 'in.' });
+      L.push({ lhs: 'φM_{n}', sub: F.case + ', a = ' + fn(F.a, 3) + ' in., 0.90 × ' + fx(F.Mn, 0), res: fx(p.MrN, 0), unit: 'k-ft', ref: '8.16.3' });
+    }
+    return { L, demand: Math.abs(Mu), cap: p.MrN, ok: true, unit: 'k-ft' };
+  }
+  function wsSvcLFD(res, p, which, dkfc) {
+    const C = ctx(res), L = [], s = C.s, fc = C.fc, lim = res.limits;
+    const M1 = p.MDC1 * 12, M2 = (p.MDC2 + p.MDW) * 12, ML = Math.max(p.MLLp, 0) * 12;
+    stressHead(res, p, L);
+    if (which === 't') {
+      const fb = p.Fs / s.A + p.Fs * p.e / s.Sb - M1 / s.Sb - (M2 + ML) / C.Scb;
+      L.push({ lhs: 'f_{b}', expr: '\\f{F}{A} + \\f{Fe}{S_{b}} − \\f{M_{DC1}}{S_{b}} − \\f{M_{DC2} + M_{DW} + M_{L+I}}{S_{bc}}', sub: '\\f{' + fx(p.Fs, 1) + '}{' + fx(s.A, 1) + '} + \\f{' + fx(p.Fs, 1) + '×' + fn(p.e, 3) + '}{' + fx(s.Sb, 0) + '} − \\f{' + fx(M1, 0) + '}{' + fx(s.Sb, 0) + '} − \\f{' + fx(M2 + ML, 0) + '}{' + fx(C.Scb, 0) + '}', res: fn(fb, 3), unit: 'ksi', ref: '9.15.2.2' });
+      L.push({ lhs: 'f_{t,lim}', expr: lim.ftK + '√(f′_{c})', sub: lim.ftK + '√' + fx(fc * 1000, 0) + ' psi', res: fn(lim.fcT3, 3), unit: 'ksi', ref: '9.15.2.2(b)' });
+      return { L, demand: -fb, cap: lim.fcT3, ok: close(fb, p.fb3, 0.003), unit: 'ksi', ratioExpr: '\\f{−f_{b}}{f_{t,lim}}' };
+    }
+    const cands = [[p.ftA / (0.6 * fc), 'A'], [p.ftB / (0.4 * fc), 'B'], [p.ftC / (0.4 * fc), 'C']];
+    if (res.comp && dkfc > 0) cands.push([p.fslab / (0.6 * dkfc), 'sA'], [p.fslabB / (0.4 * dkfc), 'sB'], [p.fslabC / (0.4 * dkfc), 'sC']);
+    const g = cands.reduce((a, q) => (q[0] > a[0] ? q : a))[1];
+    const base = p.Fs / s.A - p.Fs * p.e / s.St + M1 / s.St;
+    const subB = '\\f{' + fx(p.Fs, 1) + '}{' + fx(s.A, 1) + '} − \\f{' + fx(p.Fs, 1) + '×' + fn(p.e, 3) + '}{' + fx(s.St, 0) + '} + \\f{' + fx(M1, 0) + '}{' + fx(s.St, 0) + '} + \\f{' + fx(M2, 0) + '}{' + fx(C.Sct, 0) + '}';
+    if (g[0] === 's') {
+      const cs = C.cs, k = (cs.hc - cs.yb) / cs.I * cs.n, fA = (M2 + ML) * k, fB = M2 * k, fC = ML * k + 0.5 * fB;
+      const f = g === 'sA' ? fA : g === 'sB' ? fB : fC, lv = g === 'sA' ? 0.6 * dkfc : 0.4 * dkfc;
+      L.length = 0;
+      L.push({ lhs: 'f_{slab}', expr: g === 'sA' ? 'n\\f{(M_{DC2} + M_{DW} + M_{L+I})y_{t}}{I_{c}}' : g === 'sB' ? 'n\\f{(M_{DC2} + M_{DW})y_{t}}{I_{c}}' : 'n\\f{M_{L+I}y_{t}}{I_{c}} + ½n\\f{(M_{DC2} + M_{DW})y_{t}}{I_{c}}', sub: 'n = ' + fn(cs.n, 3) + ', y_{t} = ' + fn(cs.hc - cs.yb, 2) + ' in., I_{c} = ' + fx(cs.I, 0), res: fn(f, 3), unit: 'ksi', ref: '9.15.2.2(a)' });
+      L.push({ lhs: 'f_{c,lim}', expr: (g === 'sA' ? '0.60' : '0.40') + 'f′_{c,deck}', sub: fn(g === 'sA' ? 0.6 : 0.4, 2) + ' × ' + fn(dkfc, 2), res: fn(lv, 3), unit: 'ksi' });
+      return { L, demand: f, cap: lv, ok: true, unit: 'ksi' };
+    }
+    const fB = base + M2 / C.Sct;
+    L.push({ lhs: 'f_{t,PS+D}', expr: '\\f{F}{A} − \\f{Fe}{S_{t}} + \\f{M_{DC1}}{S_{t}} + \\f{M_{DC2} + M_{DW}}{S_{tc}}', sub: subB, res: fn(fB, 3), unit: 'ksi', ref: '9.15.2.2(a)' });
+    if (g === 'B') { L.push({ lhs: 'f_{c,lim}', expr: '0.40f′_{c}', sub: '0.40 × ' + fn(fc, 3) + ' (effective prestress and permanent loads)', res: fn(0.4 * fc, 3), unit: 'ksi' }); return { L, demand: fB, cap: 0.4 * fc, ok: close(fB, p.ftB, 0.003), unit: 'ksi' }; }
+    const fL = ML / C.Sct;
+    L.push({ lhs: 'f_{t,L+I}', expr: '\\f{M_{L+I}}{S_{tc}}', sub: '\\f{' + fx(ML, 0) + '}{' + fx(C.Sct, 0) + '}', res: fn(fL, 3), unit: 'ksi' });
+    if (g === 'A') { const f = fB + fL; L.push({ lhs: 'f_{t}', expr: 'f_{t,PS+D} + f_{t,L+I}', sub: fn(fB, 3) + ' + ' + fn(fL, 3), res: fn(f, 3), unit: 'ksi' }); L.push({ lhs: 'f_{c,lim}', expr: '0.60f′_{c}', sub: '0.60 × ' + fn(fc, 3) + ' (all loads)', res: fn(0.6 * fc, 3), unit: 'ksi' }); return { L, demand: f, cap: 0.6 * fc, ok: close(f, p.ftA, 0.003), unit: 'ksi' }; }
+    const f = fL + 0.5 * fB;
+    L.push({ lhs: 'f_{t}', expr: 'f_{t,L+I} + ½f_{t,PS+D}', sub: fn(fL, 3) + ' + 0.5 × ' + fn(fB, 3), res: fn(f, 3), unit: 'ksi' });
+    L.push({ lhs: 'f_{c,lim}', expr: '0.40f′_{c}', sub: '0.40 × ' + fn(fc, 3) + ' (live load plus half the prestress and permanent loads)', res: fn(0.4 * fc, 3), unit: 'ksi' });
+    return { L, demand: f, cap: 0.4 * fc, ok: close(f, p.ftC, 0.003), unit: 'ksi' };
+  }
+  function wsReleaseLFD(res, r) {
+    const w = wsRelease(res, r), C = ctx(res), L = w.L;
+    const i = L.findIndex(l => l.lhs === 'f_{ci,lim}' || l.lhs === 'f_{ti,lim}');
+    if (i >= 0) L[i] = r.ratioC >= r.ratioT ? { lhs: 'f_{ci,lim}', expr: '0.60f′_{ci}', sub: '0.60 × ' + fn(C.fci, 3), res: fn(C.lim.fciC, 3), unit: 'ksi', ref: '9.15.2.1(a)' }
+      : { lhs: 'f_{ti,lim}', expr: res.lfd.relTension === 'none' ? 'min(200 psi, 3√(f′_{ci}))' : '7.5√(f′_{ci})', sub: res.lfd.relTension === 'none' ? 'no bonded reinforcement' : '7.5√' + fx(C.fci * 1000, 0) + ' psi, bonded reinforcement', res: fn(C.lim.fciT, 3), unit: 'ksi', ref: '9.15.2.1(b)' };
+    L.forEach(l => { if (l.ref === '5.9.2.3.1') l.ref = '9.15.2.1'; });
+    return w;
+  }
+  function vuLFD(q) {
+    const D = q.VDC1 + q.VDC2 + q.VDW, VuP = 1.3 * D + 1.3 * 1.67 * Math.max(q.VLLp, 0), VuN = 1.3 * D + 1.3 * 1.67 * Math.min(q.VLLn, 0);
+    const s = Math.abs(VuP) >= Math.abs(VuN) ? 1 : -1;
+    return { s, v: Math.abs(s > 0 ? VuP : VuN), LL: s > 0 ? Math.max(q.VLLp, 0) : Math.min(q.VLLn, 0), D };
+  }
+  function wsShearLFD(res, q) {
+    const C = ctx(res), L = [], fc = C.fc, bv = res.comp ? C.shp.bw : C.shp.bwTot, S = q.simp, rf = sqk(fc);
+    L.push({ note: 'Demand' + (q.tags && q.tags.includes('critical section for shear') ? ' at the critical section, h/2 from the face of support (9.20.1.4)' : '') });
+    const V = vuLFD(q);
+    L.push({ lhs: 'V_{u}', expr: '|1.3[V_{D} + 1.67V_{L+I}]|', sub: '|1.3[' + sg(V.D) + ' + 1.67 × ' + ng(V.LL) + ']|', res: fx(V.v, 1), unit: 'k', ref: 'Table 3.22.1A' });
+    L.push({ lhs: 'M_{u}', sub: (q.useNeg ? 'negative' : 'positive') + ' moment at the section', res: fx(q.Mu, 0), unit: 'k-ft' });
+    L.push({ note: 'Resistance (9.20); b′ = ' + fn(bv, 2) + ' in., f′_{c} = ' + fx(fc * 1000, 0) + ' psi, √f′_{c} = ' + fn(rf * 1000, 2) + ' psi, f_{sy} = 60 ksi' });
+    const hcT = res.comp ? C.cs.hc : C.shp.h;
+    L.push({ lhs: 'd', expr: 'max(d_{p}, 0.8h)', sub: 'd_{p} = ' + fn(q.de, 2) + ', 0.8h = ' + fn(0.8 * hcT, 2), res: fn(q.dv, 2), unit: 'in.', ref: '9.20.2.2' });
+    L.push({ lhs: 'M_{cr}', expr: '\\f{I}{Y_{t}}(6√(f′_{c}) + f_{pe} − f_{d})', sub: '\\f{' + fx(S.It, 0) + '}{' + fn(S.Yt, 2) + '}(' + fn(6 * rf, 3) + ' + ' + fn(S.fpeT, 3) + ' − ' + fn(S.fdT, 3) + ') / 12', res: fx(S.Mcr, 0), unit: 'k-ft', ref: '9-28' });
+    L.push({ lhs: 'V_{ci}', expr: '0.6√(f′_{c})b′d + V_{d} + \\f{V_{i}M_{cr}}{M_{max}} ≥ 1.7√(f′_{c})b′d', sub: fn(0.6 * rf, 4) + '×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(S.Vd, 2) + ' + \\f{' + fn(S.Vi, 2) + '×' + fx(S.Mcr, 0) + '}{' + fx(S.Mmax, 1) + '}', res: fx(S.Vci, 1), unit: 'k', ref: '9-27' });
+    L.push({ lhs: 'f_{pc}', expr: '\\f{F}{A} − \\f{Fe(y_{c} − y_{b})}{I} + \\f{M_{DC1}(y_{c} − y_{b})}{I}', sub: 'F = ' + fx(S.F, 1) + ' k, e = ' + fn(S.e, 3) + ', y_{c} = ' + fn(S.yc, 2) + ' in.', res: fn(S.fpc, 3), unit: 'ksi', ref: '9.20.2.3' });
+    L.push({ lhs: 'V_{cw}', expr: '(3.5√(f′_{c}) + 0.3f_{pc})b′d + V_{p}', sub: '(' + fn(3.5 * rf, 4) + ' + 0.3×' + fn(S.fpc, 3) + ')×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(q.Vp, 2), res: fx(S.Vcw, 1), unit: 'k', ref: '9-29' });
+    L.push({ lhs: 'V_{c}', expr: 'min(V_{ci}, V_{cw})', res: fx(q.Vc, 1), unit: 'k', ref: '9.20.2.1' });
+    L.push({ lhs: 'V_{s}', expr: '\\f{A_{v}f_{sy}d}{s} ≤ 8√(f′_{c})b′d', sub: '\\f{' + fn(q.Av, 2) + '×60×' + fn(q.dv, 2) + '}{' + fn(q.s, 2) + '} ≤ ' + fx(S.VsMax, 1), res: fx(q.Vs, 1), unit: 'k', ref: '9-30' });
+    L.push({ lhs: 'φV_{n}', expr: 'φ(V_{c} + V_{s})', sub: '0.90 × (' + fx(q.Vc, 1) + ' + ' + fx(q.Vs, 1) + ')', res: fx(0.9 * q.Vn, 1), unit: 'k', ref: '9-26' });
+    return { L, demand: q.Vu, cap: 0.9 * q.Vn, ok: true, unit: 'k' };
+  }
+  function wsHorizLFD(res, q) {
+    const L = [], H = q.hs;
+    L.push({ lhs: 'V_{u}', sub: 'Group I shear at the section', res: fx(q.Vu, 1), unit: 'k', ref: '9.20.4.3' });
+    L.push({ lhs: 'A_{vh,min}', expr: '\\f{50b_{v}s}{f_{y}}', sub: '\\f{50 × ' + fn(H.bvi, 2) + ' × ' + fn(q.s, 2) + '}{60,000}', res: fn(H.AvhMin, 3) + (H.ties ? ' ≤ ' : ' > ') + fn(q.Av, 2), unit: 'in.²', ref: '9.20.4.5' });
+    L.push({ lhs: 'v_{nh}', sub: H.ties && H.rough ? '350 psi, roughened ¼ in. with minimum ties, plus 160f_{y}/40,000 per percent of ties above the minimum' : H.ties || H.rough ? '80 psi (' + (H.rough ? 'roughened, ties below the minimum' : 'minimum ties, not roughened') + ')' : 'not permitted: neither roughened nor minimum ties', res: fn(H.vnh, 1), unit: 'psi', ref: '9.20.4.3' });
+    L.push({ lhs: 'φV_{nh}', expr: 'φv_{nh}b_{v}d', sub: '0.90 × ' + fn(H.vnh, 1) + ' × ' + fn(H.bvi, 2) + ' × ' + fn(H.d, 2) + ' / 1000', res: fx(0.9 * q.Vni, 1), unit: 'k' });
+    if (H.over500) L.push({ note: 'V_{u}/φ exceeds 500b_{v}d: design by 9.20.4.4 (shear friction)' });
+    return { L, demand: q.Vu, cap: 0.9 * q.Vni, ok: true, unit: 'k' };
+  }
+  function wsMinLFD(res, p) {
+    const C = ctx(res), L = [], s = C.s;
+    L.push({ lhs: 'f_{r}', expr: '7.5√(f′_{c})', sub: '7.5√' + fx(C.fc * 1000, 0) + ' psi', res: fn(p.fr, 3), unit: 'ksi', ref: '9.15.2.3' });
+    L.push({ lhs: 'f_{pe}', expr: '\\f{F}{A} + \\f{Fe}{S_{b}}', sub: '\\f{' + fx(p.Fs, 1) + '}{' + fx(s.A, 1) + '} + \\f{' + fx(p.Fs, 1) + '×' + fn(p.e, 3) + '}{' + fx(s.Sb, 0) + '}', res: fn(p.fpeB, 3), unit: 'ksi' });
+    L.push({ lhs: 'M*_{cr}', expr: '(f_{r} + f_{pe})S_{c} − M_{d/nc}(\\f{S_{c}}{S_{b}} − 1)', sub: '(' + fn(p.fr, 3) + ' + ' + fn(p.fpeB, 3) + ')×' + fx(C.Scb, 0) + '/12 − ' + fx(p.MDC1, 0) + '(' + fx(C.Scb, 0) + '/' + fx(s.Sb, 0) + ' − 1)', res: fx(p.Mcr, 0), unit: 'k-ft', ref: '9.18.2.1' });
+    L.push({ lhs: 'M_{req}', expr: 'min(1.2M*_{cr}, 1.33M_{u})', sub: 'min(' + fx(1.2 * p.Mcr, 0) + ', 1.33 × ' + fx(p.MuP, 0) + ')', res: fx(p.minReq, 0), unit: 'k-ft', ref: '9.18.2.2' });
+    L.push({ lhs: 'φM_{n}', sub: 'see flexure at this point', res: fx(p.Mr, 0), unit: 'k-ft' });
+    return { L, demand: p.minReq, cap: p.Mr, ok: true, unit: 'k-ft' };
+  }
+  function wsDuctLFD(res, p) {
+    const F = p.flex;
+    return { L: [{ lhs: F.case === 'rectangular' ? 'ρ*f*_{su}/f′_{c}' : 'A_{sr}f*_{su}/(b′df′_{c})', sub: F.case + ' section at x = ' + fn(p.x, 2) + ' ft', res: fn(F.idx, 4), ref: F.case === 'rectangular' ? '9-20' : '9-21' }, { lhs: 'limit', expr: '0.36β_{1}', sub: '0.36 × ' + fn(F.b1, 3), res: fn(F.idxMax, 4), ref: '9.18.1' }], demand: F.idx, cap: F.idxMax, ok: true, unit: '' };
+  }
+  function wsRatingLFR(res, row, key) {
+    const L = [], r = res.rating, inv = key === 'inv';
+    if (row.lim.startsWith('Strength')) {
+      const A2 = inv ? r.A2inv : r.A2op, shear = /shear/.test(row.lim);
+      L.push({ lhs: 'C', expr: 'φR_{n}', sub: 'design ' + (shear ? 'shear' : 'flexural') + ' strength, φ = ' + (shear ? '0.90' : '1.00'), res: fx(row.cap, shear ? 1 : 0), unit: shear ? 'k' : 'k-ft' });
+      L.push({ lhs: inv ? 'RF_{inv}' : 'RF_{op}', expr: '\\f{C − A_{1}D}{A_{2}L(1 + I)}', sub: '\\f{' + sg(row.cap) + ' − ' + ng(row.dead) + '}{' + fn(A2, 2) + ' × ' + sg(row.ll) + '}', res: fn((row.cap - row.dead) / (A2 * row.ll), 2), ref: 'MBE 6B.4.1, 6B.5.3.3' });
+      L.push({ note: 'A_{1}D = 1.3 × dead load effect = ' + sg(row.dead) });
+      return L;
+    }
+    const cap = !inv && row.capOp ? row.capOp : row.cap;
+    L.push({ lhs: inv ? 'RF_{inv}' : 'RF_{op}', expr: '\\f{f_{allow} − (F_{d} + F_{p})}{F_{L}}', sub: '\\f{' + fn(cap, 3) + ' − ' + ng(row.dead) + '}{' + fn(row.ll, 3) + '}', res: fn((cap - row.dead) / row.ll, 2), ref: 'MBE 6B.5.3.3' });
+    L.push({ note: row.lim + ': ' + (row.basis || '') + (row.lim === 'Concrete tension' ? '; F_{d} + F_{p} tension positive' : '') });
+    return L;
+  }
+
   // ---------- rating derivation ----------
   function wsRating(res, row, key) {
     const L = [], r = res.rating, inv = key === 'inv';
@@ -2039,7 +2488,8 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
   // ---------- report ----------
   async function build(model, res, opts) {
     const mode = opts.mode || 'summary', meta = opts.meta || {};
-    const edName = 'AASHTO LRFD 10th Edition (2024) / IDOT Bridge Manual / MBE LRFR';
+    LFDR = !!res.lfd;
+    const edName = LFDR ? 'AASHTO Standard Specifications 17th Ed. (2002) LFD / MBE LFR' : 'AASHTO LRFD 10th Edition (2024) / IDOT Bridge Manual / MBE LRFR';
     const inputId = hash(JSON.stringify(Object.assign({}, model, { report: undefined })));
     const now = new Date(), stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
     const titleTxt = mode === 'summary' ? 'Calculation summary' : mode === 'all' ? 'Comprehensive calculation — all analysis points' : 'Comprehensive calculation — tenth points and governing locations';
@@ -2078,14 +2528,21 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.table([{ h: 'Check', w: 2.6 }, { h: 'Location', w: 1.6 }, { h: 'Values', w: 5 }, { h: 'Ratio', w: 0.8, a: 'r' }], C.map(c => [c.label, c.where, c.detail || '', { t: fr(c.ratio), f: 'B', color: rCol(c.ratio) }]));
     const R = res.rating;
     const LV = res.live || {}, PM = res.permit, RL = res.ratingLoad;
+    if (LFDR) {
+      F.h3('Load rating, ' + RL.name + (R.complete ? '' : ' — partial: shear not rated'));
+      F.table([{ h: 'Limit state', w: 2.4 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 3.6 }],
+        R.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Strength') ? 'A1 1.30, A2 ' + fn(R.A2inv, 2) + ' / ' + fn(R.A2op, 2) : (q.inv.basis || '') + (q.op ? '' : '; inventory only')]));
+      if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft, ' + fn(R.inventory.inv * RL.tons, 1) + ' tons)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft, ' + fn(R.operating.op * RL.tons, 1) + ' tons)' : '') + '.', { size: 8.4 });
+    } else {
     F.h3((R.permitOnly ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'HL-93 design load rating (MBE LRFR)') + (R.complete ? '' : ' — partial: shear not rated'));
     F.table([{ h: 'Limit state', w: 2.4 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 3.6 }],
       R.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Service') ? 'γLL ' + fn(R.gS3 || 0.8, 2) + ', fR = 0.19√f′c; inventory only' : 'γDC ' + fn(R.gDC || 1.25, 2) + ', γDW ' + R.gDW + ', γLL ' + (R.permitOnly && res.permit ? fn(res.permit.opts.gR, 2) : fn(R.gLinv || 1.75, 2) + ' / ' + fn(R.gLop || 1.35, 2)) + (/shear/.test(q.lim) ? '; φs = 1.0' : '; φcφs = ' + fn(R.phiCS, 2))]));
     if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft)' : '') + '.', { size: 8.4 });
-    if (RL && RL.tons && R.inventory && !R.permitOnly) F.para(RL.veh + ': inventory ' + fn(R.inventory.inv * RL.tons, 1) + ' tons' + (R.operating ? ', operating ' + fn(R.operating.op * RL.tons, 1) + ' tons' : '') + '.', { size: 8.6 });
+    if (!LFDR && RL && RL.tons && R.inventory && !R.permitOnly) F.para(RL.veh + ': inventory ' + fn(R.inventory.inv * RL.tons, 1) + ' tons' + (R.operating ? ', operating ' + fn(R.operating.op * RL.tons, 1) + ' tons' : '') + '.', { size: 8.6 });
     if (PM && !R.permitOnly) {
       F.h3('Permit load rating (MBE 6A.4.5)');
       F.table([{ h: 'Limit state', w: 2.4 }, { h: 'RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 5.5 }], PM.rating.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), 'γL ' + fn(PM.opts.gR, 2) + ', ' + PM.opts.typeName]));
+    }
     }
     if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ' at x = ' + fn(res.controlling.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '.', { size: 8.6 });
     if (res.warn && res.warn.length) { F.h3('Warnings'); F.bullets(res.warn, { color: AMB }); }
@@ -2097,24 +2554,24 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       ['Beam', res.shapeData.name + (deck ? '' : ', ' + (model.girder === 'exterior' ? 'exterior' : 'interior'))],
       ['Spans', res.spans.map(s => fx(+s, 3)).join(' – ') + ' ft' + (res.spans.length > 1 ? (res.cont ? ', continuous for DC2, DW and LL' : ', simple spans') : '')],
       ['Beams', (model.nBeams || res.df.Nb) + (deck ? ' deck beams' : ' at ' + model.S + ' ft') + ', roadway ' + model.roadway + ' ft, skew ' + (model.skew || 0) + '°'],
-      ['Concrete', "beam f′c " + mt.fc + " ksi, f′ci " + mt.fci + ' ksi; Eci ' + fx(mt.Eci, 0) + ', Ec ' + fx(mt.Eb, 0) + ' ksi' + (res.comp ? '; deck f′c ' + (model.deck || {}).fc + ' ksi' : '')],
+      ['Concrete', "beam f′c " + mt.fc + " ksi, f′ci " + mt.fci + ' ksi; Eci ' + fx(mt.Eci, 0) + ', Ec ' + fx(mt.Eb, 0) + ' ksi' + (LFDR ? ' (8.7.1)' : '') + (res.comp ? '; deck f′c ' + (model.deck || {}).fc + ' ksi' : '')],
       ['Deck', res.comp ? (model.deck.t + ' in. slab, ' + (model.deck.fillet || 0) + ' in. fillet; b_eff ' + fn(res.section.comp.beff, 1) + ' in., tributary ' + fn(res.loads.trib * 12, 1) + ' in.') : (model.overlay ? model.overlay.t + ' in. ' + model.overlay.type + ' overlay, noncomposite' : 'noncomposite')],
       ['Strands', st.n + ' × ' + st.d + ' in., Aps ' + fn(st.Aps, 3) + ' in.², ' + (model.pattern && model.pattern.name ? 'pattern ' + model.pattern.name : 'custom pattern') + (st.groups.some(g => g.draped) ? ', draped' : '') + (st.groups.some(g => g.Ldb > 0) ? ', debonded' : '')],
-      ['Prestress', 'fpbt ' + fn(ls.fpbt, 1) + ', fpt ' + fn(ls.fpt, 1) + ', fpe ' + fn(ls.fpe, 1) + ' ksi; total loss ' + fn(ls.pct, 1) + '%'],
+      ['Prestress', LFDR ? 'fsi ' + fn(ls.fpbt, 1) + ', after ES ' + fn(ls.fpt, 1) + ', fse ' + fn(ls.fpe, 1) + ' ksi; losses SH ' + fn(ls.SH, 2) + ' + ES ' + fn(ls.dES, 2) + ' + CRc ' + fn(ls.CRc, 2) + ' + CRs ' + fn(ls.CRs, 2) + (ls.method === 'lump' ? ' (lump sum used: 45 ksi)' : '') + ' = ' + fn(ls.dT, 2) + ' ksi (' + fn(ls.pct, 1) + '%)' : 'fpbt ' + fn(ls.fpbt, 1) + ', fpt ' + fn(ls.fpt, 1) + ', fpe ' + fn(ls.fpe, 1) + ' ksi; total loss ' + fn(ls.pct, 1) + '%'],
       ['Dead loads', 'DC1 ' + fn(ld.DC1, 3) + ', DC2 ' + fn(ld.DC2, 3) + ', DW ' + fn(ld.DW, 3) + ' k/ft'],
-      ['Live load', (() => { const out = [];
+      ['Live load', LFDR ? res.lfd.vehicle + ' truck or lane' + (res.lfd.military ? ' or alternate military' : '') + ', impact 50/(L + 125) ≤ 0.30; Group I 1.3[D + 1.67(L + I)]' : (() => { const out = [];
         if (LV.permit !== 'only') out.push(LV.ped ? 'Pedestrian bridge (AASHTO Guide Spec 2009, 2015 interims): 90 psf × ' + fn(LV.ped.width, 2) + ' ft = ' + fn(LV.ped.w, 3) + ' k/ft' + (LV.ped.veh ? '; ' + LV.ped.veh + ' maintenance vehicle alone, distribution ' + fn(LV.ped.dfVeh, 3) : '; no maintenance vehicle') + '; no impact; fatigue not checked (Guide Spec 3.5)' : 'HL-93, IM 33%; fatigue truck IM 15%');
         if (LV.perm) out.push('Permit (Strength II, γLL ' + fn(LV.perm.gDesign, 2) + ', IM 33%): ' + LV.perm.vehicles.map(v => v.name + ' ' + v.w.join('-') + ' k at ' + v.s.join('-') + ' ft').join('; ') + (LV.perm.lane ? '; 0.2 k/ft lane for negative moment and spans over 200 ft' : ''));
         return out.join('. '); })()],
-      ['Distribution', 'g(M) ' + fn(res.df.at.M, 3) + ', g(V) ' + fn(res.df.at.V, 3) + ', NL ' + res.df.NL + (res.df.override ? ' (entered)' : '')],
-      ['Rating factors', 'φc ' + R.phiC + ', φs ' + R.phiS + ', γDW ' + R.gDW],
-      ['Shear', res.shearChecked ? (res.shearMethod === 'simplified' ? 'simplified procedure (5.7.3.4.3)' : 'general procedure (5.7.3.4.2)') : 'not checked'],
+      ['Distribution', LFDR ? fn(res.df.at.wM, 3) + ' wheels (' + res.df.at.gov + ') = ' + fn(res.df.at.M, 3) + ' lanes; shear ' + fn(res.df.at.wV, 3) + (res.comp ? ', end axle ' + fn(res.df.at.wEnd, 3) : '') + ' wheels; NL ' + res.df.NL : 'g(M) ' + fn(res.df.at.M, 3) + ', g(V) ' + fn(res.df.at.V, 3) + ', NL ' + res.df.NL + (res.df.override ? ' (entered)' : '')],
+      ['Rating factors', LFDR ? 'MBE 6B LFR: A1 1.30, A2 ' + fn(R.A2inv, 2) + ' inventory, ' + fn(R.A2op, 2) + ' operating' : 'φc ' + R.phiC + ', φs ' + R.phiS + ', γDW ' + R.gDW],
+      ['Shear', res.shearChecked ? (LFDR ? 'Vci / Vcw (9.20), horizontal shear 9.20.4' : res.shearMethod === 'simplified' ? 'simplified procedure (5.7.3.4.3)' : 'general procedure (5.7.3.4.2)') : 'not checked'],
     ];
     F.kv(desc, { cols: 2, kw: 78 });
     const byId = id => C.find(c => c.id === id);
     const tagMap = [['flexure', 'M+'], ['negflex', 'M−'], ['shear', 'V'], ['svc3', 'S3'], ['svc1', 'S1'], ['fatigue', 'f']];
     elevation(F, res, tagMap.map(([id, t]) => { const c = byId(id); return c && c.src && c.src.x != null ? { tag: t, x: c.src.x } : null; }));
-    F.para('Markers: M+ positive flexure, M− negative flexure, V shear, S3 Service III, S1 Service I, f fatigue.', { size: 7.5, color: F.pal.mute });
+    F.para(LFDR ? 'Markers: M+ positive flexure, M− negative flexure, V shear, S3 service tension, S1 service compression.' : 'Markers: M+ positive flexure, M− negative flexure, V shear, S3 Service III, S1 Service I, f fatigue.', { size: 7.5, color: F.pal.mute });
     crossSection(F, res, model);
 
     // ---- controlling checks
@@ -2136,7 +2593,9 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       flexure: c => wsFlexPos(res, c.src), negflex: c => wsFlexNeg(res, c.src), svc3: c => wsSvc3(res, c.src), svc1: c => wsSvc1(res, c.src, +(model.deck || {}).fc), fatigue: c => wsFat(res, c.src),
       release: c => wsRelease(res, c.src), shear: c => wsShear(res, c.src), minreinf: c => wsMinReinf(res, c.src), longreinf: c => wsLong(res, c.src),
     };
-    const order = ['flexure', 'negflex', 'shear', 'svc3', 'svc1', 'fatigue', 'release'];
+    if (LFDR) Object.assign(W1, { flexure: c => wsFlexLFD(res, c.src), negflex: c => wsFlexNegLFD(res, c.src), svc3: c => wsSvcLFD(res, c.src, 't'), svc1: c => wsSvcLFD(res, c.src, 'c', +(model.deck || {}).fc),
+      release: c => wsReleaseLFD(res, c.src), shear: c => wsShearLFD(res, c.src), minreinf: c => wsMinLFD(res, c.src), interface: c => wsHorizLFD(res, c.src), ductmax: c => wsDuctLFD(res, c.src) });
+    const order = LFDR ? ['flexure', 'negflex', 'shear', 'interface', 'svc3', 'svc1', 'release'] : ['flexure', 'negflex', 'shear', 'svc3', 'svc1', 'fatigue', 'release'];
     const extra = C.filter(c => !order.includes(c.id)).map(c => c.id);
     (mode === 'summary' ? order : order.concat(extra)).forEach(id => { const c = byId(id); if (!c) return; const w = W1[id] ? W1[id](c) : wsGeneric(c); ws(c, w); });
     if (mode === 'summary') { const ex = C.filter(c => !order.includes(c.id) && c.ratio > 0.9); ex.forEach(c => ws(c, W1[c.id] ? W1[c.id](c) : wsGeneric(c))); }
@@ -2144,8 +2603,9 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     F.need(120); F.h3('Governing load rating');
     const ratL = [];
     const gi = R.summary.map(q => q.inv).reduce((a, r) => (!a || r.inv < a.inv ? r : a), null), go = R.summary.filter(q => q.op).map(q => q.op).reduce((a, r) => (!a || r.op < a.op ? r : a), null);
-    if (gi) { ratL.push({ note: 'Inventory: ' + gi.lim + ' at x = ' + fn(gi.x, 2) + ' ft' }); ratL.push(...wsRating(res, gi, 'inv')); }
-    if (go) { ratL.push({ note: 'Operating: ' + go.lim + ' at x = ' + fn(go.x, 2) + ' ft' }); ratL.push(...wsRating(res, go, 'op')); }
+    const wsR = LFDR ? wsRatingLFR : wsRating;
+    if (gi) { ratL.push({ note: 'Inventory: ' + gi.lim + ' at x = ' + fn(gi.x, 2) + ' ft' }); ratL.push(...wsR(res, gi, 'inv')); }
+    if (go) { ratL.push({ note: 'Operating: ' + go.lim + ' at x = ' + fn(go.x, 2) + ' ft' }); ratL.push(...wsR(res, go, 'op')); }
     F.math(plain(ratL));
 
     if (mode === 'summary') {
@@ -2169,11 +2629,13 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       [['Beam (noncomposite)', fx(s.A, 1), fx(s.I, 0), fn(s.yb, 2), fx(s.Sb, 0), fx(s.St, 0), '—']].concat(res.comp ? [['Composite (n = ' + fn(cs.n, 3) + ')', fx(cs.Ac, 1), fx(cs.I, 0), fn(cs.yb, 2), fx(cs.Sb, 0), fx(cs.St, 0), fx(cs.Sts, 0)]] : []), { size: 7.4 });
     F.table([{ h: 'Row', w: 0.8 }, { h: 'Strands', w: 0.8, a: 'r' }, { h: 'y end, in.', w: 1, a: 'r' }, { h: 'y midspan, in.', w: 1, a: 'r' }, { h: 'Draped', w: 0.8 }, { h: 'Debond length, ft', w: 1.2, a: 'r' }],
       st.groups.map(g => [String(g.row), String(g.n), fn(g.yE, 2), fn(g.yC, 2), g.draped ? 'yes' : '', g.Ldb > 0 ? fn(g.Ldb, 1) : '—']), { size: 7.4 });
-    F.kv([['Transfer length', fn(st.lt, 1) + ' in.'], ['Development length', fn(st.ldB, 1) + ' in. bonded' + (st.ldDb ? ', ' + fn(st.ldDb, 1) + ' in. debonded' : '')], ['fps at midspan', fn(st.fpsMid, 2) + ' ksi'], ['Initial force Fi', fx(ls.Fi, 1) + ' k'], ['Elastic shortening ΔfpES', fn(ls.dES, 2) + ' ksi (' + ls.iterations + ' iterations)'], ['fcgp', fn(ls.fcgp, 3) + ' ksi'], ['Long-term ΔfpLT', fn(ls.dLT, 2) + ' ksi (γh ' + fn(ls.gh, 3) + ', γst ' + fn(ls.gst, 3) + ')' + (ls.dCorr ? ' + DG 3.5 correction ' + fn(ls.dCorr, 2) : '')], ['Total loss', fn(ls.dT, 2) + ' ksi (' + fn(ls.pct, 1) + '%)'], ['Ep, Eci, Ec', fx(ls.Ep, 0) + ', ' + fx(ls.Eci, 0) + ', ' + fx(ls.Eb, 0) + ' ksi']], { cols: 2, size: 7.6, kw: 100 });
+    if (LFDR) F.kv([['Transfer length', fn(st.lt, 1) + ' in. (50d_b)'], ['Development length', fn(st.ldB, 1) + ' in. bonded' + (st.ldDb ? ', ' + fn(st.ldDb, 1) + ' in. debonded' : '') + ' (9.28)'], ['f*su at midspan', fn(st.fpsMid, 2) + ' ksi'], ['fsi = 0.75f′s', fn(ls.fpbt, 1) + ' ksi'], ['fcir / fcds', fn(ls.fcir, 3) + ' / ' + fn(ls.fcds, 3) + ' ksi'], ['ES', fn(ls.dES, 2) + ' ksi (' + ls.iterations + ' iterations)'], ['SH = 17 − 0.15RH', fn(ls.SH, 2) + ' ksi'], ['CRc = 12fcir − 7fcds', fn(ls.CRc, 2) + ' ksi'], ['CRs', fn(ls.CRs, 3) + ' ksi'], ['Total loss', fn(ls.dT, 2) + ' ksi (' + fn(ls.pct, 1) + '%)' + (ls.method === 'lump' ? ', lump sum' : '')], ['Es, Eci, Ec', fx(ls.Ep, 0) + ', ' + fx(ls.Eci, 0) + ', ' + fx(ls.Eb, 0) + ' ksi']], { cols: 2, size: 7.6, kw: 100 });
+    else F.kv([['Transfer length', fn(st.lt, 1) + ' in.'], ['Development length', fn(st.ldB, 1) + ' in. bonded' + (st.ldDb ? ', ' + fn(st.ldDb, 1) + ' in. debonded' : '')], ['fps at midspan', fn(st.fpsMid, 2) + ' ksi'], ['Initial force Fi', fx(ls.Fi, 1) + ' k'], ['Elastic shortening ΔfpES', fn(ls.dES, 2) + ' ksi (' + ls.iterations + ' iterations)'], ['fcgp', fn(ls.fcgp, 3) + ' ksi'], ['Long-term ΔfpLT', fn(ls.dLT, 2) + ' ksi (γh ' + fn(ls.gh, 3) + ', γst ' + fn(ls.gst, 3) + ')' + (ls.dCorr ? ' + DG 3.5 correction ' + fn(ls.dCorr, 2) : '')], ['Total loss', fn(ls.dT, 2) + ' ksi (' + fn(ls.pct, 1) + '%)'], ['Ep, Eci, Ec', fx(ls.Ep, 0) + ', ' + fx(ls.Eci, 0) + ', ' + fx(ls.Eb, 0) + ' ksi']], { cols: 2, size: 7.6, kw: 100 });
     F.h3('Loads and distribution');
     F.kv(Object.keys(ld).filter(k => typeof ld[k] === 'number').map(k => [k, fn(ld[k], 4)]).concat(Object.keys(res.df.at).map(k => ['g ' + k, fn(res.df.at[k], 4)])), { cols: 3, size: 7.4, kw: 60 });
     const lim = res.limits;
-    F.kv([['Release compression 0.65f′ci', fn(lim.fciC, 3)], ['Release tension 0.24√f′ci', fn(lim.fciT, 3)], ['Service I 0.60f′c / 0.45f′c', fn(lim.fc06, 3) + ' / ' + fn(lim.fc045, 3)], ['Service III 0.19√f′c', fn(lim.fcT3, 3)], ['Fatigue 0.40f′c', fn(lim.fFat, 3)]], { cols: 2, size: 7.4, kw: 120 });
+    if (LFDR) F.kv([['Release compression 0.60f′ci', fn(lim.fciC, 3)], ['Release tension', fn(lim.fciT, 3)], ['Compression 0.60f′c / 0.40f′c', fn(lim.fc06, 3) + ' / ' + fn(lim.fc04, 3)], ['Tension ' + lim.ftK + '√f′c', fn(lim.fcT3, 3)]].concat(res.comp ? [['Deck 0.60f′c / 0.40f′c', fn(lim.dk06, 3) + ' / ' + fn(lim.dk04, 3)]] : []), { cols: 2, size: 7.4, kw: 120 });
+    else F.kv([['Release compression 0.65f′ci', fn(lim.fciC, 3)], ['Release tension 0.24√f′ci', fn(lim.fciT, 3)], ['Service I 0.60f′c / 0.45f′c', fn(lim.fc06, 3) + ' / ' + fn(lim.fc045, 3)], ['Service III 0.19√f′c', fn(lim.fcT3, 3)], ['Fatigue 0.40f′c', fn(lim.fFat, 3)]], { cols: 2, size: 7.4, kw: 120 });
 
     // points
     const govX = C.filter(c => c.src && c.src.x != null).map(c => c.src.x);
@@ -2183,18 +2645,20 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const keep = x => mode === 'all' || isTenth(x) || isGov(x);
     const pts = res.pois.filter(p => keep(p.x));
     F.h1('Load effects' + (mode === 'all' ? '' : ' — tenth points and governing locations'));
-    F.para('Per beam, unfactored, k-ft. Live load includes impact and distribution; Mu is ' + (GS === 1.75 ? 'Strength I.' : 'Strength II (permit).'), { size: 8, color: F.pal.mute });
-    F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Span', w: 0.5, a: 'r' }, { h: 'M DC1', w: 0.9, a: 'r' }, { h: 'M DC2', w: 0.9, a: 'r' }, { h: 'M DW', w: 0.9, a: 'r' }, { h: 'M LL+', w: 0.9, a: 'r' }, { h: 'M LL−', w: 0.9, a: 'r' }, { h: 'M fat+', w: 0.9, a: 'r' }, { h: 'Mu+', w: 0.9, a: 'r' }, { h: 'Mu−', w: 0.9, a: 'r' }, { h: 'V DL', w: 0.9, a: 'r' }, { h: 'V LL max/min', w: 1.3, a: 'r' }, { h: 'Notes', w: 1.8 }],
-      pts.map(p => [fn(p.x, 2), p.span != null ? String(p.span) : '—', fx(p.MDC1, 0), fx(p.MDC2, 0), fx(p.MDW, 0), fx(p.MLLp, 0), fx(p.MLLn, 0), fx(p.MFLp, 0), fx(p.MuP, 0), fx(p.MuN, 0), fx(p.VDC1 + p.VDC2 + p.VDW, 1), fx(p.VLLp, 1) + ' / ' + fx(p.VLLn, 1), (p.tags || []).join(', ') + (p.dualGov ? (p.tags && p.tags.length ? '; ' : '') + 'dual truck' : '')]), { size: 6.7, hl: k => isGov(pts[k].x) });
+    F.para('Per beam, unfactored, k-ft. Live load includes impact and distribution; Mu is ' + (LFDR ? 'Group I; I is the positive-moment impact fraction.' : GS === 1.75 ? 'Strength I.' : 'Strength II (permit).'), { size: 8, color: F.pal.mute });
+    F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Span', w: 0.5, a: 'r' }, { h: 'M DC1', w: 0.9, a: 'r' }, { h: 'M DC2', w: 0.9, a: 'r' }, { h: 'M DW', w: 0.9, a: 'r' }, { h: 'M LL+', w: 0.9, a: 'r' }, { h: 'M LL−', w: 0.9, a: 'r' }, { h: LFDR ? 'I' : 'M fat+', w: 0.9, a: 'r' }, { h: 'Mu+', w: 0.9, a: 'r' }, { h: 'Mu−', w: 0.9, a: 'r' }, { h: 'V DL', w: 0.9, a: 'r' }, { h: 'V LL max/min', w: 1.3, a: 'r' }, { h: 'Notes', w: 1.8 }],
+      pts.map(p => [fn(p.x, 2), p.span != null ? String(p.span) : '—', fx(p.MDC1, 0), fx(p.MDC2, 0), fx(p.MDW, 0), fx(p.MLLp, 0), fx(p.MLLn, 0), LFDR ? fn(p.IMp, 3) : fx(p.MFLp, 0), fx(p.MuP, 0), fx(p.MuN, 0), fx(p.VDC1 + p.VDC2 + p.VDW, 1), fx(p.VLLp, 1) + ' / ' + fx(p.VLLn, 1), (p.tags || []).join(', ') + (p.dualGov ? (p.tags && p.tags.length ? '; ' : '') + 'dual truck' : '')]), { size: 6.7, hl: k => isGov(pts[k].x) });
     const bp = pts.filter(p => p.z != null);
     F.h1('Stresses and flexure');
-    F.para('Stresses in ksi, compression positive. Service I top of beam (all loads / permanent), Service III bottom, Fatigue I top; φMn with the strands developed at the point.', { size: 8, color: F.pal.mute });
-    F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'F, k', w: 0.9, a: 'r' }, { h: 'e, in.', w: 0.7, a: 'r' }, { h: 'ft all', w: 0.8, a: 'r' }, { h: 'ft perm', w: 0.8, a: 'r' }, { h: 'fb Svc III', w: 0.9, a: 'r' }, { h: 'ft fatigue', w: 0.9, a: 'r' }, { h: 'Mu+', w: 0.9, a: 'r' }, { h: 'φMn+', w: 0.9, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Mu−', w: 0.9, a: 'r' }, { h: 'φMn−', w: 0.9, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }],
-      bp.map(p => { const r1 = p.MuP > 0 && p.Mr > 0 ? p.MuP / p.Mr : null, r2 = p.MrN ? Math.abs(p.MuN) / p.MrN : null; return [fn(p.x, 2), fx(p.Fs, 0), fn(p.e, 2), fn(p.ftA, 3), fn(p.ftB, 3), { t: fn(p.fb3, 3), color: -p.fb3 > lim.fcT3 ? RED : null }, fn(p.ftFat, 3), fx(p.MuP, 0), fx(p.Mr, 0), r1 == null ? '—' : { t: fn(r1, 3), color: rCol(r1) }, p.MrN ? fx(p.MuN, 0) : '—', p.MrN ? fx(p.MrN, 0) : '—', r2 == null ? '—' : { t: fn(r2, 3), color: rCol(r2) }]; }), { size: 6.7, hl: k => isGov(bp[k].x) });
+    F.para(LFDR ? 'Stresses in ksi, compression positive (9.15.2.2). Top of beam: all loads / prestress + dead / LL + ½(prestress + dead); bottom with the full live load; φMn (9.17) with the strands developed at the point.' : 'Stresses in ksi, compression positive. Service I top of beam (all loads / permanent), Service III bottom, Fatigue I top; φMn with the strands developed at the point.', { size: 8, color: F.pal.mute });
+    F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'F, k', w: 0.9, a: 'r' }, { h: 'e, in.', w: 0.7, a: 'r' }, { h: 'ft all', w: 0.8, a: 'r' }, { h: LFDR ? 'ft PS+D' : 'ft perm', w: 0.8, a: 'r' }, { h: LFDR ? 'fb all' : 'fb Svc III', w: 0.9, a: 'r' }, { h: LFDR ? 'ft LL+½' : 'ft fatigue', w: 0.9, a: 'r' }, { h: 'Mu+', w: 0.9, a: 'r' }, { h: 'φMn+', w: 0.9, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Mu−', w: 0.9, a: 'r' }, { h: 'φMn−', w: 0.9, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }],
+      bp.map(p => { const r1 = p.MuP > 0 && p.Mr > 0 ? p.MuP / p.Mr : null, r2 = p.MrN ? Math.abs(p.MuN) / p.MrN : null; return [fn(p.x, 2), fx(p.Fs, 0), fn(p.e, 2), fn(p.ftA, 3), fn(p.ftB, 3), { t: fn(p.fb3, 3), color: -p.fb3 > lim.fcT3 ? RED : null }, fn(LFDR ? p.ftC : p.ftFat, 3), fx(p.MuP, 0), fx(p.Mr, 0), r1 == null ? '—' : { t: fn(r1, 3), color: rCol(r1) }, p.MrN ? fx(p.MuN, 0) : '—', p.MrN ? fx(p.MrN, 0) : '—', r2 == null ? '—' : { t: fn(r2, 3), color: rCol(r2) }]; }), { size: 6.7, hl: k => isGov(bp[k].x) });
     if (res.shear && res.shear.length) {
       const sh = res.shear.filter(q => mode === 'all' || isTenth(q.x) || isGov(q.x) || (q.tags || []).includes('critical section for shear'));
       F.h1('Shear');
-      F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Vu, k', w: 0.8, a: 'r' }, { h: 'Mu, k-ft', w: 0.9, a: 'r' }, { h: 'dv', w: 0.7, a: 'r' }, { h: res.shearMethod === 'simplified' ? 'Vci / Vcw' : 'εs×1000 / θ', w: 1.2, a: 'r' }, { h: 'Vc', w: 0.8, a: 'r' }, { h: 'Vs', w: 0.8, a: 'r' }, { h: 'Vp', w: 0.6, a: 'r' }, { h: 'φVn', w: 0.8, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Av / s', w: 0.9, a: 'r' }, { h: 's / smax', w: 0.7, a: 'r' }, { h: 'Interface', w: 0.7, a: 'r' }, { h: 'Long. T', w: 0.7, a: 'r' }],
+      if (LFDR) F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Vu, k', w: 0.8, a: 'r' }, { h: 'Mu, k-ft', w: 0.9, a: 'r' }, { h: 'd', w: 0.7, a: 'r' }, { h: 'Mcr', w: 0.8, a: 'r' }, { h: 'Vci / Vcw', w: 1.2, a: 'r' }, { h: 'Vc', w: 0.8, a: 'r' }, { h: 'Vs', w: 0.8, a: 'r' }, { h: 'Vp', w: 0.6, a: 'r' }, { h: 'φVn', w: 0.8, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Av / s', w: 0.9, a: 'r' }, { h: 's / smax', w: 0.7, a: 'r' }, { h: 'Horizontal', w: 0.8, a: 'r' }],
+        sh.map(q => [fn(q.x, 2), fx(q.Vu, 1), fx(q.Mu, 0), fn(q.dv, 1), fx(q.simp.Mcr, 0), fx(q.simp.Vci, 0) + ' / ' + fx(q.simp.Vcw, 0), fx(q.Vc, 1), fx(q.Vs, 1), fn(q.Vp, 1), fx(0.9 * q.Vn, 1), { t: fn(q.ratio, 3), color: rCol(q.ratio) }, fn(q.Av, 2) + ' / ' + fn(q.s, 1), fn(q.sRatio, 2), q.iRatio == null ? '—' : { t: fn(q.iRatio, 3), color: rCol(q.iRatio) }]), { size: 6.6, hl: k => isGov(sh[k].x) });
+      else F.table([{ h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Vu, k', w: 0.8, a: 'r' }, { h: 'Mu, k-ft', w: 0.9, a: 'r' }, { h: 'dv', w: 0.7, a: 'r' }, { h: res.shearMethod === 'simplified' ? 'Vci / Vcw' : 'εs×1000 / θ', w: 1.2, a: 'r' }, { h: 'Vc', w: 0.8, a: 'r' }, { h: 'Vs', w: 0.8, a: 'r' }, { h: 'Vp', w: 0.6, a: 'r' }, { h: 'φVn', w: 0.8, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Av / s', w: 0.9, a: 'r' }, { h: 's / smax', w: 0.7, a: 'r' }, { h: 'Interface', w: 0.7, a: 'r' }, { h: 'Long. T', w: 0.7, a: 'r' }],
         sh.map(q => [fn(q.x, 2), fx(q.Vu, 1), fx(q.Mu, 0), fn(q.dv, 1), q.simp ? fx(q.simp.Vci, 0) + ' / ' + fx(q.simp.Vcw, 0) : fn(q.es * 1000, 3) + ' / ' + fn(q.theta, 1), fx(q.Vc, 1), fx(q.Vs, 1), fn(q.Vp, 1), fx(0.9 * q.Vn, 1), { t: fn(q.ratio, 3), color: rCol(q.ratio) }, fn(q.Av, 2) + ' / ' + fn(q.s, 1), fn(q.sRatio, 2), q.iRatio == null ? '—' : { t: fn(q.iRatio, 3), color: rCol(q.iRatio) }, { t: fn(q.lRatio, 3), color: rCol(q.lRatio) }]), { size: 6.6, hl: k => isGov(sh[k].x) });
     }
     F.h1('Release stresses');
@@ -2203,9 +2667,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       res.release.map(r => [fn(r.z, 2), fn(r.Lb, 2), fx(r.F, 0), fn(r.e, 2), fx(r.M, 0), fn(r.ft, 3), fn(r.fb, 3), { t: fn(r.ratioC, 3), color: rCol(r.ratioC) }, { t: fn(r.ratioT, 3), color: rCol(r.ratioT) }]), { size: 7 });
     if (res.pierChecks && res.pierChecks.length) {
       F.h1('Pier regions');
-      F.table([{ h: 'Pier', w: 0.6 }, { h: 'As, in.²', w: 0.8, a: 'r' }, { h: 'ds, in.', w: 0.8, a: 'r' }, { h: 'Ms, k-ft', w: 0.9, a: 'r' }, { h: 'fss, ksi', w: 0.8, a: 'r' }, { h: 's / s allow, in.', w: 1.2, a: 'r' }, { h: 'Crack ratio', w: 0.9, a: 'r' }, { h: 'Δf / ΔFth, ksi', w: 1.2, a: 'r' }, { h: 'Fatigue ratio', w: 0.9, a: 'r' }],
+      if (LFDR) F.table([{ h: 'Pier', w: 0.6 }, { h: 'As, in.²', w: 0.8, a: 'r' }, { h: 'ds, in.', w: 0.8, a: 'r' }, { h: 'Ms, k-ft', w: 0.9, a: 'r' }, { h: 'fs, ksi', w: 0.8, a: 'r' }, { h: 'fs allow (z), ksi', w: 1.2, a: 'r' }, { h: 'Crack ratio', w: 0.9, a: 'r' }, { h: 'ff / allow, ksi', w: 1.2, a: 'r' }, { h: 'Fatigue ratio', w: 0.9, a: 'r' }],
+        res.pierChecks.map(q => [String(q.pier), fn(q.As, 2), fn(q.ds, 2), fx(q.Ms, 0), fn(q.fss, 2), fn(q.fsa, 2) + ' (' + q.z + ')', { t: fn(q.crackRatio, 3), color: rCol(q.crackRatio) }, fn(q.df, 2) + ' / ' + fn(q.dFth, 2), { t: fn(q.fatRatio, 3), color: rCol(q.fatRatio) }]), { size: 7.2 });
+      else F.table([{ h: 'Pier', w: 0.6 }, { h: 'As, in.²', w: 0.8, a: 'r' }, { h: 'ds, in.', w: 0.8, a: 'r' }, { h: 'Ms, k-ft', w: 0.9, a: 'r' }, { h: 'fss, ksi', w: 0.8, a: 'r' }, { h: 's / s allow, in.', w: 1.2, a: 'r' }, { h: 'Crack ratio', w: 0.9, a: 'r' }, { h: 'Δf / ΔFth, ksi', w: 1.2, a: 'r' }, { h: 'Fatigue ratio', w: 0.9, a: 'r' }],
         res.pierChecks.map(q => [String(q.pier), fn(q.As, 2), fn(q.ds, 2), fx(q.Ms, 0), fn(q.fss, 2), fn(q.sProv, 2) + ' / ' + fn(q.sAllow, 2), { t: fn(q.crackRatio, 3), color: rCol(q.crackRatio) }, fn(q.df, 2) + ' / ' + fn(q.dFth, 2), { t: fn(q.fatRatio, 3), color: rCol(q.fatRatio) }]), { size: 7.2 });
-      F.table([{ h: 'x, ft', w: 0.9, a: 'r' }, { h: 'F, k', w: 0.9, a: 'r' }, { h: 'Sbc, in.³', w: 1, a: 'r' }, { h: 'Svc I all', w: 0.9, a: 'r' }, { h: 'Svc I perm', w: 0.9, a: 'r' }, { h: 'Fatigue I', w: 0.9, a: 'r' }, { h: 'Max ratio', w: 0.9, a: 'r' }],
+      F.table([{ h: 'x, ft', w: 0.9, a: 'r' }, { h: 'F, k', w: 0.9, a: 'r' }, { h: 'Sbc, in.³', w: 1, a: 'r' }, { h: LFDR ? 'All loads' : 'Svc I all', w: 0.9, a: 'r' }, { h: LFDR ? 'PS + dead' : 'Svc I perm', w: 0.9, a: 'r' }, { h: LFDR ? 'LL + ½' : 'Fatigue I', w: 0.9, a: 'r' }, { h: 'Max ratio', w: 0.9, a: 'r' }],
         res.pierChecks.flatMap(q => q.flange).map(f => { const r = Math.max(f.rA, f.rB, f.rF); return [fn(f.x, 2), fx(f.F, 0), fx(f.Sbc, 0), fn(f.fA, 3), fn(f.fB, 3), fn(f.fF, 3), { t: fn(r, 3), color: rCol(r) }]; }), { size: 7.2 });
     }
     F.h1('Load rating by point');
@@ -2280,12 +2746,24 @@ const EXAMPLES = [
     loads: { parapet: 0.525, nParapet: 2, fws: 50, dc1: 0, dc2: 0, dw: 0, fwsDist: 'equal' } }) },
   { id: 'il63', fam: 'I', label: 'IL63-2438, 120 ft simple span', m: Object.assign(defI(), {
     shape: 'IL63-2438', spans: [120], continuous: false, S: 8, overhang: 3.5, nBeams: 6, roadway: 44, pattern: { name: '44B-2T-2db-4d' } }) },
+  { id: 'tx41', fam: 'I', label: 'TxDOT Example A.1 — Type IV, Std Specs LFD', m: Object.assign(defI(), {
+    name: 'TxDOT 0-4751-1 Vol. 2, Example A.1: AASHTO Type IV interior beam, Standard Specifications', code: 'lfd',
+    shapeData: { name: 'AASHTO Type IV', fam: 'custom', h: 54, A: 788.4, I: 260403, yb: 24.75, wt: 0.821, btf: 20, ttf: 8, bw: 8, bbf: 26, tbf: 8, strand: 0.5, narrow: false },
+    spans: [108.583], continuous: false, ext: 0.5435, padW: 0, S: 8, overhang: 3, nBeams: 6, girder: 'interior', skew: 0, roadway: 44, parapetWidth: 1, lanes: 0,
+    deck: { t: 8, fc: 4, fillet: 0, beff: 96 }, beam: { fc: 5.5825, fci: 5.455 }, strand: { d: 0.5 }, harp: 0.4505, H: 60,
+    pattern: { custom: true, rows: [{ row: '1', ctr: 12, end: 10, dbn: 0, dbL: 0 }, { row: '2', ctr: 12, end: 10, dbn: 0, dbL: 0 }, { row: '3', ctr: 12, end: 10, dbn: 0, dbL: 0 }, { row: '4', ctr: 10, end: 8, dbn: 0, dbL: 0 }, { row: '5', ctr: 4, end: 2, dbn: 0, dbL: 0 },
+      { row: '@44', ctr: 0, end: 2, dbn: 0, dbL: 0 }, { row: '@46', ctr: 0, end: 2, dbn: 0, dbL: 0 }, { row: '@48', ctr: 0, end: 2, dbn: 0, dbL: 0 }, { row: '@50', ctr: 0, end: 2, dbn: 0, dbL: 0 }, { row: '@52', ctr: 0, end: 2, dbn: 0, dbL: 0 }] },
+    loads: { parapet: 0.326, nParapet: 2, fws: 17.5, fwsDist: 'equal', dc1: 0, dc2: 0, dw: 0 },
+    stirMode: 'entered', stirrups: [{ from: 0, to: 1, Av: 0.40, s: 22 }], lift: { Lc: 0 },
+    lfd: { vehicle: 'HS20', military: false, losses: 'refined', release: 'ends', relTension: 'bonded', corrosive: false, hsSurface: 'rough' },
+    opts: { dc1Span: 'bearing', critAt: 'dv', dualTruck: 'contraflexure' },
+  }) },
   { id: 'dg35', fam: 'deck', label: 'DG 3.5 example — 27x36 deck beam, 60 ft', m: Object.assign(defDeck(), {
     shape: '27x36', spans: [60], ext: 0, skew: 25, roadway: 33, nBeams: 11, edgeWidth: 33, beam: { fc: 6, fci: 5, wci: 0.146 }, opts: { flexStrands: 'all' } }) },
   { id: 'd42', fam: 'deck', label: '42x48 deck beam, 90 ft', m: Object.assign(defDeck(), { shape: '42x48', spans: [90], roadway: 30, nBeams: 8, pattern: { name: '38SS' } }) },
 ];
 
-let state = { fam: 'I', models: { I: clone(EXAMPLES[0].m), deck: clone(EXAMPLES[3].m) }, view: { chart: 'flex', table: 'poi' } };
+let state = { fam: 'I', models: { I: clone(EXAMPLES[0].m), deck: clone(EXAMPLES.find(e => e.id === 'dg35').m) }, view: { chart: 'flex', table: 'poi' } };
 try { const s = JSON.parse(localStorage.getItem(STORE)); if (s && s.models && s.models.I && s.models.deck) state = Object.assign(state, s); } catch (e) { /* storage unavailable */ }
 const save = () => { try { localStorage.setItem(STORE, JSON.stringify(state)); } catch (e) { /* ignore */ } };
 const M = () => state.models[state.fam];
@@ -2307,7 +2785,7 @@ const fld = (k, label, unit, o = {}) => {
     '<input class="n" data-k="' + k + '" data-t="' + (o.t || 'num') + '" inputmode="decimal" value="' + esc(val) + '"' + (o.ph ? ' placeholder="' + esc(o.ph) + '"' : '') + '></label>';
 };
 const sel = (k, label, opts, o = {}) => {
-  const v = String(getP(M(), k));
+  const v = k === '__shape' ? '__custom' : k === 'code' ? (getP(M(), k) === 'lfd' ? 'lfd' : 'lrfd') : String(getP(M(), k));
   return '<label class="f' + (o.w2 ? ' w2' : '') + '">' + esc(label) + '<select data-k="' + k + '" data-t="' + (o.t || 'str') + '">' +
     opts.map(([val, txt]) => '<option value="' + esc(val) + '"' + (String(val) === v ? ' selected' : '') + '>' + esc(txt) + '</option>').join('') + '</select></label>';
 };
@@ -2398,13 +2876,43 @@ function stirTable(st) {
     st.map((r, i) => '<tr><td><input class="n" data-st="' + i + '.from" value="' + r.from + '"></td><td><input class="n" data-st="' + i + '.to" value="' + r.to + '"></td><td><input class="n" data-st="' + i + '.Av" value="' + r.Av + '"></td><td><input class="n" data-st="' + i + '.s" value="' + r.s + '"></td><td><button class="xbtn" type="button" data-act="delst" data-i="' + i + '" aria-label="Remove zone">×</button></td></tr>').join('') +
     '</tbody></table><div><button type="button" class="xbtn" data-act="addst">Add zone</button></div>';
 }
+const isLFD = m => m && m.code === 'lfd';
+// what the LFD inputs use when blank, from the engine
+function lfdInfo() { return R && R.lfd && R.df ? R.df.at : null; }
+function refreshLfdPH() { // computed wheel fractions as the placeholders of the blank override inputs
+  const g = lfdInfo(); if (!g) return;
+  const set = (k, v) => { const e = document.querySelector('[data-k="' + k + '"]'); if (e) e.placeholder = v > 0 ? f3(v) : ''; };
+  set('lfdDF.M', g.wM); set('lfdDF.V', g.wV); set('lfdDF.end', g.wEnd);
+}
+function lfdGroup(m) {
+  const o = m.lfd = Object.assign({ vehicle: 'HS20', military: false, losses: 'refined', release: 'ends', relTension: 'bonded', corrosive: false, z: null, hsSurface: 'rough', rebarFatigue: true, A2inv: null, A2op: null }, m.lfd || {});
+  const g = lfdInfo() || {}, I = m.kind !== 'deck', cont = I && m.continuous && (m.spans || []).length > 1;
+  const ph = v => (v > 0 ? f3(v) : '');
+  return grp('Standard Specifications (LFD)', '<div class="fields">' +
+    sel('lfd.vehicle', 'Design truck and lane load', [['HS20', 'HS20-44'], ['HS15', 'HS15-44'], ['HS25', 'HS25-44']]) +
+    sel('lfd.losses', 'Prestress losses', [['refined', 'Refined (9.16.2.1)'], ['lump', 'Lump sum 45 ksi']]) +
+    '<div class="w2" style="grid-column:1/-1">' + chk('lfd.military', 'Also apply the alternate military loading, two 24 k axles 4 ft apart (3.7.4)') + '</div>' +
+    sel('lfd.release', 'Release stresses', [['ends', 'At transfer'], ['lift', 'At lifting points']]) +
+    sel('lfd.relTension', 'Release tension (bonded steel or not)', [['bonded', '7.5√f′ci'], ['none', '200 psi or 3√f′ci']]) +
+    '<div class="w2" style="grid-column:1/-1">' + chk('lfd.corrosive', 'Severe corrosive exposure: service tension 3√f′c (9.15.2.2)') + '</div>' +
+    (I ? sel('lfd.hsSurface', 'Contact surface (9.20.4.3)', [['rough', 'Roughened ¼ in.'], ['smooth', 'Not roughened']]) : '') +
+    (cont ? fld('lfd.z', 'Crack control z (8.16.8.4)', 'k/in.', { ph: '170 moderate' }) : '') +
+    fld('lfdDF.M', 'Wheel fraction, moment', '', { ph: ph(g.wM) }) +
+    fld('lfdDF.V', 'Wheel fraction, shear', '', { ph: ph(g.wV) }) +
+    (I ? fld('lfdDF.end', 'Wheel fraction, end axle (lever)', '', { ph: ph(g.wEnd) }) : '') +
+    fld('lfd.A2inv', 'Rating A2, inventory', '', { ph: '2.17' }) + fld('lfd.A2op', 'Rating A2, operating', '', { ph: '1.30' }) +
+    (cont ? '<div class="w2" style="grid-column:1/-1">' + chk('lfd.rebarFatigue', 'Check deck reinforcement fatigue at the piers (8.16.8.3)') + '</div>' : '') +
+    '</div><p class="hint">Group I, 1.3[D + 1.67(L + I)], impact 50/(L + 125) ≤ 0.30 (3.8.2). Wheel fractions from Table 3.23.1 (I-beams: S/5.5 for two or more lanes, S/7.0 for one; lever rule for exterior beams and wide spacing) or 3.23.4.3 (deck beams, S/D); lanes = wheel fraction / 2. Rating by the MBE load factor method (6B.5.3.3), A1 = 1.3.</p>', true);
+}
 function renderRail() {
-  const m = M(), I = state.fam === 'I';
+  const m = M(), I = state.fam === 'I', lf = isLFD(m);
   let h = '';
+  h += grp('Design code', '<div class="fields">' + sel('code', 'Specification', [['lrfd', 'LRFD 10th Ed. (2024), IDOT, LRFR'], ['lfd', 'Standard Specs 17th Ed. (2002), LFD, LFR']], { w2: true }) + '</div>', true);
   // geometry
   if (I) {
+    const shOpts = (m.shapeData ? [['__custom', 'Custom section: ' + (m.shapeData.name || 'entered properties')]] : []).concat(shapeOptions());
     h += grp('Beam and spans', '<div class="fields">' +
-      sel('shape', 'Beam section', shapeOptions(), { w2: true }) +
+      sel(m.shapeData ? '__shape' : 'shape', 'Beam section', shOpts, { w2: true }) +
       fld('spans', 'Span lengths', 'ft', { t: 'list', w2: true, ph: 'e.g. 120, 120' }) +
       '<p class="hint w2" style="grid-column:1/-1">Composite spans: CL bearing at the abutments to CL pier (simple spans: CL bearing to CL bearing).</p>' +
       '<div class="w2" style="grid-column:1/-1">' + chk('continuous', 'Made continuous for DC2, DW and live load (IDOT standard continuity details; 5.12.3.3 waived)') + '</div>' +
@@ -2448,8 +2956,9 @@ function renderRail() {
     pat += '<div class="pat-sum">' + (I ? rows.map(r => r.row + ': ' + r.ctr + (r.end !== r.ctr ? '→' + r.end : '') + (r.dbn ? ' (' + r.dbn + ' db ' + r.dbL + ')' : '')).join(' · ') : rows.map(r => r.ctr + ' @ ' + r.row + ' in.').join(' · ')) + ' — ' + tot + ' strands</div>';
     if (I && rows.some(r => r.dbn)) pat += '<div class="fields">' + fld('pattern.dbA', 'Debond length A (0 = BM rule)', 'ft') + '<p class="hint" style="align-self:end">B = A − 60d<sub>b</sub>; A = lesser of 0.2L (0.15L narrow flange) and 0.4L − ℓd.</p></div>';
   }
-  h += liveGroup(m);
-  h += grp('Load rating factors', '<div class="fields">' +
+  if (lf) h += lfdGroup(m);
+  if (!lf) h += liveGroup(m);
+  if (!lf) h += grp('Load rating factors', '<div class="fields">' +
     sel('rating.phiC', 'Condition factor φc', [['1', 'Good or satisfactory — 1.00'], ['0.95', 'Fair — 0.95'], ['0.85', 'Poor — 0.85']], { t: 'num' }) +
     fld('rating.phiS', 'System factor φs (flexure)', '', { ph: '1.00', blank: true }) +
     fld('rating.gDC', 'γDC', '', { ph: '1.25', blank: true }) + fld('rating.gDW', 'γDW', '', { ph: '1.50', blank: true }) +
@@ -2492,19 +3001,20 @@ function renderRail() {
         stirTable(st) + '<p class="hint">Fractions of the bearing span from the left bearing. IL beams use welded wire reinforcement per the base sheets: enter its area per spacing (two legs).</p>'));
   }
   h += grp('Handling and options', '<div class="fields">' +
-    fld('lift.Lc', I ? 'Lifting point from beam end (0 = BM table)' : 'Storage supports from beam end', 'ft') +
+    (lf && (m.lfd || {}).release !== 'lift' ? '' : fld('lift.Lc', I ? 'Lifting point from beam end (0 = BM table)' : 'Storage supports from beam end', 'ft')) +
     (I ? sel('opts.dc1Span', 'DC1 span', [['bearing', 'Bearing span (DG 3.4 text)'], ['composite', 'Composite span (DG 3.4 example)']]) +
-      sel('opts.critAt', 'Shear critical section', [['dv', 'dv from the face (5.7.3.2)'], ['0.72h', '0.72h from the face (DG 3.4)']]) +
-      sel('opts.dualTruck', '90% dual truck applied', [['contraflexure', 'Between contraflexure points'], ['pier', 'At piers only'], ['all', 'Everywhere']]) : '') +
-    sel('opts.flexStrands', 'Strands in flexure', [['tension', 'Tension side only (5.6.3)'], ['all', 'All strands (DG 3.4/3.5 examples)']]) +
-    sel('opts.ltCap', '5.7.3.5 maximum-moment limit', [['positive', 'Positive moment (load on top face)'], ['all', 'Positive and negative'], ['off', 'Not applied']]) +
-    sel('opts.shearMethod', 'Shear method', [['general', 'General procedure, 5.7.3.4.2 (IDOT preferred)'], ['simplified', 'Simplified Vci/Vcw, 5.7.3.4.3']]) +
+      (lf ? '' : sel('opts.critAt', 'Shear critical section', [['dv', 'dv from the face (5.7.3.2)'], ['0.72h', '0.72h from the face (DG 3.4)']]) +
+      sel('opts.dualTruck', '90% dual truck applied', [['contraflexure', 'Between contraflexure points'], ['pier', 'At piers only'], ['all', 'Everywhere']])) : '') +
+    sel('opts.flexStrands', 'Strands in flexure', [['tension', 'Tension side only' + (lf ? '' : ' (5.6.3)')], ['all', 'All strands (DG 3.4/3.5 examples)']]) +
+    (lf ? '' : sel('opts.ltCap', '5.7.3.5 maximum-moment limit', [['positive', 'Positive moment (load on top face)'], ['all', 'Positive and negative'], ['off', 'Not applied']]) +
+    sel('opts.shearMethod', 'Shear method', [['general', 'General procedure, 5.7.3.4.2 (IDOT preferred)'], ['simplified', 'Simplified Vci/Vcw, 5.7.3.4.3']])) +
     '<div class="w2" style="grid-column:1/-1">' + chk('checkDeflection', 'Check live-load deflection against L/800') + '</div>' +
     '</div>');
-  const was = new Set([...document.querySelectorAll('#rail details.grp')].filter(d => d.open).map(d => d.querySelector('summary').textContent));
-  const first = !document.querySelector('#rail details.grp');
+  const prevG = [...document.querySelectorAll('#rail details.grp')], had = new Set(prevG.map(d => d.querySelector('summary').textContent));
+  const was = new Set(prevG.filter(d => d.open).map(d => d.querySelector('summary').textContent));
   $('#rail').innerHTML = h;
-  if (!first) document.querySelectorAll('#rail details.grp').forEach(d => { d.open = was.has(d.querySelector('summary').textContent); });
+  // groups already shown keep their open state; a group that appears (e.g. on a code change) opens as designed
+  document.querySelectorAll('#rail details.grp').forEach(d => { const t = d.querySelector('summary').textContent; if (had.has(t)) d.open = was.has(t); });
 }
 
 // ---------------- model to engine ----------------
@@ -2551,7 +3061,7 @@ function runNow() {
 
 // ---------------- results ----------------
 const cls = r => (r > 1 + 1e-9 ? 'bad' : r > 0.95 ? 'warn' : 'ok');
-function renderAll() { renderVerdict(); renderRating(); renderCharts(); renderSection(); renderTables(); renderMethod(); renderIO(); }
+function renderAll() { renderVerdict(); renderRating(); renderCharts(); renderSection(); renderTables(); renderMethod(); renderIO(); refreshLfdPH(); }
 
 function renderVerdict() {
   const c = R.checks, over = c.filter(q => q.ratio > 1 + 1e-9);
@@ -2566,17 +3076,33 @@ function renderVerdict() {
       '<div class="val ' + k + '">' + f2(q.ratio) + '<small>' + (q.ratio > 1 + 1e-9 ? 'EXCEEDS' : 'OK') + '</small></div>' +
       '<div class="meter"><i class="bg-' + k + '" style="width:' + w.toFixed(1) + '%"></i><s style="left:80%"></s></div>' +
       '<div class="sub">' + esc(q.where) + (q.detail ? ' · ' + esc(q.detail) : '') + '</div></div>';
-  }).join('') + (noShear ? '<div class="pr"><div class="top"><span class="lbl">Strength I shear</span></div><div class="val warn">–<small>NOT CHECKED</small></div><div class="meter"></div><div class="sub">No shear reinforcement entered. Enter the base-sheet stirrups under Shear reinforcement to check and rate shear.</div></div>' : '') + '</div>';
+  }).join('') + (noShear ? '<div class="pr"><div class="top"><span class="lbl">' + (R.lfd ? 'Group I shear' : 'Strength I shear') + '</span></div><div class="val warn">–<small>NOT CHECKED</small></div><div class="meter"></div><div class="sub">No shear reinforcement entered. Enter the base-sheet stirrups under Shear reinforcement to check and rate shear.</div></div>' : '') + '</div>';
   $('#c-verdict').innerHTML = h;
 }
 
 // one line describing the live loads behind the results
 function liveText(L) {
+  if (L.lfd) return L.lfd.vehicle + ' truck or lane' + (L.lfd.military ? ' or alternate military' : '');
   const a = L.ped ? 'pedestrian load 90 psf' + (L.ped.veh ? ' or the ' + L.ped.veh : '') + ' (Guide Spec 2009/2015)' : 'HL-93';
   const pv = L.perm ? L.perm.vehicles.map(v => v.name).join(', ') : '';
   return L.permit === 'only' ? 'permit trucks only (' + pv + ')' : L.permit === 'include' ? a + ' plus permit trucks (' + pv + ')' : a;
 }
+function renderRatingLFR() {
+  const r = R.rating, RL = R.ratingLoad;
+  const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : f2(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
+  const pl = r.complete ? '' : ' — partial', tons = v => (v != null && isFinite(v) ? ' · ' + f1(v * RL.tons) + ' tons' : '');
+  let h = '<div class="card-h"><h2>Load rating, ' + esc(RL.name) + '</h2><span class="status">MBE 6B.5.3.3 · A1 ' + f2(r.A1) + ' · A2 ' + f2(r.A2inv) + ' inventory, ' + f2(r.A2op) + ' operating</span></div>';
+  if (!r.complete) h += '<div class="warnbox" style="margin-bottom:12px"><div><b>Partial rating: flexure and service limits only.</b> Shear is not rated because no shear reinforcement is entered.</div></div>';
+  h += '<div class="verdict">' + tile('Inventory' + pl, r.inventory && r.inventory.inv, r.inventory ? r.inventory.lim + ' at x = ' + f2(r.inventory.x) + ' ft' + tons(r.inventory.inv) : '') +
+    tile('Operating' + pl, r.operating && r.operating.op, r.operating ? r.operating.lim + ' at x = ' + f2(r.operating.x) + ' ft' + tons(r.operating.op) : '') + '</div>';
+  const basis = q => q.lim.startsWith('Strength') ? 'A1 ' + f2(r.A1) + ', A2 ' + f2(r.A2inv) + ' / ' + f2(r.A2op) + (/shear/.test(q.lim) ? ', φ 0.90' : ', φ 1.00') : (q.inv.basis || '') + (q.op ? '' : '; inventory only');
+  h += '<div class="tbl-wrap" style="margin-top:12px;max-height:none"><table class="res"><thead><tr><th class="l">Limit state</th><th>Inventory RF</th><th>at x, ft</th><th>Operating RF</th><th>at x, ft</th><th class="l">Basis</th></tr></thead><tbody>' +
+    r.summary.map(q => '<tr><td class="l">' + esc(q.lim) + '</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + f2(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>' + (q.op ? f2(q.op.op) : '–') + '</td><td>' + (q.op ? f2(q.op.x) : '–') + '</td><td class="l">' + esc(basis(q)) + '</td></tr>').join('') + '</tbody></table></div>';
+  h += '<p class="hint" style="margin-top:8px">Load factor rating (MBE 6B): RF = (C − A1·D) / (A2·L(1 + I)) with the design distribution and impact; the service limits are inventory checks with unfactored loads, and strand tension also at operating (0.9f*y). Tons = RF × ' + f1(RL.tons) + ' (' + esc(RL.veh) + '). Legal and permit vehicles are not included.</p>';
+  $('#c-rating').innerHTML = h;
+}
 function renderRating() {
+  if (R.lfd) return renderRatingLFR();
   const r = R.rating, PM = R.permit, RL = R.ratingLoad, PO = r.permitOnly;
   const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : f2(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
   let h = '<div class="card-h"><h2>' + (PO ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating, ' + esc(RL.name) + ' (LRFR factors)' : 'HL-93 design load rating (LRFR)') + '</h2><span class="status">φc ' + r.phiC.toFixed(2) + ' · φs ' + r.phiS.toFixed(2) + ' (φcφs ≥ 0.85) · shear φs = 1.0 (SSM 4.3.3.2) · γDW ' + r.gDW.toFixed(2) + '</span></div>';
@@ -2658,16 +3184,27 @@ function renderCharts() {
   $('#c-charts').innerHTML = h;
   const box = $('#chartbox'), P = R.pois, onB = P.filter(p => p.z != null);
   const fk = (x, t) => (t ? f0(x) + ' k-ft' : f0(x));
+  const LS = R.lfd ? 'Group I' : 'Strength I', LLn = R.lfd ? R.lfd.vehicle + ' + I' : 'HL-93 + IM';
   if (v === 'flex') {
     const se = [
-      { name: 'Mu, Strength I (+)', c: 'var(--s1)', pts: P.map(p => [p.x, p.z != null || p.isPier ? Math.max(p.MuP, 0) : null]) },
+      { name: 'Mu, ' + LS + ' (+)', c: 'var(--s1)', pts: P.map(p => [p.x, p.z != null || p.isPier ? Math.max(p.MuP, 0) : null]) },
       { name: 'φMn (+), developed strands', c: 'var(--s1)', dash: true, pts: P.map(p => [p.x, p.Mr != null ? p.Mr : null]) },
     ];
     if (R.cont) {
-      se.push({ name: 'Mu, Strength I (−)', c: 'var(--s2)', pts: P.map(p => [p.x, p.MuN < 0 ? p.MuN : null]) });
+      se.push({ name: 'Mu, ' + LS + ' (−)', c: 'var(--s2)', pts: P.map(p => [p.x, p.MuN < 0 ? p.MuN : null]) });
       se.push({ name: '−φMn (−), deck steel', c: 'var(--s2)', dash: true, pts: P.map(p => [p.x, p.MrN != null ? -p.MrN : null]) });
     }
     lineChart(box, { title: 'Flexure', ylab: 'Moment, k-ft', fmt: fk, series: se, h: 320 });
+  } else if (v === 'stress' && R.lfd) {
+    const L = R.limits;
+    lineChart(box, { title: 'Service stresses', ylab: 'Stress, ksi (compression +)', fmt: (x, t) => (t ? f3(x) + ' ksi' : x.toFixed(1)), h: 320,
+      series: [
+        { name: 'Top of beam, all loads', c: 'var(--s1)', pts: onB.map(p => [p.x, p.ftA]) },
+        { name: 'Top of beam, prestress + dead', c: 'var(--s3)', pts: onB.map(p => [p.x, p.ftB]) },
+        { name: 'Top of beam, LL + ½(prestress + dead)', c: 'var(--s4)', pts: onB.map(p => [p.x, p.ftC]) },
+        { name: 'Bottom of beam, all loads', c: 'var(--s2)', pts: onB.map(p => [p.x, p.fb3]) },
+      ],
+      yref: [{ y: L.fc06, label: '0.60f′c', c: 'var(--s1)' }, { y: L.fc04, label: '0.40f′c', c: 'var(--s3)' }, { y: -L.fcT3, label: '−' + L.ftK + '√f′c', c: 'var(--s2)' }] });
   } else if (v === 'stress') {
     const L = R.limits;
     lineChart(box, { title: 'Service stresses', ylab: 'Stress, ksi (compression +)', fmt: (x, t) => (t ? f3(x) + ' ksi' : x.toFixed(1)), h: 320,
@@ -2681,10 +3218,10 @@ function renderCharts() {
   } else if (v === 'shear') {
     const S = R.shear;
     lineChart(box, { title: 'Shear', ylab: 'Shear, kips', fmt: (x, t) => (t ? f1(x) + ' k' : f0(x)), h: 300,
-      series: [{ name: '|Vu|, Strength I', c: 'var(--s1)', dots: true, pts: S.map(q => [q.x, q.Vu]) }, { name: 'φVn', c: 'var(--s3)', dash: true, dots: true, pts: S.map(q => [q.x, 0.9 * q.Vn]) }, { name: 'Vp, draped strands', c: 'var(--s4)', pts: S.map(q => [q.x, q.Vp]) }] });
+      series: [{ name: '|Vu|, ' + LS, c: 'var(--s1)', dots: true, pts: S.map(q => [q.x, q.Vu]) }, { name: 'φVn', c: 'var(--s3)', dash: true, dots: true, pts: S.map(q => [q.x, 0.9 * q.Vn]) }, { name: 'Vp, draped strands', c: 'var(--s4)', pts: S.map(q => [q.x, q.Vp]) }] });
   } else {
     lineChart(box, { title: 'Live load', ylab: 'Moment, k-ft per beam', fmt: fk, h: 300,
-      series: [{ name: 'HL-93 + IM (+M), distributed', c: 'var(--s1)', pts: P.map(p => [p.x, p.MLLp]) }, { name: 'HL-93 + IM (−M)', c: 'var(--s2)', pts: P.map(p => [p.x, p.MLLn]) },
+      series: [{ name: LLn + ' (+M), distributed', c: 'var(--s1)', pts: P.map(p => [p.x, p.MLLp]) }, { name: LLn + ' (−M)', c: 'var(--s2)', pts: P.map(p => [p.x, p.MLLn]) },
         { name: 'DC1', c: 'var(--s3)', pts: P.map(p => [p.x, p.MDC1]) }, { name: 'DC2 + DW', c: 'var(--s4)', pts: P.map(p => [p.x, p.MDC2 + p.MDW]) }] });
   }
 }
@@ -2747,14 +3284,21 @@ function renderSection() {
     ['A', f1(r.section.A) + ' in.²'], ['I', f0(r.section.I) + ' in.⁴'], ['y<sub>b</sub>', f2(r.section.yb) + ' in.'], ['S<sub>b</sub> / S<sub>t</sub>', f0(r.section.Sb) + ' / ' + f0(r.section.St) + ' in.³'],
     ...(c ? [['n = E<sub>deck</sub>/E<sub>beam</sub>', f3(c.n)], ["y′<sub>b</sub>", f2(c.yb) + ' in.'], ["I′", f0(c.I) + ' in.⁴'], ["S′<sub>b</sub> / S′<sub>t</sub>", f0(c.Sb) + ' / ' + f0(c.St) + ' in.³']] : []),
     ['E<sub>ci</sub> / E<sub>c</sub>', f0(r.materials.Eci) + ' / ' + f0(r.materials.Eb) + ' ksi'], ...(c ? [['E<sub>c</sub> deck', f0(r.materials.Ed) + ' ksi']] : [])]) + '</div>';
-  h += '<div><h3>Strands and losses</h3>' + kv([
+  if (L.lfd) h += '<div><h3>Strands and losses (9.16.2)</h3>' + kv([
+    ['Strands', s.n + ' × ' + s.d + ' in. = ' + f3(s.Aps) + ' in.²'], ['e at midspan', f2(s.eC) + ' in.'], ['Debond lengths', db],
+    ['f<sub>si</sub> = 0.75f′<sub>s</sub>', f2(L.fpbt) + ' ksi'], ['f<sub>cir</sub> / f<sub>cds</sub>', f3(L.fcir) + ' / ' + f3(L.fcds) + ' ksi'],
+    ['ES (' + L.iterations + ' iterations)', f2(L.dES) + ' ksi'], ['SH / CR<sub>c</sub> / CR<sub>s</sub>', f2(L.SH) + ' / ' + f2(L.CRc) + ' / ' + f2(L.CRs) + ' ksi'],
+    ['Total loss', f2(L.dT) + ' ksi (' + f1(L.pct) + '%)' + (L.method === 'lump' ? ', lump sum' : '')], ['f<sub>se</sub>', f2(L.fpe) + ' ksi'],
+    ['Transfer / ℓd bonded / debonded', f1(s.lt) + ' / ' + f1(s.ldB) + ' / ' + f1(s.ldDb) + ' in.']]) + '</div>';
+  else h += '<div><h3>Strands and losses</h3>' + kv([
     ['Strands', s.n + ' × ' + s.d + ' in. = ' + f3(s.Aps) + ' in.²'], ['e at midspan', f2(s.eC) + ' in.'], ['Debond lengths', db],
     ['f<sub>pbt</sub>', f2(L.fpbt) + ' ksi'], ['Δf<sub>pES</sub> (elastic, ' + L.iterations + ' iterations)', f2(L.dES) + ' ksi'], ['Δf<sub>pLT</sub> (approximate' + (L.dCorr ? ' + ' + L.dCorr + ' DG 3.5' : '') + ')', f2(L.dLT) + ' ksi'],
     ['Total loss', f2(L.dT) + ' ksi (' + f1(L.pct) + '%)'], ['f<sub>pe</sub>', f2(L.fpe) + ' ksi'],
     ['Transfer / ℓd bonded / debonded', f1(s.lt) + ' / ' + f1(s.ldB) + ' / ' + f1(s.ldDb) + ' in.']]) + '</div>';
   const g = r.df.at;
   h += '<div><h3>Distribution and loads</h3>' + kv([
-    ['Design lanes', r.df.NL], ...(r.comp ? [['K<sub>g</sub>', f0(r.df.info.Kg) + ' in.⁴'], ['g moment / shear', f3(g.M) + ' / ' + f3(g.V)], ['g fatigue (moment)', f3(g.MF)], ['Shear skew factor', f3(g.skV)]] : [['C / D', f3(g.C) + ' / ' + f2(g.D) + ' ft'], ['g = S/D', f3(g.M)], ['g fatigue = g/1.2', f3(g.MF)]]),
+    ['Design lanes', r.df.NL], ...(r.lfd ? (r.comp ? [['Wheel fraction moment / shear', f3(g.wM) + ' / ' + f3(g.wV)], ['Basis', esc(g.gov)], ['End axle (lever rule)', f3(g.wEnd)], ['Lanes per beam', f3(g.M)]] : [['C / D', f3(g.C) + ' / ' + f2(g.D) + ' ft'], ['Wheel fraction S/D', f3(g.wM)], ['Lanes per beam', f3(g.M)]])
+      : r.comp ? [['K<sub>g</sub>', f0(r.df.info.Kg) + ' in.⁴'], ['g moment / shear', f3(g.M) + ' / ' + f3(g.V)], ['g fatigue (moment)', f3(g.MF)], ['Shear skew factor', f3(g.skV)]] : [['C / D', f3(g.C) + ' / ' + f2(g.D) + ' ft'], ['g = S/D', f3(g.M)], ['g fatigue = g/1.2', f3(g.MF)]]),
     ['g deflection', f3(r.df.mDefl)],
     ...(r.comp ? [['b<sub>eff</sub> / tributary', f1(r.section.comp.beff) + ' / ' + f1(r.loads.trib * 12) + ' in.']] : []),
     ['DC1', f3(r.loads.DC1) + ' k/ft' + (r.comp ? ' (beam ' + f3(r.loads.beam) + ', slab ' + f3(r.loads.slab) + ', fillet ' + f3(r.loads.fillet) + (r.loads.dc1x ? ', additional ' + f3(r.loads.dc1x) : '') + ')' : '') + (r.loads.nTies ? ' + ' + r.loads.nTies + ' ties @ ' + f2(r.loads.PT) + ' k' : '')], ...(r.comp ? [['DC2', f3(r.loads.DC2) + ' k/ft']] : []), ['DW', f3(r.loads.DW) + ' k/ft']]) + '</div>';
@@ -2775,7 +3319,15 @@ function renderTables() {
   let h = '<div class="card-h"><h2>Results by location</h2></div><div class="tabs2">' + btn('poi', 'Moments and stresses') + (r.shear.length ? btn('shear', 'Shear') : '') + btn('rel', r.kind === 'deck' ? 'Storage' : 'Lifting') + (r.cont ? btn('pier', 'Piers') : '') + '</div>';
   const L = r.limits;
   const oc = (val, lim, sgn) => (val != null && (sgn > 0 ? val > lim + 1e-9 : val < lim - 1e-9) ? ' class="over"' : '');
-  if (v === 'poi') {
+  if (v === 'poi' && r.lfd) {
+    h += '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">x, ft</th><th class="l">Location</th><th>M DC1</th><th>M DC2</th><th>M DW</th><th>M LL+I +</th><th>M LL+I −</th><th>I</th><th>Mu+</th><th>φMn+</th><th>Mu−</th><th>φMn−</th><th>F<sub>s</sub>, k</th><th>e, in.</th><th>Top all</th><th>Top PS+DL</th><th>Top LL+½</th><th>Bottom</th></tr></thead><tbody>' +
+      r.pois.map(p => '<tr><td>' + f2(p.x) + '</td><td class="l">' + esc(p.tags.join(', ')) + '</td><td>' + f0(p.MDC1) + '</td><td>' + f0(p.MDC2) + '</td><td>' + f0(p.MDW) + '</td><td>' + f0(p.MLLp) + '</td><td>' + f0(p.MLLn) + '</td><td>' + f3(p.IMp) + '</td><td' + (p.Mr != null && p.MuP > p.Mr ? ' class="over"' : '') + '>' + f0(p.MuP) + '</td><td>' + f0(p.Mr) + '</td><td' + (p.MrN != null && -p.MuN > p.MrN ? ' class="over"' : '') + '>' + (p.MuN < 0 ? f0(p.MuN) : '–') + '</td><td>' + f0(p.MrN) + '</td><td>' + f0(p.Fs) + '</td><td>' + f2(p.e) + '</td><td' + oc(p.ftA, L.fc06, 1) + '>' + f3(p.ftA) + '</td><td' + oc(p.ftB, L.fc04, 1) + '>' + f3(p.ftB) + '</td><td' + oc(p.ftC, L.fc04, 1) + '>' + f3(p.ftC) + '</td><td' + oc(p.fb3, -L.fcT3, -1) + '>' + f3(p.fb3) + '</td></tr>').join('') +
+      '</tbody></table></div><p class="hint" style="margin-top:8px">Moments in k-ft per beam with impact I (moment), stresses in ksi (compression positive). Limits 9.15.2.2: 0.60f′c = ' + f2(L.fc06) + ' all loads; 0.40f′c = ' + f2(L.fc04) + ' for prestress + dead and for LL + ½(prestress + dead); tension −' + L.ftK + '√f′c = −' + f3(L.fcT3) + ' ksi.</p>';
+  } else if (v === 'shear' && r.lfd) {
+    h += '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">x, ft</th><th class="l">Location</th><th>|Vu|, k</th><th>|Mu|, k-ft</th><th>d, in.</th><th>Vp, k</th><th>M<sub>cr</sub>, k-ft</th><th>Vci, k</th><th>f<sub>pc</sub>, ksi</th><th>Vcw, k</th><th>Vc, k</th><th>Av / s</th><th>Vs, k</th><th>φVn, k</th><th>Ratio</th><th>s req., in.</th><th>s max, in.</th><th>φVnh, k</th><th>Horiz.</th></tr></thead><tbody>' +
+      r.shear.map(q => '<tr><td>' + f2(q.x) + '</td><td class="l">' + esc((q.tags || []).join(', ')) + (q.useNeg ? ' (−M)' : '') + '</td><td>' + f1(q.Vu) + '</td><td>' + f0(q.Mu) + '</td><td>' + f2(q.dv) + '</td><td>' + f1(q.Vp) + '</td><td>' + f0(q.simp.Mcr) + '</td><td>' + f1(q.simp.Vci) + '</td><td>' + f3(q.simp.fpc) + '</td><td>' + f1(q.simp.Vcw) + '</td><td>' + f1(q.Vc) + '</td><td>' + f2(q.Av) + ' / ' + q.s + '</td><td>' + f1(q.Vs) + '</td><td>' + f1(0.9 * q.Vn) + '</td><td' + (q.ratio > 1 ? ' class="over"' : '') + '>' + f3(q.ratio) + '</td><td>' + (isFinite(q.sReq) ? f1(q.sReq) : '–') + '</td><td>' + f1(Math.min(q.smax, q.hs ? q.hs.sTie : Infinity)) + '</td><td>' + (q.Vni != null ? f1(0.9 * q.Vni) : '–') + '</td><td' + (q.iRatio > 1 ? ' class="over"' : '') + '>' + f3(q.iRatio) + '</td></tr>').join('') +
+      '</tbody></table></div><p class="hint" style="margin-top:8px">9.20: Vc = min(Vci, Vcw), d ≥ 0.8h; Vs ≤ 8√f′c b′d; φ = 0.90. Horizontal shear (9.20.4) on the beam top flange with the stirrups as ties. Sections within h/2 of the support face use the shear at h/2 (9.20.1.4).</p>';
+  } else if (v === 'poi') {
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">x, ft</th><th class="l">Location</th><th>M DC1</th><th>M DC2</th><th>M DW</th><th>M LL+</th><th>M LL−</th><th>Mu+</th><th>φMn+</th><th>Mu−</th><th>φMn−</th><th>F<sub>s</sub>, k</th><th>e, in.</th><th>Top SI</th><th>Top SI perm.</th><th>Bot SIII</th><th>Top Fat.</th></tr></thead><tbody>' +
       r.pois.map(p => '<tr><td>' + f2(p.x) + '</td><td class="l">' + esc(p.tags.join(', ')) + '</td><td>' + f0(p.MDC1) + '</td><td>' + f0(p.MDC2) + '</td><td>' + f0(p.MDW) + '</td><td>' + f0(p.MLLp) + '</td><td>' + f0(p.MLLn) + '</td><td' + (p.Mr != null && p.MuP > p.Mr ? ' class="over"' : '') + '>' + f0(p.MuP) + '</td><td>' + f0(p.Mr) + '</td><td' + (p.MrN != null && -p.MuN > p.MrN ? ' class="over"' : '') + '>' + (p.MuN < 0 ? f0(p.MuN) : '–') + '</td><td>' + f0(p.MrN) + '</td><td>' + f0(p.Fs) + '</td><td>' + f2(p.e) + '</td><td' + oc(p.ftA, L.fc06, 1) + '>' + f3(p.ftA) + '</td><td' + oc(p.ftB, L.fc045, 1) + '>' + f3(p.ftB) + '</td><td' + oc(p.fb3, -L.fcT3, -1) + '>' + f3(p.fb3) + '</td><td' + oc(p.ftFat, L.fFat, 1) + '>' + f3(p.ftFat) + '</td></tr>').join('') +
       '</tbody></table></div><p class="hint" style="margin-top:8px">Moments in k-ft per beam, stresses in ksi (compression positive). Limits: 0.60f′c = ' + f2(L.fc06) + ', 0.45f′c = ' + f2(L.fc045) + ', −0.19√f′c = −' + f3(L.fcT3) + ', Fatigue I 0.40f′c = ' + f2(L.fFat) + ' ksi.</p>';
@@ -2784,9 +3336,13 @@ function renderTables() {
       r.shear.map(q => '<tr><td>' + f2(q.x) + '</td><td class="l">' + esc((q.tags || []).join(', ')) + (q.useNeg ? ' (−M)' : '') + '</td><td>' + f1(q.Vu) + '</td><td>' + f0(q.Mu) + '</td><td>' + f2(q.dv) + '</td><td>' + f1(q.Vp) + '</td>' + (q.simp ? '<td>' + f1(q.simp.Vci) + '</td><td>' + f1(q.simp.Vcw) + '</td><td>' + f3(1 / Math.tan(q.theta * Math.PI / 180)) + '</td>' : '<td>' + f3(q.es * 1000) + '</td><td>' + f2(q.beta) + '</td><td>' + f1(q.theta) + '</td>') + '<td>' + f1(q.Vc) + '</td><td>' + f2(q.Av) + ' / ' + q.s + '</td><td>' + f1(q.Vs) + '</td><td>' + f1(0.9 * q.Vn) + '</td><td' + (q.ratio > 1 ? ' class="over"' : '') + '>' + f3(q.ratio) + '</td><td>' + (isFinite(q.sReq) ? f1(q.sReq) : '–') + '</td><td>' + f1(q.smax) + '</td><td' + (q.iRatio > 1 ? ' class="over"' : '') + '>' + f3(q.iRatio) + '</td><td>' + f0(q.Treq) + '</td><td>' + f0(q.TreqUsed) + '</td><td>' + f0(q.Tprov) + '</td><td' + (q.lRatio > 1 ? ' class="over"' : '') + '>' + f3(q.lRatio) + '</td></tr>').join('') +
       '</tbody></table></div><p class="hint" style="margin-top:8px">' + (r.shearMethod === 'simplified' ? 'Simplified procedure (5.7.3.4.3): Vc = min(Vci, Vcw), Vp through Vcw.' : 'General procedure (5.7.3.4.2) with prestress contribution in all regions (SSM 4.2.4.3.3).') + ' Interface and longitudinal-reinforcement columns are demand/capacity ratios.</p>';
   } else if (v === 'rel') {
-    h += '<p class="hint" style="margin-bottom:8px">' + esc(r.releaseHow) + '. Limits 0.65f′ci = ' + f2(L.fciC) + ' ksi compression, 0.24√f′ci = ' + f3(L.fciT) + ' ksi tension (with bonded reinforcement).</p>';
+    h += '<p class="hint" style="margin-bottom:8px">' + esc(r.releaseHow) + '. Limits ' + (r.lfd ? '0.60f′ci = ' + f2(L.fciC) + ' ksi compression, ' + (r.lfd.relTension === 'none' ? 'the lesser of 200 psi and 3√f′ci' : '7.5√f′ci') + ' = ' + f3(L.fciT) + ' ksi tension (9.15.2.1).' : '0.65f′ci = ' + f2(L.fciC) + ' ksi compression, 0.24√f′ci = ' + f3(L.fciT) + ' ksi tension (with bonded reinforcement).') + '</p>';
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th>z from beam end, ft</th><th>F<sub>t</sub>, k</th><th>e, in.</th><th>M self-weight, k-ft</th><th>Top, ksi</th><th>Bottom, ksi</th></tr></thead><tbody>' +
       r.release.map(q => '<tr><td>' + f2(q.z) + '</td><td>' + f0(q.F) + '</td><td>' + f2(q.e) + '</td><td>' + f1(q.M) + '</td><td' + oc(q.ft, -L.fciT, -1) + '>' + f3(q.ft) + '</td><td' + oc(q.fb, L.fciC, 1) + '>' + f3(q.fb) + '</td></tr>').join('') + '</tbody></table></div>';
+  } else if (v === 'pier' && r.lfd) {
+    h += r.pierChecks.map(q => '<div class="detail" style="margin-bottom:12px"><div><h3>Pier ' + q.pier + ' — deck steel</h3><dl class="kv"><dt>A<sub>s</sub> / d<sub>s</sub></dt><dd>' + f2(q.As) + ' in.² / ' + f2(q.ds) + ' in.</dd><dt>Cracked NA from bottom</dt><dd>' + f2(q.x_na) + ' in.</dd><dt>Service M (DC2 + DW + LL + I)</dt><dd>' + f0(q.Ms) + ' k-ft</dd><dt>f<sub>s</sub></dt><dd>' + f2(q.fss) + ' ksi</dd><dt>z / d<sub>c</sub> / A</dt><dd>' + q.z + ' / ' + f2(q.dcc) + ' in. / ' + f1(q.Aef) + ' in.²</dd><dt>f<sub>s</sub> allowed (8.16.8.4)</dt><dd>' + f2(q.fsa) + ' ksi</dd><dt>Fatigue f<sub>f</sub> / allowed (8.16.8.3)</dt><dd>' + f2(q.df) + ' / ' + f2(q.dFth) + ' ksi</dd></dl></div>' +
+      q.flange.map(fl => '<div><h3>Bottom flange at x = ' + f2(fl.x) + ' ft</h3><dl class="kv"><dt>F<sub>s</sub> / e</dt><dd>' + f0(fl.F) + ' k / ' + f2(fl.e) + ' in.</dd><dt>All loads</dt><dd>' + f3(fl.fA) + ' ≤ ' + f2(L.fc06) + '</dd><dt>Prestress + dead</dt><dd>' + f3(fl.fB) + ' ≤ ' + f2(L.fc04) + '</dd><dt>LL + ½(prestress + dead)</dt><dd>' + f3(fl.fF) + ' ≤ ' + f2(L.fc04) + '</dd></dl></div>').join('') + '</div>').join('') +
+      '<p class="hint">Bottom-flange compression is checked one transfer length from the pier end of each beam with the cracked composite section, against the 9.15.2.2 limits.</p>';
   } else if (v === 'pier') {
     h += r.pierChecks.map(q => '<div class="detail" style="margin-bottom:12px"><div><h3>Pier ' + q.pier + ' — deck steel</h3><dl class="kv"><dt>A<sub>s</sub> / d<sub>s</sub></dt><dd>' + f2(q.As) + ' in.² / ' + f2(q.ds) + ' in.</dd><dt>Cracked NA from bottom</dt><dd>' + f2(q.x_na) + ' in.</dd><dt>I<sub>cr</sub> / S<sub>bc</sub></dt><dd>' + f0(q.Icr) + ' / ' + f0(q.Sbc) + '</dd><dt>Service I M</dt><dd>' + f0(q.Ms) + ' k-ft</dd><dt>f<sub>ss</sub></dt><dd>' + f2(q.fss) + ' ksi</dd><dt>Spacing limit (5.6.7)</dt><dd>' + f2(q.sAllow) + ' in. (provided ' + q.sProv + ')</dd><dt>Fatigue Δf / (ΔF)<sub>TH</sub></dt><dd>' + f2(q.df) + ' / ' + f2(q.dFth) + ' ksi</dd></dl></div>' +
       q.flange.map(fl => '<div><h3>Bottom flange at x = ' + f2(fl.x) + ' ft</h3><dl class="kv"><dt>F<sub>s</sub> / e</dt><dd>' + f0(fl.F) + ' k / ' + f2(fl.e) + ' in.</dd><dt>Service I, all loads</dt><dd>' + f3(fl.fA) + ' ≤ ' + f2(L.fc06) + '</dd><dt>Service I, permanent</dt><dd>' + f3(fl.fB) + ' ≤ ' + f2(L.fc045) + '</dd><dt>Fatigue I</dt><dd>' + f3(fl.fF) + ' ≤ ' + f2(L.fFat) + '</dd></dl></div>').join('') + '</div>').join('') +
@@ -2808,8 +3364,37 @@ function liveNotes() {
     out.push('<b>Permit rating.</b> MBE 6A.4.5, RF = (φc φs φ R − γDC DC − γDW DW) / (γL (LL + IM)). ' + esc(P.typeName) + ': γL ' + f2(P.gR) + (P.type === 'routine' ? ' from Table 6A.4.5.4.2a-1 at ADTT ' + Math.round(P.adtt) + ' and each vehicle\'s GVW / axle length (the largest over the listed vehicles)' : '') + (P.type === 'escorted' && P.crawl ? ' (1.10 increased by 1.05 at crawl speed)' : '') + '. ' + (P.single ? 'One lane loaded, with the 1.2 multiple presence factor divided out (6A.4.5.4.2b).' : 'Multi-lane distribution factors (6A.4.5.4.2a).') + ' IM ' + (P.crawl ? 'neglected at crawl speed (6A.4.5.5)' : Math.round(P.IMrate * 100) + '%') + '. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads.'); }
   return out;
 }
+function lfdNotes() {
+  const I = R.kind === 'I', Lf = R.lfd, g = R.df.at;
+  const items = [
+    '<b>Specification.</b> AASHTO Standard Specifications for Highway Bridges, 17th Edition (2002), Division I, load factor design (Sections 3, 8 and 9), and rating by the MBE load factor method (6B). Beam sections, strand patterns and dead-load conventions follow the IDOT inputs used for LRFD; IDOT LRFD policies are not applied.',
+    '<b>Analysis.</b> ' + (I ? 'Beam, fillet and slab (DC1) act on the simple-span noncomposite beam; parapets, wearing surface and live load act on the composite girder, continuous over the piers when made continuous (constant stiffness).' : 'Simple span, noncomposite for all loads.') + ' Composite properties use n = E<sub>deck</sub>/E<sub>beam</sub> with E<sub>c</sub> = 33w<sup>1.5</sup>√f′c (8.7.1), w = 150 pcf.',
+    '<b>Live load.</b> ' + esc(Lf.vehicle) + ' truck (rear axle spacing 14–30 ft, either direction, one per lane) or lane load (' + f2(0.64 * Lf.scale) + ' k/ft with ' + f1(18 * Lf.scale) + ' k for moment, ' + f1(26 * Lf.scale) + ' k for shear, and a second concentrated load in another span for negative moment, 3.11.3)' + (Lf.military ? ', or the alternate military loading of two 24 k axles 4 ft apart (3.7.4)' : '') + '. Impact I = 50/(L + 125) ≤ 0.30 (3.8.2) with L the span for positive moment, the average of the spans at the nearest pier for negative moment, and the loaded length from the point to the far reaction for shear. Group I: 1.3[D + 1.67(L + I)].',
+    '<b>Distribution.</b> ' + (I ? 'Table 3.23.1 for prestressed concrete girders: S/5.5 for two or more lanes (lever rule when S > 14 ft) or S/7.0 for one lane (lever rule when S > 10 ft); exterior beams by the lever rule with the wheel 2 ft from the curb, not less than the interior fraction (3.23.2.3.1.2, 3.23.2.3.1.4). Shear uses the moment fraction, except that an axle at the beam end takes the lever-rule reaction (3.23.1.2). The lane reduction of 3.12.1 is not applied with Table 3.23.1. Current: ' + esc(g.gov) + ', ' + f3(g.wM) + ' wheels = ' + f3(g.M) + ' lanes.' : 'Multi-beam deck, 3.23.4.3: load fraction S/D ≤ 1 of a wheel line with D = (5.75 − 0.5N<sub>L</sub>) + 0.7N<sub>L</sub>(1 − 0.2C)², C = K(W/L) ≤ K; current C = ' + f3(g.C) + ', D = ' + f2(g.D) + ' ft, ' + f3(g.wM) + ' wheels = ' + f3(g.M) + ' lanes.'),
+    '<b>Losses.</b> ' + (R.losses.method === 'lump' ? 'Lump sum 45 ksi (Table 9.16.2.2), with elastic shortening computed for the release stresses.' : '9.16.2.1 for low-relaxation strand: SH = 17 − 0.15RH, ES = (E<sub>s</sub>/E<sub>ci</sub>)f<sub>cir</sub> with E<sub>s</sub> = 28,000 ksi and f<sub>cir</sub> at midspan of the longest beam from the force after elastic shortening (iterated) and the beam weight on its length, CR<sub>c</sub> = 12f<sub>cir</sub> − 7f<sub>cds</sub>, CR<sub>s</sub> = 5 − 0.10ES − 0.05(SH + CR<sub>c</sub>) ksi.') + ' Jacking stress 0.75f′s (9.15.1); the loss at transfer is ES.',
+    '<b>Release.</b> ' + (Lf.release === 'lift' ? 'At the lifting points.' : 'At transfer, the beam spanning between its ends on the casting bed.') + ' Prestress transferred over 50 strand diameters (9.20.2.4). Limits 0.60f′ci and ' + (Lf.relTension === 'none' ? 'the lesser of 200 psi and 3√f′ci (no bonded reinforcement)' : '7.5√f′ci with bonded reinforcement') + ' (9.15.2.1).',
+    '<b>Service.</b> 9.15.2.2 after losses: compression 0.60f′c under all loads, 0.40f′c under prestress and dead load, and 0.40f′c under live load plus half the prestress and dead load, for the beam top and the deck top (deck f′c); tension under the full live load plus impact at the bottom of the beam, ' + (Lf.corrosive ? '3√f′c (severe corrosive exposure)' : '6√f′c') + '. Uncracked sections (9.17.1).',
+    '<b>Flexure.</b> 9.17 for bonded strands with f*su = f′s[1 − (γ*/β1)(ρ*f′s/f′c)], γ* = 0.28, ρ* = A*s/bd: rectangular (9-13) when the stress block lies in the ' + (I ? 'deck (deck f′c)' : 'top slab') + ', otherwise flanged (9-14) with b′ = ' + (I ? 'the beam top flange width' : 'both side walls') + '; φ = 1.0 (9.14). Strands not fully developed (ℓd = (f*su − ⅔f<sub>se</sub>)D, twice that for debonded strands, 9.28) are credited in proportion to their stress. Maximum steel by the 0.36β1 index (9.18.1); minimum steel φMn ≥ 1.2M*cr, waived at 1.33Mu (9.18.2).' + (R.cont ? ' Negative moment: deck reinforcement with the beam bottom flange in compression at the girder f′c (9.7.2.3), φ = 0.90; minimum 1.2M<sub>cr</sub> on the deck concrete (8.17.1); crack control z = ' + Lf.z + ' k/in. (8.16.8.4)' + (Lf.rebarFatigue ? ' and reinforcement fatigue 21 − 0.33f<sub>min</sub> + 8(r/h), r/h = 0.3 (8.16.8.3)' : '') + '.' : ''),
+    '<b>Shear.</b> ' + (R.shearChecked ? '9.20 from the critical section h/2 from the face of support (9.20.1.4; bearing pad or pier face): V<sub>ci</sub> = 0.6√f′c b′d + V<sub>d</sub> + V<sub>i</sub>M<sub>cr</sub>/M<sub>max</sub> ≥ 1.7√f′c b′d with M<sub>cr</sub> = (I/Y<sub>t</sub>)(6√f′c + f<sub>pe</sub> − f<sub>d</sub>), V<sub>i</sub> = V<sub>u</sub> − V<sub>d</sub> and M<sub>max</sub> = M<sub>u</sub> − M<sub>d</sub>; V<sub>cw</sub> = (3.5√f′c + 0.3f<sub>pc</sub>)b′d + V<sub>p</sub> with f<sub>pc</sub> at the composite centroid (or the web–flange junction); d ≥ 0.8h; V<sub>s</sub> = A<sub>v</sub>f<sub>sy</sub>d/s ≤ 8√f′c b′d; φ = 0.90. Spacing ≤ 0.75h and 24 in. (halved above 4√f′c b′d), A<sub>v</sub> ≥ 50b′s/f<sub>sy</sub>.' + (I ? ' Horizontal shear (9.20.4): V<sub>u</sub> ≤ φV<sub>nh</sub>, with ' + (Lf.hsSurface === 'smooth' ? 'a clean surface not intentionally roughened, 80b<sub>v</sub>d with minimum ties' : 'the surface roughened to ¼ in., 350b<sub>v</sub>d with minimum ties plus 160f<sub>y</sub>/40,000 per percent of ties above the minimum') + '; the stirrups are taken as the ties, b<sub>v</sub> = top flange width, tie spacing ≤ 4 × web and 24 in.' : '') + ' Negative-moment regions use the deck steel depth and the slab cracking moment.' : 'Not checked: no shear reinforcement entered.'),
+    '<b>Rating.</b> MBE 6B.5.3.3 load factor rating for ' + esc(Lf.vehicle) + ': strength RF = (φR<sub>n</sub> − 1.3D)/(A2 L(1 + I)), A2 = ' + f2(R.rating.A2inv) + ' inventory and ' + f2(R.rating.A2op) + ' operating, for flexure and shear; inventory concrete tension (6√f′c), compression (0.6f′c, and 0.4f′c with half the prestress and dead load); strand tension 0.8f*y inventory and 0.9f*y operating with f*y = 0.9f′s, the strand stress taking f<sub>se</sub> plus the elastic increase from the dead load placed after transfer. Tons = RF × ' + f1(36 * Lf.scale) + '.',
+  ];
+  if (R.lfd.military) items.push('The alternate military loading is not scaled with the HS designation and is rated with the same factors.');
+  return items;
+}
 function renderMethod() {
   const I = R.kind === 'I';
+  if (R.lfd) {
+    const items = lfdNotes();
+    const diffs = ['TxDOT 0-4751-1 Example A.1 computes the service stresses with composite properties at n = 1 (S<sub>bc</sub> = 16,877 in.³, S<sub>tg</sub> = 54,084 in.³) and the strength checks at n = 0.846. This tool uses n = 0.846 throughout, so the top-of-beam stress under prestress and dead load is about 2.25 ksi against the 2.233 ksi limit the example reaches exactly, and the bottom tension is about −0.44 ksi (example −0.412).',
+      'The example interpolates the strand eccentricity at the shear critical section with the distance from the bearing (2.583 ft) measured as if from the beam end; this tool uses the beam end 0.5435 ft beyond the bearing, giving e = 11.60 in. (example 11.51 in.), V<sub>cw</sub> = 221 k and a shear ratio of about 1.00 with the #4 stirrups at 22 in.',
+      'The example takes the transfer loss as ES + ½CR<sub>s</sub> and f<sub>cir</sub> with the beam moment at the hold-down point; this tool uses ES and the midspan beam moment (9.16.2.1). Total losses agree within 0.2 ksi.',
+      'The example uses the moment distribution factor and the span impact for shear; this tool takes impact on the loaded length to the far reaction (3.8.2.2), about 0.2% more live load shear at the critical section.'];
+    const excl = ['Service load design (allowable stress) checks other than the 9.15 prestressed concrete stresses', 'Legal and permit vehicles', 'Lifting and shipping stability', 'Anchorage zone reinforcement (9.22)', 'Time-dependent restraint moments in continuous spans'];
+    $('#c-method').innerHTML = '<div class="card-h"><h2>Method</h2></div><ul class="notes">' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>' +
+      '<h3 style="margin-top:14px">Where this differs from the TxDOT example</h3><ul class="notes">' + diffs.map(t => '<li>' + t + '</li>').join('') + '</ul>' +
+      '<h3 style="margin-top:14px">Not included</h3><ul class="notes">' + excl.map(t => '<li>' + t + '</li>').join('') + '</ul>';
+    return;
+  }
   const items = I ? [
     '<b>Analysis.</b> Beam, fillet and slab (DC1) act on the simple-span noncomposite beam between bearings. DC2, DW and HL-93 act on the composite girder, continuous over the piers when made continuous (constant stiffness, spans to CL pier). IDOT standard continuity details satisfy 5.12.3.3, so restraint moments are not computed.',
     '<b>HL-93.</b> Design truck (14–30 ft rear axle spacing) or tandem plus 0.64 k/ft lane, IM 33%; 90% of two trucks 50 ft apart plus lane for negative moment between contraflexure points and at piers (3.6.1.3.1). Fatigue truck with 30 ft rear spacing and IM 15%; Fatigue I load factor 1.75.',
@@ -2930,12 +3515,13 @@ function onRail(ev) {
   if (el.dataset.pr) { const [i, k] = el.dataset.pr.split('.'); const r = m.pattern.rows[+i]; r[k] = k === 'row' ? el.value : +el.value || 0; schedule(); return; }
   if (el.dataset.pv) { const [i, k] = el.dataset.pv.split('.'); const v = liveOf(m).permits.vehicles[+i]; if (v) v[k] = el.value; refreshLive(); schedule(); return; }
   if (el.dataset.st) { const [i, k] = el.dataset.st.split('.'); const v = el.value.trim(); m.stirrups[+i][k] = v === '' || !isFinite(+v) ? v : +v; schedule(); return; }
-  const k = el.dataset.k; if (!k) return;
+  let k = el.dataset.k; if (!k) return;
+  if (k === '__shape') { if (ev.type !== 'change' || el.value === '__custom') return; delete m.shapeData; k = 'shape'; }
   const t = el.dataset.t;
   let v = t === 'bool' ? el.checked : t === 'list' ? el.value.split(/[\s,;]+/).filter(Boolean).map(Number) : t === 'num' ? (el.value === '' ? 0 : +el.value) : el.value;
   if (k.startsWith('live.')) liveOf(m);
   if (t === 'num' && !isFinite(v)) return;
-  if ((k === 'deck.beff' || k === 'deck.btrib' || ['live.ped.width', 'live.ped.clear', 'live.ped.dfVeh', 'live.permits.adtt', 'live.permits.gDesign', 'live.permits.im', 'rating.phiS', 'rating.gDC', 'rating.gDW', 'rating.gLinv', 'rating.gLop', 'rating.gS3'].includes(k)) && el.value.trim() === '') v = null;
+  if ((k === 'deck.beff' || k === 'deck.btrib' || ['live.ped.width', 'live.ped.clear', 'live.ped.dfVeh', 'live.permits.adtt', 'live.permits.gDesign', 'live.permits.im', 'rating.phiS', 'rating.gDC', 'rating.gDW', 'rating.gLinv', 'rating.gLop', 'rating.gS3', 'lfd.z', 'lfd.A2inv', 'lfd.A2op', 'lfdDF.M', 'lfdDF.V', 'lfdDF.end'].includes(k)) && el.value.trim() === '') v = null;
   setP(m, k, v);
   if (k === 'S' || k === 'overhang' || k === 'girder') { const ph = widthPH(m); document.querySelectorAll('[data-k="deck.beff"]').forEach(e => { e.placeholder = ph.beff; }); document.querySelectorAll('[data-k="deck.btrib"]').forEach(e => { e.placeholder = ph.trib; }); }
   if (k === 'shape' && ev.type === 'change') {
@@ -2951,7 +3537,7 @@ function onRail(ev) {
     }
     renderRail();
   }
-  if ((k === 'continuous' || k === 'spans' || k === 'stirMode' || ['live.design', 'live.permit', 'live.permits.type', 'live.permits.crawl', 'live.ped.noVehicle', 'live.ped.mpf'].includes(k)) && ev.type === 'change') renderRail();
+  if ((k === 'continuous' || k === 'spans' || k === 'stirMode' || ['live.design', 'live.permit', 'live.permits.type', 'live.permits.crawl', 'live.ped.noVehicle', 'live.ped.mpf', 'code', 'lfd.release'].includes(k)) && ev.type === 'change') renderRail();
   else if (k.startsWith('live.') || ['S', 'overhang', 'girder', 'roadway', 'parapetWidth', 'shape'].includes(k)) refreshLive();
   schedule();
 }
