@@ -181,6 +181,15 @@ guard('Steel 2D Grillage', () => {
   near('60° skew: bearing skew, deg', S.girders[0].brg[1].skew, 60, 1e-6);
   near('60° skew: cross-frames normal to girders, deg', Math.max(...S.crossframes.filter(x => x.tag === 'intermediate').map(x => Math.abs(x.angA))), 0, 0.01, 'AASHTO 6.7.4.2');
   is('60° skew: unbraced lengths within 20 ft', Math.max(...S.girders.map(g => g.LbMax)) <= 20 + 1e-6, true);
+  // a 4-span curved unit from an MDX girder system run (geometry only): G1 inside at R = 3128.25 ft, 4 girders at 12.5 ft,
+  // radial supports, cross-frames at MDX's brace spacings along G1. MDX's grid reports these girder span lengths
+  const k = 3147 / 3128.25, BR = [10, 20, 25, 25, 20, 20, 15, 15, 28.4968, 15, 15, 20, 20, 20, 20, 20, 20, 15, 15, 29.4455, 15, 15, 20, 21, 25, 25, 21, 20, 15, 15, 27.8929, 15, 15, 20, 25, 25, 22, 20];
+  const M4 = G.build({ mode: 'concentric', concentric: { R: 3147, turn: 'L', nG: 4, spacing: 12.5, spans: [163.4968, 209.4455, 219.8929, 166.9693].map(v => v * k), skews: [0, 0, 0, 0, 0], ext: 1, crossframes: { atRef: { girder: 'G1', spacing: BR } } } });
+  const mdxSpans = { G1: [163.497, 209.445, 219.893, 166.969], G2: [164.150, 210.282, 220.772, 167.636], G3: [164.803, 211.119, 221.650, 168.303], G4: [165.457, 211.956, 222.529, 168.971] };
+  near('MDX system run: largest girder span difference from MDX, ft', Math.max(...M4.girders.flatMap(g => g.spans.map((s, j) => Math.abs(s.L - mdxSpans[g.id][j])))), 0, 0.002, 'GSA.OUT Girder Span Lengths');
+  is('MDX system run: cross-frames per bay (38 at the brace spacings + 5 on supports)', [1, 2, 3].map(b => M4.crossframes.filter(x => x.bay === b).length).join(), '43,43,43');
+  is('MDX system run: G1 brace points, ft', M4.crossframes.filter(x => x.bay === 1 && x.tag === 'intermediate').slice(0, 9).map(x => +(x.uA - 1).toFixed(2)).join(), '10,30,55,80,100,120,135,150,178.5');
+  near('MDX system run: G4 largest unbraced length, ft', M4.girders[3].LbMax, 25 * 3165.75 / 3128.25, 0.01, '25 ft on G1, radial');
   // widening with an interior partial-length girder: G1-G3 parallel, G5 and G6 fan out, and G4 starts on diaphragm D1
   // (spanning G3 to G5) where that bay reaches 12 ft, then runs continuous over the pier
   const W = G.build({ mode: 'alignment', ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 300 }] },

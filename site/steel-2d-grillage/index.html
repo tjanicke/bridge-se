@@ -146,6 +146,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
         <option value="curved">3-span curved, R = 700 ft (NSBA Example 4)</option>
         <option value="skew">2-span straight, 60° skew, 4 girders</option>
         <option value="flare">Widening, interior girder starting on a diaphragm</option>
+        <option value="mdx4">4-span curved, R = 3147 ft, MDX brace spacings</option>
         <option value="mixed">Curved with skewed pier, stations and offsets</option>
       </select>
     </div>
@@ -512,7 +513,18 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       return us;
     };
     const orient = cfg.orient || 'auto', auto = cfg.auto !== false; // auto false: only the cross-frames listed in add
-    if (auto) ref.spans.forEach(s => {
+    // cross-frames at listed spacings along one girder (as MDX's BR input), measured from its first bearing, on lines
+    // normal to that girder across all the girders; this replaces the equal-panel layout
+    const at = cfg.atRef && Array.isArray(cfg.atRef.spacing) && cfg.atRef.spacing.filter(v => +v > 0).length ? cfg.atRef : null;
+    if (auto && at) {
+      const g = order.find(x => x.id === at.girder) || order[0];
+      if (at.girder && g.id !== at.girder) warnings.push('Cross-frame spacings: girder ' + at.girder + ' not found; ' + g.id + ' used.');
+      let u = g.brg.length ? g.brg[0].u : 0;
+      at.spacing.forEach(v => { u += +v || 0; if (u > 1e-6 && u < g.L - 1e-6) place(g.P.at(u), rotL(g.P.tan(u)), 'intermediate'); });
+      // the list may stop short of the far bearing (MDX leaves the last panel out); running past it is the mistake
+      if (g.brg.length && u > g.brg[g.brg.length - 1].u + 0.5) warnings.push('Cross-frame spacings along ' + g.id + ' add up to ' + (u - g.brg[0].u).toFixed(2) + ' ft; its bearings are ' + (g.brg[g.brg.length - 1].u - g.brg[0].u).toFixed(2) + ' ft apart.');
+    }
+    if (auto && !at) ref.spans.forEach(s => {
       const sk = Math.max(skOf(ref, s.from), skOf(ref, s.to));
       if (!(orient === 'skew' || (orient === 'auto' && sk > 0.5 && sk <= 20))) return;
       const n = panels(s.from, s.to, s.L);
@@ -522,7 +534,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       }
       s.parallel = true;
     });
-    if (auto) order.slice(0, -1).forEach((a, k) => {
+    if (auto && !at) order.slice(0, -1).forEach((a, k) => {
       a.spans.forEach(s => {
         const rs = ref.spans.find(r => r.from === s.from && r.to === s.to);
         if (rs && rs.parallel) return;
@@ -771,6 +783,11 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       girders: [{ id: 'G1', offsets: [[1000, -18]] }, { id: 'G2', offsets: [[1000, -9]] }, { id: 'G3', offsets: [[1000, 0]] }, { id: 'G4', offsets: [[1100, 6], [1300, 9]], startOn: 'D1' }, { id: 'G5', offsets: [[1000, 9], [1300, 18]] }, { id: 'G6', offsets: [[1000, 18], [1300, 27]] }],
       supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1150, skew: 0, kind: 'pier' }, { id: 'Abut 2', sta: 1300, skew: 0, kind: 'abutment' }],
       diaphragms: [{ id: 'D1', sta: 1100, skew: 0, from: 'G3', to: 'G5' }], crossframes: CF({ spacing: 20 }) } },
+    // a 4-span curved unit taken from an MDX girder system run: 4 girders at 12.5 ft, G1 on the inside at R = 3128.25 ft
+    // (centerline 3147 ft), radial supports, cross-frames at MDX's brace spacings along G1. Mirrored (curving left) so G1
+    // stays the inside girder with this page's left-to-right numbering
+    mdx4: { mode: 'concentric', concentric: { R: 3147, turn: 'L', nG: 4, spacing: 12.5, spans: [163.4968, 209.4455, 219.8929, 166.9693].map(v => +(v * 3147 / 3128.25).toFixed(4)), skews: [0, 0, 0, 0, 0], ext: 1,
+      crossframes: CF({ atRef: { girder: 'G1', spacing: [10, 20, 25, 25, 20, 20, 15, 15, 28.4968, 15, 15, 20, 20, 20, 20, 20, 20, 15, 15, 29.4455, 15, 15, 20, 21, 25, 25, 21, 20, 15, 15, 27.8929, 15, 15, 20, 25, 25, 22, 20] } }) } },
     mixed: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 100, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 90 }, { type: 'arc', L: 320, R: 900, turn: 'R' }] },
       girders: [-18, -9, 0, 9, 18].map((o, i) => ({ id: 'G' + (i + 1), offsets: [[100, o]] })),
       supports: [{ id: 'Abut 1', sta: 120, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 275, skew: 25, kind: 'pier' }, { id: 'Abut 2', sta: 450, skew: 10, kind: 'abutment' }],
@@ -926,6 +943,9 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
         ${fNum('Clear distance from bearings', 'ft', base + '.clear')}
         ${fNum('Unbraced length limit', 'ft', base + '.maxLb', '0 for no check')}
       </div><div class="fields one">${fList('Panels per span', '', base + '.panels', 'Optional, one per span, e.g. 8, 11, 8; blank uses the spacing')}</div>
+      <h3>Or by a list of spacings</h3>
+      <div class="fields">${fTxt('Along girder', base + '.atRef.girder', 'G1', 'gids')}</div>
+      <div class="fields one">${fList('Spacings from its first bearing', 'ft', base + '.atRef.spacing', 'As in MDX BR input: 10, 20, 25, … Lines are normal to that girder across all girders and replace the equal panels; leave blank to use the panels.')}</div>
       <label class="c"><input type="checkbox" data-k="${base}.atSupports" data-t="bool"${c.atSupports !== false ? ' checked' : ''}> Cross-frames on the support lines</label>
       <p class="hint">${(c.remove || []).length ? `${c.remove.length} removed (${esc(c.remove.join(', '))}). <button data-act="restore">Bring all back</button>` : 'Click a cross-frame in the plan to remove it.'}</p>
       <h3>Added cross-frames</h3><p class="hint">By girder and distance along it from its start, ft.</p>
