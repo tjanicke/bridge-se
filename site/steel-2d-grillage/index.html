@@ -1,0 +1,1184 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Steel 2D Grillage lays out framing plans for curved, skewed, flared and partial-length steel I-girder bridges, with cross-frame layouts and DXF import, toward an AASHTO LRFD 10th Edition grillage analysis.">
+<link rel="canonical" href="https://bridge-se.open-dot.org/steel-2d-grillage/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Bridge SE · Open DOT">
+<meta property="og:title" content="Steel 2D Grillage | Bridge SE | Open DOT">
+<meta property="og:description" content="Framing plans for curved, skewed, flared and partial-length steel I-girder bridges, with cross-frame layouts and DXF import.">
+<meta property="og:url" content="https://bridge-se.open-dot.org/steel-2d-grillage/">
+<meta property="og:image" content="https://bridge-se.open-dot.org/assets/bridge-se-logo.png">
+<meta name="twitter:card" content="summary">
+<link rel="icon" type="image/png" href="/assets/bridge-se-logo.png">
+<script defer src="https://collect.open-dot.org/script.js" data-website-id="13843423-777f-410d-90ed-4ef5e60bb045" data-host-url="https://collect.open-dot.org" data-domains="bridge-se.open-dot.org" data-exclude-search="true"></script>
+<script defer src="/assets/track.js"></script>
+<style>.bridge-nav{max-width:1500px;margin:0 auto 12px;font:500 13px/1.5 system-ui,sans-serif}.bridge-nav a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}.bridge-nav a:focus-visible{outline:2px solid currentColor;outline-offset:3px}.bridge-nav span{margin:0 8px;color:var(--muted)}</style>
+<title>Steel 2D Grillage | Bridge SE | Open DOT</title>
+<meta name="robots" content="noindex">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Same calc-sheet workbench as the other Bridge SE modules: input rail left, plan and tables right */
+:root{
+  --bg:#eef1ef; --surface:#fbfcfb; --sunk:#e3e8e5; --ink:#17201d; --muted:#56655f; --line:#cdd6d2;
+  --accent:#0b6e4f; --accent-ink:#ffffff; --ok:#1f7a45; --warn:#a86a0c; --bad:#b42318;
+  --girder:#17201d; --support:#2557a4; --xf:#0a7d57; --xf-off:#b42318; --diaph:#a8870a; --grid:#dfe5e2;
+  --f-display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
+  --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
+  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
+  --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
+  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
+h1,h2,h3{font-family:var(--f-display);font-weight:600;margin:0;text-wrap:balance;letter-spacing:.01em}
+h1{font-size:1.75rem;line-height:1.1}
+h2{font-size:1.15rem}
+h3{font-size:.8rem;text-transform:uppercase;letter-spacing:.08em;color:var(--muted);font-weight:600;margin:6px 0 4px}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:flex-end;justify-content:space-between;max-width:1500px;margin:0 auto 16px}
+header p{margin:4px 0 0;color:var(--muted);max-width:76ch}
+.badge{display:inline-block;font:600 11px var(--f-body);letter-spacing:.06em;text-transform:uppercase;color:var(--warn);border:1px solid var(--warn);border-radius:4px;padding:1px 6px;vertical-align:middle;margin-left:6px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-end}
+button,.btn,select,input{font:inherit}
+button,.btn{font:500 13px var(--f-body);border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:6px;padding:7px 12px;cursor:pointer;text-decoration:none;display:inline-block}
+button:hover,.btn:hover{border-color:var(--muted)}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+button:focus-visible,input:focus-visible,select:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:var(--surface);flex-wrap:wrap}
+.seg button{border:0;border-radius:0;padding:8px 12px;display:flex;flex-direction:column;align-items:flex-start;line-height:1.15;background:transparent}
+.seg button+button{border-left:1px solid var(--line)}
+.seg button b{font-family:var(--f-display);font-size:15px;font-weight:600}
+.seg button small{font-size:11px;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.seg button[aria-pressed="true"] small{color:var(--accent-ink);opacity:.85}
+.lbl{display:block;font-size:11px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:.06em}
+.wrap{display:grid;grid-template-columns:minmax(0,400px) minmax(0,1fr);gap:18px;max-width:1500px;margin:0 auto}
+@media (max-width:900px){.wrap{grid-template-columns:minmax(0,1fr)}.sheet{order:-1}}
+.rail{display:flex;flex-direction:column;gap:10px;min-width:0}
+.sheet{display:flex;flex-direction:column;gap:16px;min-width:0}
+details.grp{background:var(--surface);border:1px solid var(--line);border-radius:8px}
+details.grp>summary{list-style:none;cursor:pointer;padding:10px 14px;display:flex;justify-content:space-between;align-items:center;font-family:var(--f-display);font-weight:600;font-size:1rem}
+details.grp>summary::-webkit-details-marker{display:none}
+details.grp>summary::after{content:"+";font-family:var(--f-mono);color:var(--muted)}
+details.grp[open]>summary::after{content:"–"}
+.gbody{padding:0 14px 14px;display:flex;flex-direction:column;gap:10px}
+.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 12px}
+.fields.one{grid-template-columns:minmax(0,1fr)}
+label.f{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted);min-width:0}
+label.f .u{font-family:var(--f-mono);font-size:11px}
+label.c{display:flex;gap:8px;align-items:flex-start;font-size:13px}
+input.n,input.t,select,textarea{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:5px;padding:6px 8px;min-width:0;width:100%}
+input.n,textarea{font-family:var(--f-mono);font-size:13px}
+textarea{resize:vertical;min-height:64px;line-height:1.35}
+input[aria-invalid="true"],textarea[aria-invalid="true"]{border-color:var(--bad);background:color-mix(in srgb,var(--bad) 8%,var(--bg))}
+.hint{font-size:12px;color:var(--muted);margin:0}
+.toolbar{display:flex;flex-wrap:wrap;gap:6px}
+table.mini{width:100%;border-collapse:collapse;font-size:12px}
+table.mini th{font-weight:600;color:var(--muted);text-align:left;font-size:11px;padding:2px 4px}
+table.mini td{padding:2px 3px}
+table.mini input,table.mini select{padding:4px 5px;font-size:12px}
+table.mini select{padding:4px 2px}
+table.mini{table-layout:fixed}
+table.mini td:last-child,table.mini th:last-child{width:34px}
+table.mini button{padding:3px 8px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px;min-width:0}
+.card-h{display:flex;flex-wrap:wrap;gap:6px 16px;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+.status{font-size:12px;color:var(--muted)}
+.plan{position:relative;border:1px solid var(--line);border-radius:8px;background:var(--bg);overflow:hidden;touch-action:none;height:min(62vh,560px)}
+.plan svg{display:block;width:100%;height:100%;cursor:grab;user-select:none}
+.plan svg.drag{cursor:grabbing}
+.plan .zoom{position:absolute;right:8px;top:8px;display:flex;flex-direction:column;gap:4px}
+.plan .zoom button{width:32px;height:32px;padding:0;font-family:var(--f-mono)}
+.plan .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;max-width:280px;box-shadow:0 2px 8px rgb(0 0 0/.15)}
+.legend{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:12px;color:var(--muted);margin-top:8px;align-items:center}
+.legend i{display:inline-block;width:22px;height:0;border-top:2px solid;vertical-align:middle;margin-right:6px}
+.legend label{display:inline-flex;gap:5px;align-items:center}
+.msg{border-radius:8px;padding:10px 14px;font-size:13px;display:flex;flex-direction:column;gap:4px}
+.msg.err{background:color-mix(in srgb,var(--bad) 10%,var(--surface));border:1px solid var(--bad)}
+.msg.wrn{background:color-mix(in srgb,var(--warn) 12%,var(--surface));border:1px solid var(--warn)}
+.tbl-wrap{overflow:auto;max-height:440px;border:1px solid var(--line);border-radius:8px}
+table.res{border-collapse:collapse;width:100%;font-size:12px;white-space:nowrap}
+table.res th{position:sticky;top:0;background:var(--sunk);text-align:right;font-weight:600;padding:6px 8px;border-bottom:1px solid var(--line);font-size:11px;color:var(--muted)}
+table.res th.l,table.res td.l{text-align:left}
+table.res td{padding:4px 8px;border-bottom:1px solid var(--line);text-align:right;font-family:var(--f-mono);font-variant-numeric:tabular-nums}
+table.res td.l{font-family:var(--f-body)}
+table.res tr[data-x]{cursor:pointer}
+table.res tr:hover td{background:var(--sunk)}
+table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.cols2{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:16px}
+.notes{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px;max-width:100ch}
+.notes b{color:var(--ink)}
+.layers td{vertical-align:middle}
+.row{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px}
+.gbody>.row:first-of-type{border-top:0;padding-top:0}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head><body>
+<nav class="bridge-nav" aria-label="Breadcrumb"><a href="https://open-dot.org/">Open DOT</a><span>›</span><a href="/">Bridge SE</a><span>›</span>Steel 2D Grillage</nav>
+
+<header>
+  <div>
+    <h1>Steel 2D Grillage <span class="badge">Preview · framing</span></h1>
+    <p>Framing plans for steel I-girder bridges: curved, highly skewed, flared and tapered girders, girders that end on diaphragms, and cross-frame layouts. This first stage builds and checks the framing; the grillage analysis (AASHTO LRFD 10th edition) comes next. Everything runs in your browser; files you open are not uploaded.</p>
+  </div>
+  <div class="actions">
+    <div>
+      <span class="lbl" id="modeLbl">Geometry input</span>
+      <div class="seg" role="group" aria-labelledby="modeLbl" id="modeSel">
+        <button data-mode="concentric"><b>Concentric</b><small>curved or straight</small></button>
+        <button data-mode="alignment"><b>Stations</b><small>offsets on an alignment</small></button>
+        <button data-mode="xy"><b>X-Y</b><small>plan coordinates</small></button>
+        <button data-mode="dxf"><b>DXF</b><small>import a framing plan</small></button>
+      </div>
+    </div>
+    <div>
+      <span class="lbl">Example</span>
+      <select id="example" aria-label="Load example">
+        <option value="">Load example…</option>
+        <option value="curved">3-span curved, R = 700 ft (NSBA Example 4)</option>
+        <option value="skew">2-span straight, 60° skew, 4 girders</option>
+        <option value="flare">Flared widening, girder ending on a diaphragm</option>
+        <option value="mixed">Curved with skewed pier, stations and offsets</option>
+      </select>
+    </div>
+    <div class="toolbar"><button id="btnSave">Save input</button><label class="btn" for="fileIn">Open input<input type="file" id="fileIn" accept=".json,application/json" hidden></label><button id="btnReset">Reset</button></div>
+  </div>
+</header>
+
+<div class="wrap">
+  <aside class="rail" id="rail" aria-label="Inputs"></aside>
+  <main class="sheet">
+    <div id="msgs"></div>
+    <section class="card">
+      <div class="card-h"><h2>Framing plan</h2><span class="status" id="planStatus"></span></div>
+      <div class="plan" id="plan">
+        <svg id="svg" role="img" aria-label="Framing plan"></svg>
+        <div class="zoom"><button id="zIn" aria-label="Zoom in">+</button><button id="zOut" aria-label="Zoom out">−</button><button id="zFit" aria-label="Fit to view">⤢</button></div>
+        <div class="tip" id="tip" hidden></div>
+      </div>
+      <div class="legend">
+        <span><i style="border-color:var(--girder)"></i>Girder</span>
+        <span><i style="border-color:var(--support);border-top-style:dashed"></i>Support line</span>
+        <span><i style="border-color:var(--diaph);border-top-width:4px"></i>Diaphragm</span>
+        <span><i style="border-color:var(--xf)"></i>Cross-frame</span>
+        <span><i style="border-color:var(--xf-off);border-top-style:dotted"></i>Removed</span>
+        <label><input type="checkbox" id="showLbl" checked> Labels</label>
+        <label><input type="checkbox" id="showXfId"> Cross-frame names</label>
+      </div>
+      <p class="hint" style="margin-top:6px">Drag to pan, scroll or use + and − to zoom. Click a cross-frame to remove it or bring it back.</p>
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>Girders</h2><span class="status" id="gStatus"></span></div>
+      <div class="tbl-wrap"><table class="res" id="gTbl"></table></div>
+    </section>
+    <div class="cols2">
+      <section class="card">
+        <div class="card-h"><h2>Cross-frames by bay</h2></div>
+        <div class="tbl-wrap"><table class="res" id="bTbl"></table></div>
+        <p class="hint" style="margin-top:8px">Angle is from the line normal to the girder; 0° is square to the girder.</p>
+      </section>
+      <section class="card">
+        <div class="card-h"><h2>Bearings</h2></div>
+        <div class="tbl-wrap"><table class="res" id="sTbl"></table></div>
+        <p class="hint" style="margin-top:8px">Skew is the angle between the support line and the line normal to the girder at the bearing.</p>
+      </section>
+    </div>
+    <section class="card">
+      <div class="card-h"><h2>Cross-frames and diaphragms</h2><div class="toolbar"><button id="btnCsv">Copy CSV</button></div></div>
+      <div class="tbl-wrap"><table class="res" id="xTbl"></table></div>
+    </section>
+    <section class="card">
+      <div class="card-h"><h2>How the framing is built</h2></div>
+      <ul class="notes" id="notes">
+        <li><b>Coordinates.</b> Feet and degrees. In plan, x is east and y is north. Offsets are positive to the right looking up-station. A skew turns the support line counterclockwise from the line normal (radial) to the alignment.</li>
+        <li><b>Girders.</b> Each girder is a line in plan: a constant or straight-line-varying offset from the alignment (so curved, flared and tapered girders are all the same input), or a list of x-y points. A girder runs between its end supports, extended past the bearings by the distance entered, or it can start or end on a diaphragm or another support line. Spans are measured along each girder between its bearings and framing ends.</li>
+        <li><b>Cross-frames.</b> With square bearings, each span is divided equally, so on a curve the lines are radial and line up across the bays. Where a bay has a skewed bearing, cross-frames are normal to the girders and are laid out bay by bay over the length where a normal line lands inside a span of the next girder, so they stagger near skewed supports (AASHTO 6.7.4.2: skews over 20°). With a skew of 20° or less they can be set parallel to the skew instead. Cross-frames along the support lines are added between girders that bear on the same support. Any cross-frame can be removed by clicking it, and cross-frames can be added by girder and distance.</li>
+        <li><b>DXF import.</b> Lines, polylines (with arcs) and arcs are read by layer. You assign each layer a role: girders, support lines, diaphragms or cross-frames. Girder pieces that meet end to end are joined; cross-frame lines are attached to the girders their ends touch. The drawing units come from the file and can be changed. The import becomes an X-Y input you can edit.</li>
+        <li><b>Next stages.</b> Section properties along each girder and the grillage stiffness model (girder warping torsion, cross-frames as condensed trusses with the reduced axial stiffness of single angles, composite deck), dead-load stages and fit conditions, live load by influence surface, cross-frame member forces, and the hand-off of girder forces to the AASHTO checks already used in Steel Line Girder.</li>
+      </ul>
+    </section>
+  </main>
+</div>
+<script>
+// ===================== Steel 2D Grillage: framing engine (phase 1) =====================
+// Plan geometry only: girder lines, support lines, diaphragms and cross-frames, from one of three inputs
+// (concentric curve form, alignment stations and offsets, plain x-y), all turned into one framing model.
+// Units: feet and degrees. Plan coordinates: x east, y north. Angles in plan are measured counterclockwise
+// from +x. Offsets are positive to the right looking up-station. A skew angle turns the support line
+// counterclockwise from the line normal to the alignment (radial on a curve).
+(function (root) {
+  'use strict';
+  const D2R = Math.PI / 180, TOL = 1e-6;
+  const num = v => (v === '' || v == null ? NaN : +v);
+  const dist = (a, b) => Math.hypot(b[0] - a[0], b[1] - a[1]);
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1]];
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1]];
+  const mul = (a, k) => [a[0] * k, a[1] * k];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1];
+  const cross = (a, b) => a[0] * b[1] - a[1] * b[0];
+  const unit = a => { const l = Math.hypot(a[0], a[1]) || 1; return [a[0] / l, a[1] / l]; };
+  const rotL = a => [-a[1], a[0]]; // 90° counterclockwise
+
+  // ---------- alignment: tangents and circular curves ----------
+  // al = { sta0, x0, y0, dir0 (deg, CCW from +x), elements: [{ type: 'line', L } | { type: 'arc', L, R, turn: 'L'|'R' }] }
+  function alignment(al) {
+    const els = [], sta0 = +al.sta0 || 0;
+    let p = [+al.x0 || 0, +al.y0 || 0], th = (+al.dir0 || 0) * D2R, s = sta0;
+    (al.elements || []).forEach((e, k) => {
+      const L = +e.L; if (!(L > 0)) throw new Error('Alignment element ' + (k + 1) + ' needs a length greater than zero.');
+      if (e.type === 'arc') {
+        const R = +e.R; if (!(R > 0)) throw new Error('Alignment curve ' + (k + 1) + ' needs a radius greater than zero.');
+        const sg = e.turn === 'R' ? -1 : 1, ctr = add(p, mul(rotL([Math.cos(th), Math.sin(th)]), sg * R));
+        els.push({ type: 'arc', s0: s, L, R, sg, th0: th, p0: p, ctr });
+        th += sg * L / R; p = add(ctr, mul(rotL([Math.cos(th), Math.sin(th)]), -sg * R));
+      } else { els.push({ type: 'line', s0: s, L, th0: th, p0: p }); p = add(p, mul([Math.cos(th), Math.sin(th)], L)); }
+      s += L;
+    });
+    if (!els.length) throw new Error('The alignment needs at least one element.');
+    const staEnd = s;
+    // point and direction at a station; beyond the ends the first or last element is extended
+    function at(st) {
+      let e = els[0]; for (const q of els) if (st >= q.s0 - TOL) e = q;
+      const u = st - e.s0;
+      if (e.type === 'line') { const t = [Math.cos(e.th0), Math.sin(e.th0)]; return { p: add(e.p0, mul(t, u)), th: e.th0, t }; }
+      const th = e.th0 + e.sg * u / e.R, t = [Math.cos(th), Math.sin(th)];
+      return { p: add(e.ctr, mul(rotL(t), -e.sg * e.R)), th, t, R: e.R, sg: e.sg };
+    }
+    // offset positive to the right of the direction of stationing
+    const point = (st, off) => { const a = at(st); return add(a.p, mul(rotL(a.t), -off)); };
+    // station and offset of a plan point (nearest point on the alignment, by bisection on the projection)
+    function locate(q) {
+      let best = null; const N = 400;
+      for (let i = 0; i <= N; i++) { const st = sta0 + (staEnd - sta0) * i / N, d = dist(point(st, 0), q); if (!best || d < best.d) best = { st, d }; }
+      let lo = best.st - (staEnd - sta0) / N, hi = best.st + (staEnd - sta0) / N;
+      for (let k = 0; k < 60; k++) { const m = (lo + hi) / 2, a = at(m); if (dot(sub(q, a.p), a.t) > 0) lo = m; else hi = m; }
+      const st = (lo + hi) / 2, a = at(st); return { sta: st, off: -dot(sub(q, a.p), rotL(a.t)) };
+    }
+    return { at, point, locate, sta0, staEnd, els };
+  }
+
+  // ---------- polylines with arc length ----------
+  function poly(pts) {
+    const s = [0]; for (let i = 1; i < pts.length; i++) s.push(s[i - 1] + dist(pts[i - 1], pts[i]));
+    const L = s[s.length - 1];
+    const n = pts.length;
+    const seg = u => { let lo = 1, hi = n - 1; while (lo < hi) { const m = (lo + hi) >> 1; if (s[m] < u) lo = m + 1; else hi = m; } return lo; };
+    const at = u => { const i = seg(u), r = (u - s[i - 1]) / ((s[i] - s[i - 1]) || 1); return add(pts[i - 1], mul(sub(pts[i], pts[i - 1]), r)); };
+    // tangent at each vertex from its neighbors (exact for points on a circular arc), blended along the segment; a
+    // corner sharper than 2° keeps the chord direction on each side, so kinks in a drawn line stay kinks
+    const vt = pts.map((p, j) => unit(sub(pts[Math.min(n - 1, j + 1)], pts[Math.max(0, j - 1)])));
+    const tan = u => {
+      const i = seg(u), c = unit(sub(pts[i], pts[i - 1]));
+      const a = dot(vt[i - 1], c) > 0.99939 ? vt[i - 1] : c, b = dot(vt[i], c) > 0.99939 ? vt[i] : c;
+      const r = Math.max(0, Math.min(1, (u - s[i - 1]) / ((s[i] - s[i - 1]) || 1)));
+      return unit(add(mul(a, 1 - r), mul(b, r)));
+    };
+    return { pts, s, L, at, tan };
+  }
+  // all crossings of the line through p with direction d and a polyline: [{ u (along polyline), t (along line) }]
+  function lineHits(p, d, P) {
+    const out = [];
+    for (let i = 1; i < P.pts.length; i++) {
+      const a = P.pts[i - 1], e = sub(P.pts[i], a), den = cross(d, e);
+      if (Math.abs(den) < 1e-12) continue;
+      const w = sub(a, p), t = cross(w, e) / den, r = cross(w, d) / den;
+      if (r >= -1e-9 && r <= 1 + 1e-9) out.push({ u: P.s[i - 1] + r * (P.s[i] - P.s[i - 1]), t });
+    }
+    return out.sort((x, y) => x.t - y.t).filter((h, k, arr) => !k || Math.abs(h.t - arr[k - 1].t) > 1e-7);
+  }
+  // radius of a polyline over an interval from three points (Infinity when straight)
+  function radiusOf(P, u0, u1) {
+    const a = P.at(u0), b = P.at((u0 + u1) / 2), c = P.at(u1), k = 2 * cross(sub(b, a), sub(c, a));
+    const R = Math.abs(k) < 1e-9 ? Infinity : dist(a, b) * dist(b, c) * dist(c, a) / Math.abs(k);
+    return R > 1e5 ? Infinity : R;
+  }
+
+  // ---------- input forms to one framing model ----------
+  // concentric form: a single curve (or tangent) carrying parallel girders, spans along the centerline
+  function fromConcentric(c) {
+    const R = num(c.R), n = Math.round(+c.nG), sp = num(c.spacing);
+    const spans = (c.spans || []).map(Number);
+    if (!(n >= 2)) throw new Error('Enter at least two girders.');
+    if (!(sp > 0)) throw new Error('Enter the girder spacing.');
+    if (!spans.length || spans.some(v => !(v > 0))) throw new Error('Every span needs a length greater than zero.');
+    const Ltot = spans.reduce((a, b) => a + b, 0), ext = num(c.ext) >= 0 ? num(c.ext) : 1;
+    const skews = spans.map((_, i) => +((c.skews || [])[i] || 0)).concat([+((c.skews || [])[spans.length] || 0)]);
+    if (R > 0 && R < (n - 1) / 2 * sp + 10) throw new Error('The radius is too small for the width of the girder system.');
+    const al = { sta0: 0, x0: 0, y0: 0, dir0: 0, elements: [R > 0 ? { type: 'arc', L: Ltot, R, turn: c.turn === 'R' ? 'R' : 'L' } : { type: 'line', L: Ltot }] };
+    const girders = Array.from({ length: n }, (_, i) => ({ id: 'G' + (i + 1), offsets: [[0, (i - (n - 1) / 2) * sp]] }));
+    let st = 0; const supports = [{ id: 'Abut 1', sta: 0, skew: skews[0], kind: 'abutment' }];
+    spans.forEach((L, i) => { st += L; supports.push({ id: i === spans.length - 1 ? 'Abut 2' : 'Pier ' + (i + 1), sta: st, skew: skews[i + 1], kind: i === spans.length - 1 ? 'abutment' : 'pier' }); });
+    return { mode: 'alignment', alignment: al, girders, supports, diaphragms: [], ext, crossframes: c.crossframes };
+  }
+
+  // alignment form: girders by offsets at stations (linear between), supports and diaphragms by station and skew
+  function lineAtStation(A, st, skew) {
+    const a = A.at(st), n = rotL(a.t), d = unit(add(mul(n, Math.cos(skew * D2R)), mul(a.t, -Math.sin(skew * D2R))));
+    return { p: a.p, d };
+  }
+  function offsetAt(offs, st) {
+    if (offs.length === 1) return +offs[0][1];
+    if (st <= offs[0][0]) return +offs[0][1];
+    for (let i = 1; i < offs.length; i++) if (st <= offs[i][0]) { const [s0, o0] = offs[i - 1], [s1, o1] = offs[i]; return o0 + (o1 - o0) * (st - s0) / ((s1 - s0) || 1); }
+    return +offs[offs.length - 1][1];
+  }
+  function fromAlignment(m) {
+    const A = alignment(m.alignment), span = A.staEnd - A.sta0, pad = Math.max(50, span * 0.2);
+    const girders = (m.girders || []).map(g => {
+      const offs = (g.offsets || []).map(q => [+q[0], +q[1]]).filter(q => isFinite(q[0]) && isFinite(q[1])).sort((a, b) => a[0] - b[0]);
+      if (!offs.length) throw new Error('Girder ' + g.id + ' needs an offset.');
+      const a = isFinite(num(g.staStart)) ? num(g.staStart) : A.sta0 - pad, b = isFinite(num(g.staEnd)) ? num(g.staEnd) : A.staEnd + pad;
+      const N = Math.max(40, Math.ceil((b - a) / 0.5)), pts = [];
+      for (let i = 0; i <= N; i++) { const st = a + (b - a) * i / N; pts.push(A.point(st, offsetAt(offs, st))); }
+      return { id: g.id, pts, startOn: g.startOn || null, endOn: g.endOn || null, trimStart: !isFinite(num(g.staStart)), trimEnd: !isFinite(num(g.staEnd)) };
+    });
+    const lines = (arr, kind) => (arr || []).map(q => { const L = lineAtStation(A, +q.sta, +q.skew || 0); return Object.assign({}, q, { kind: q.kind || kind, p: L.p, d: L.d }); });
+    return { A, girders, supports: lines(m.supports, 'pier'), diaphragms: lines(m.diaphragms, 'diaphragm') };
+  }
+  // x-y form: girders as point lists, supports and diaphragms as two points each
+  function fromXY(m) {
+    const girders = (m.girders || []).map(g => {
+      const pts = (g.pts || []).map(q => [+q[0], +q[1]]).filter(q => isFinite(q[0]) && isFinite(q[1]));
+      if (pts.length < 2) throw new Error('Girder ' + g.id + ' needs at least two points.');
+      return { id: g.id, pts, startOn: g.startOn || null, endOn: g.endOn || null, trimStart: !!g.trim, trimEnd: !!g.trim };
+    });
+    const lines = (arr, kind) => (arr || []).map(q => { const a = q.a.map(Number), b = q.b.map(Number); return Object.assign({}, q, { kind: q.kind || kind, p: a, d: unit(sub(b, a)), a, b }); });
+    return { A: null, girders, supports: lines(m.supports, 'pier'), diaphragms: lines(m.diaphragms, 'diaphragm') };
+  }
+
+  // ---------- the framing ----------
+  function build(model) {
+    const warnings = [], errors = [];
+    const mode = model.mode || 'concentric';
+    const M = mode === 'concentric' ? fromConcentric(model.concentric || {}) : model;
+    const src = (M.mode || mode) === 'xy' ? fromXY(M) : fromAlignment(M);
+    const ext = num(M.ext) >= 0 ? num(M.ext) : 1;
+    const ids = new Set(); src.girders.forEach(g => { if (ids.has(g.id)) throw new Error('Two girders are named ' + g.id + '.'); ids.add(g.id); });
+    if (src.girders.length < 2) throw new Error('Enter at least two girders.');
+    if (src.supports.length < 2) throw new Error('Enter at least two supports.');
+
+    // trim each girder: to its end supports (plus the extension past the bearings) or to the diaphragm it frames into
+    const lineById = new Map(); src.supports.forEach(q => lineById.set(q.id, q)); src.diaphragms.forEach(q => lineById.set(q.id, q));
+    const G = src.girders.map(g => {
+      let P = poly(g.pts);
+      const hitsOf = list => list.map(q => { const h = lineHits(q.p, q.d, P); return h.length ? { line: q, u: h.reduce((a, b) => (Math.abs(b.t) < Math.abs(a.t) ? b : a)).u } : null; }).filter(Boolean);
+      const sh = hitsOf(src.supports).sort((a, b) => a.u - b.u);
+      let u0 = 0, u1 = P.L, startKind = 'free', endKind = 'free';
+      const frameEnd = (ref, atStart) => {
+        const q = lineById.get(ref); if (!q) { errors.push('Girder ' + g.id + ' frames into ' + ref + ', which is not a support or diaphragm.'); return null; }
+        const h = lineHits(q.p, q.d, P); if (!h.length) { errors.push('Girder ' + g.id + ' does not reach ' + ref + '.'); return null; }
+        const u = h.reduce((a, b) => (Math.abs(b.t) < Math.abs(a.t) ? b : a)).u;
+        return { u, kind: src.diaphragms.includes(q) ? 'member' : 'support', on: ref };
+      };
+      let sOn = null, eOn = null;
+      if (g.startOn) { const f = frameEnd(g.startOn, true); if (f) { u0 = f.u; startKind = f.kind; sOn = f.on; } }
+      else if (g.trimStart && sh.length) { u0 = Math.max(0, sh[0].u - ext); startKind = 'support'; sOn = sh[0].line.id; }
+      if (g.endOn) { const f = frameEnd(g.endOn, false); if (f) { u1 = f.u; endKind = f.kind; eOn = f.on; } }
+      else if (g.trimEnd && sh.length) { u1 = Math.min(P.L, sh[sh.length - 1].u + ext); endKind = 'support'; eOn = sh[sh.length - 1].line.id; }
+      if (u1 <= u0 + 1) { errors.push('Girder ' + g.id + ' has no length between its ends.'); u1 = u0 + 1; }
+      // resample the kept part
+      const N = Math.max(20, Math.ceil((u1 - u0) / 0.5)), pts = [];
+      for (let i = 0; i <= N; i++) pts.push(P.at(u0 + (u1 - u0) * i / N));
+      P = poly(pts);
+      // bearings: supports crossed inside the kept length
+      const brg = src.supports.map(q => { const h = lineHits(q.p, q.d, P).filter(x => x.u > -1e-6 && x.u < P.L + 1e-6); return h.length ? { support: q.id, kind: q.kind, u: h[0].u, t: h[0].t } : null; })
+        .filter(Boolean).sort((a, b) => a.u - b.u);
+      brg.forEach(b => { const tg = P.tan(b.u), q = lineById.get(b.support); b.skew = -Math.asin(Math.max(-1, Math.min(1, dot(tg, q.d)))) / D2R; });
+      return { id: g.id, P, L: P.L, brg, startKind, endKind, startOn: sOn, endOn: eOn };
+    });
+    const GI = new Map(G.map((g, i) => [g.id, i]));
+    // order the girders across the bridge by their offset at mid-length of the first girder
+    const g0 = G[0], mid = g0.P.at(g0.L / 2), nrm = rotL(g0.P.tan(g0.L / 2));
+    const across = g => { const h = lineHits(mid, nrm, g.P); return h.length ? h.reduce((a, b) => (Math.abs(b.t) < Math.abs(a.t) ? b : a)).t : (dot(sub(g.P.at(g.L / 2), mid), nrm)); };
+    const order = G.map(g => ({ g, t: across(g) })).sort((a, b) => b.t - a.t).map(o => o.g); // left to right
+    order.forEach((g, i) => { g.pos = i; });
+
+    // girder checks
+    G.forEach(g => {
+      const nb = g.brg.length + (g.startKind === 'member' ? 1 : 0) + (g.endKind === 'member' ? 1 : 0);
+      if (nb < 2) errors.push('Girder ' + g.id + ' needs two supports or framing members; it crosses ' + (g.brg.length ? g.brg.map(b => b.support).join(', ') : 'no support line') + '.');
+      g.brg.forEach(b => { if (Math.abs(b.skew) > 70) warnings.push('Girder ' + g.id + ' crosses ' + b.support + ' at a skew of ' + b.skew.toFixed(1) + '°.'); });
+      // spans along the girder, between consecutive bearings or member ends
+      const pts = [];
+      if (g.startKind === 'member') pts.push({ u: 0, at: g.startOn });
+      g.brg.forEach(b => pts.push({ u: b.u, at: b.support }));
+      if (g.endKind === 'member') pts.push({ u: g.L, at: g.endOn });
+      g.spans = pts.slice(1).map((b, k) => ({ from: pts[k].at, to: b.at, u0: pts[k].u, u1: b.u, L: b.u - pts[k].u, R: radiusOf(g.P, pts[k].u, b.u) }));
+    });
+    // girder lines must not cross each other
+    for (let i = 0; i < order.length - 1; i++) {
+      const a = order[i], b = order[i + 1];
+      for (let k = 0; k <= 20; k++) { const p = a.P.at(a.L * k / 20), h = lineHits(p, rotL(a.P.tan(a.L * k / 20)), b.P); if (h.length && h.some(x => x.t > 1e-3)) { errors.push('Girders ' + a.id + ' and ' + b.id + ' cross or swap sides.'); break; } }
+    }
+
+    // diaphragm members: between neighboring girders that the diaphragm line crosses
+    const memb = [];
+    src.diaphragms.forEach(q => {
+      const hits = order.map(g => { const h = lineHits(q.p, q.d, g.P).filter(x => x.u > -1e-6 && x.u < g.L + 1e-6); return h.length ? { g, u: h[0].u, t: h[0].t } : null; }).filter(Boolean);
+      const lim = q.from || q.to ? [GI.has(q.from) ? G[GI.get(q.from)].pos : -1, GI.has(q.to) ? G[GI.get(q.to)].pos : 1e9].sort((a, b) => a - b) : [-1, 1e9];
+      const hh = hits.filter(h => h.g.pos >= lim[0] && h.g.pos <= lim[1]).sort((a, b) => a.g.pos - b.g.pos);
+      if (hh.length < 2) { errors.push('Diaphragm ' + q.id + ' does not connect two girders.'); return; }
+      for (let k = 1; k < hh.length; k++) memb.push({ id: q.id + (hh.length > 2 ? '.' + k : ''), line: q.id, kind: q.kind || 'diaphragm', gA: hh[k - 1].g.id, uA: hh[k - 1].u, gB: hh[k].g.id, uB: hh[k].u, pA: hh[k - 1].g.P.at(hh[k - 1].u), pB: hh[k].g.P.at(hh[k].u), section: q.section || '' });
+    });
+
+    // cross-frames
+    const XF = crossFrames(M.crossframes || {}, G, order, src, warnings);
+    // unbraced lengths along each girder (between cross-frames, diaphragms and bearings)
+    G.forEach(g => {
+      const br = [0, g.L, ...g.brg.map(b => b.u)];
+      XF.forEach(x => { if (x.gA === g.id) br.push(x.uA); if (x.gB === g.id) br.push(x.uB); });
+      memb.forEach(x => { if (x.gA === g.id) br.push(x.uA); if (x.gB === g.id) br.push(x.uB); });
+      const u = [...new Set(br.map(v => +v.toFixed(4)))].sort((a, b) => a - b);
+      g.Lb = u.slice(1).map((v, k) => ({ u0: u[k], u1: v, L: v - u[k] })).filter(q => q.L > 1e-3);
+      g.LbMax = Math.max(...g.Lb.map(q => q.L));
+    });
+    const lim = num((M.crossframes || {}).maxLb);
+    if (lim > 0) G.forEach(g => { if (g.LbMax > lim + 1e-6) warnings.push('Girder ' + g.id + ' has an unbraced length of ' + g.LbMax.toFixed(2) + ' ft, more than the ' + lim + ' ft entered.'); });
+
+    return {
+      mode: M.mode || mode, A: src.A, girders: G, order: order.map(g => g.id), supports: src.supports.map(q => ({ id: q.id, kind: q.kind, p: q.p, d: q.d, sta: q.sta, skew: q.skew })),
+      diaphragmLines: src.diaphragms.map(q => ({ id: q.id, p: q.p, d: q.d })), members: memb, crossframes: XF, removed: XF.removed || [], warnings, errors,
+    };
+  }
+
+  // cross-frame layout. cfg: { spacing (ft, largest spacing; panels per span are rounded up), panels: [per span], orient: 'auto'|'normal'|'skew', atSupports (bool),
+  // clear (ft, least distance from a bearing), maxLb, remove: [ids], add: [{ gA, uA, gB, uB }] }
+  // Lines are cut across all girders from points along a reference girder (the middle one); a cross-frame is kept in a
+  // bay only where both of its ends land inside a span of each girder and clear of the bearings. AASHTO 6.7.4.2: with
+  // a skew of 20° or less the intermediate cross-frames may be parallel to the skew; above 20° they are normal to the
+  // girders, which near a skewed support leaves them discontinuous.
+  function crossFrames(cfg, G, order, src, warnings) {
+    const out = [], sp = num(cfg.spacing) > 0 ? num(cfg.spacing) : 20, clear = num(cfg.clear) >= 0 ? num(cfg.clear) : 2;
+    const ref = order[Math.floor((order.length - 1) / 2)];
+    const inSpan = (g, u) => g.spans.some(s => u > s.u0 + clear - 1e-9 && u < s.u1 - clear + 1e-9);
+    const bayPairs = order.slice(1).map((g, k) => [order[k], g]);
+    const place = (p, d, tag) => {
+      const hits = order.map(g => { const h = lineHits(p, d, g.P).filter(x => x.u > 1e-6 && x.u < g.L - 1e-6); return h.length ? { g, u: h.reduce((a, b) => (Math.abs(b.t) < Math.abs(a.t) ? b : a)).u } : null; });
+      bayPairs.forEach(([a, b], k) => {
+        const ha = hits[k], hb = hits[k + 1]; if (!ha || !hb) return;
+        if (!inSpan(a, ha.u) || !inSpan(b, hb.u)) return;
+        out.push({ gA: a.id, uA: ha.u, gB: b.id, uB: hb.u, bay: k + 1, tag });
+      });
+    };
+    // intermediate cross-frames. Parallel to the skew (lines across all girders from points on the middle girder) when
+    // chosen, or under 'auto' when the skew is 20° or less and not zero; otherwise normal to the girders, laid out bay by
+    // bay over the length where a line normal to the left girder lands inside a span of the right girder, which leaves
+    // them staggered near skewed supports and radial on a curve
+    const skOf = (g, id) => Math.abs((g.brg.find(b => b.support === id) || {}).skew || 0);
+    // panels per span: the same for every bay, so lines stay continuous across the bays of a curved bridge. Based on
+    // the average length of the girders' spans between the same two supports (the centerline length on a concentric
+    // bridge) and rounded up, so the spacing there never exceeds the target; cfg.panels (by span, in order of the middle
+    // girder's spans) overrides it
+    const panels = (from, to, Lown) => {
+      const k = ref.spans.findIndex(r => r.from === from && r.to === to);
+      const ov = k >= 0 && Array.isArray(cfg.panels) ? Math.round(+cfg.panels[k]) : 0;
+      if (ov >= 1) return ov;
+      const Ls = order.map(g => g.spans.find(r => r.from === from && r.to === to)).filter(Boolean).map(r => r.L);
+      const Lm = Ls.length ? Ls.reduce((a, b) => a + b, 0) / Ls.length : Lown;
+      return Math.max(1, Math.ceil(Lm / sp - 1e-6));
+    };
+    const orient = cfg.orient || 'auto', auto = cfg.auto !== false; // auto false: only the cross-frames listed in add
+    if (auto) ref.spans.forEach(s => {
+      const sk = Math.max(skOf(ref, s.from), skOf(ref, s.to));
+      if (!(orient === 'skew' || (orient === 'auto' && sk > 0.5 && sk <= 20))) return;
+      const n = panels(s.from, s.to, s.L);
+      for (let i = 1; i < n; i++) {
+        const u = s.u0 + s.L * i / n, q = src.supports.find(x => x.id === (i <= n / 2 ? s.from : s.to));
+        place(ref.P.at(u), q ? q.d : rotL(ref.P.tan(u)), 'intermediate');
+      }
+      s.parallel = true;
+    });
+    if (auto) bayPairs.forEach(([a, b], k) => {
+      a.spans.forEach(s => {
+        const rs = ref.spans.find(r => r.from === s.from && r.to === s.to);
+        if (rs && rs.parallel) return;
+        // square bearings at both ends of the bay: equal divisions of the span, so the lines stay radial and line up
+        // across the bays of a curved bridge
+        const sq = [s.from, s.to].every(id => skOf(a, id) <= 0.5 && skOf(b, id) <= 0.5);
+        if (sq) {
+          const n = panels(s.from, s.to, s.L);
+          for (let i = 1; i < n; i++) {
+            const u = s.u0 + s.L * i / n, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
+            if (!h.length) continue; const ub = h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)).u;
+            if (inSpan(b, ub)) out.push({ gA: a.id, uA: u, gB: b.id, uB: ub, bay: k + 1, tag: 'intermediate' });
+          }
+          return;
+        }
+        // valid stretch on a: the normal line lands in a span of b, both ends clear of the bearings
+        const N = Math.max(40, Math.ceil(s.L / 0.25)), ok = [];
+        for (let j = 0; j <= N; j++) {
+          const u = s.u0 + s.L * j / N, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
+          const hb = h.length ? h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)) : null;
+          ok.push(hb && u > s.u0 + clear - 1e-9 && u < s.u1 - clear + 1e-9 && inSpan(b, hb.u) ? { u, ub: hb.u } : null);
+        }
+        let j = 0;
+        while (j <= N) {
+          if (!ok[j]) { j++; continue; }
+          let e = j; while (e + 1 <= N && ok[e + 1]) e++;
+          const v0 = ok[j].u, v1 = ok[e].u, nn = Math.max(1, Math.ceil((v1 - v0) / sp - 1e-9));
+          // the stretch ends sit at the clear distance from the bearings: cross-frames there only where the bearing is
+          // skewed (with a square bearing the support cross-frame already braces that point)
+          const atA = skOf(a, s.from) > 0.5 || skOf(b, s.from) > 0.5, atB = skOf(a, s.to) > 0.5 || skOf(b, s.to) > 0.5;
+          if (v1 - v0 > 1e-6) for (let i = 0; i <= nn; i++) {
+            if ((i === 0 && !atA) || (i === nn && !atB)) continue;
+            const u = v0 + (v1 - v0) * i / nn, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
+            if (!h.length) continue;
+            out.push({ gA: a.id, uA: u, gB: b.id, uB: h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)).u, bay: k + 1, tag: 'intermediate' });
+          }
+          j = e + 1;
+        }
+      });
+    });
+    // along the support lines, between girders that both bear there
+    if (auto && cfg.atSupports !== false) src.supports.forEach(q => {
+      const hits = order.map(g => { const b = g.brg.find(x => x.support === q.id); return b ? { g, u: b.u } : null; });
+      bayPairs.forEach(([a, b], k) => { const ha = hits[k], hb = hits[k + 1]; if (ha && hb) out.push({ gA: a.id, uA: ha.u, gB: b.id, uB: hb.u, bay: k + 1, tag: 'support', support: q.id }); });
+    });
+    // user changes
+    (cfg.add || []).forEach((x, k) => {
+      const a = G.find(g => g.id === x.gA), b = G.find(g => g.id === x.gB);
+      if (!a || !b) { warnings.push('Added cross-frame ' + (k + 1) + ' names a girder that does not exist.'); return; }
+      out.push({ gA: a.id, uA: +x.uA, gB: b.id, uB: +x.uB, bay: Math.min(a.pos, b.pos) + 1, tag: 'added' });
+    });
+    out.sort((x, y) => x.bay - y.bay || x.uA - y.uA);
+    const perBay = {}; out.forEach(x => { perBay[x.bay] = (perBay[x.bay] || 0) + 1; x.id = 'B' + x.bay + '-' + perBay[x.bay]; });
+    const rm = new Set(cfg.remove || []);
+    const kept = out.filter(x => !rm.has(x.id));
+    kept.removed = out.filter(x => rm.has(x.id)); // kept for the plan, so a removed cross-frame can be brought back
+    out.forEach(x => {
+      const a = G.find(g => g.id === x.gA), b = G.find(g => g.id === x.gB);
+      x.pA = a.P.at(x.uA); x.pB = b.P.at(x.uB); x.L = dist(x.pA, x.pB);
+      const v = unit(sub(x.pB, x.pA)), ang = g => -Math.asin(Math.max(-1, Math.min(1, dot(v, g.P.tan(g === a ? x.uA : x.uB))))) / D2R;
+      x.angA = ang(a); x.angB = ang(b); // 0 = normal to the girder
+    });
+    return kept;
+  }
+
+  // ---------- DXF reader: lines, polylines (with bulges) and arcs by layer ----------
+  function readDXF(text) {
+    const L = text.split(/\r?\n/), pairs = [];
+    for (let i = 0; i + 1 < L.length; i += 2) pairs.push([parseInt(L[i].trim(), 10), L[i + 1].replace(/\s+$/, '')]);
+    let units = 0; const ents = [];
+    let i = 0, section = null;
+    const read = () => { const e = { type: pairs[i][1], g: [] }; i++; while (i < pairs.length && pairs[i][0] !== 0) { e.g.push(pairs[i]); i++; } return e; };
+    while (i < pairs.length) {
+      const [c, v] = pairs[i];
+      if (c === 0 && v === 'SECTION') { section = pairs[i + 1] && pairs[i + 1][1]; i += 2; continue; }
+      if (c === 0 && v === 'ENDSEC') { section = null; i++; continue; }
+      if (section === 'HEADER' && c === 9 && v === '$INSUNITS') { const q = pairs[i + 1]; if (q && q[0] === 70) units = +q[1]; i += 2; continue; }
+      if (section === 'ENTITIES' && c === 0) { ents.push(read()); continue; }
+      i++;
+    }
+    const out = []; let k = 0;
+    const gv = (e, code) => { const q = e.g.find(p => p[0] === code); return q ? q[1] : undefined; };
+    const gn = (e, code, d = 0) => { const q = gv(e, code); return q === undefined ? d : +q; };
+    const bulgePts = (a, b, bulge) => { // arc from a to b with the DXF bulge, as points
+      if (!bulge) return [b];
+      const th = 4 * Math.atan(bulge), c = dist(a, b), R = c / (2 * Math.sin(Math.abs(th) / 2)), n = Math.max(2, Math.ceil(Math.abs(th) / (2 * D2R)));
+      const m = mul(add(a, b), 0.5), h = Math.sqrt(Math.max(R * R - c * c / 4, 0)), dir = unit(sub(b, a)), nl = rotL(dir);
+      const ctr = add(m, mul(nl, (bulge > 0) === (Math.abs(th) < Math.PI) ? h : -h));
+      const a0 = Math.atan2(a[1] - ctr[1], a[0] - ctr[0]), pts = [];
+      for (let j = 1; j <= n; j++) { const t = a0 + th * j / n; pts.push([ctr[0] + R * Math.cos(t), ctr[1] + R * Math.sin(t)]); }
+      pts[pts.length - 1] = b; return pts;
+    };
+    while (k < ents.length) {
+      const e = ents[k], layer = gv(e, 8) || '0';
+      if (e.type === 'LINE') out.push({ layer, pts: [[gn(e, 10), gn(e, 20)], [gn(e, 11), gn(e, 21)]] });
+      else if (e.type === 'ARC') {
+        const c = [gn(e, 10), gn(e, 20)], R = gn(e, 40); let a0 = gn(e, 50) * D2R, a1 = gn(e, 51) * D2R; if (a1 <= a0) a1 += 2 * Math.PI;
+        const n = Math.max(2, Math.ceil((a1 - a0) / (2 * D2R))), pts = [];
+        for (let j = 0; j <= n; j++) { const t = a0 + (a1 - a0) * j / n; pts.push([c[0] + R * Math.cos(t), c[1] + R * Math.sin(t)]); }
+        out.push({ layer, pts });
+      } else if (e.type === 'LWPOLYLINE') {
+        const xs = e.g.filter(p => p[0] === 10).map(p => +p[1]), ys = e.g.filter(p => p[0] === 20).map(p => +p[1]);
+        // bulges follow their vertex (code 42 after a 10/20 pair)
+        const bl = []; let vi = -1; e.g.forEach(p => { if (p[0] === 10) { vi++; bl[vi] = 0; } else if (p[0] === 42 && vi >= 0) bl[vi] = +p[1]; });
+        const closed = (gn(e, 70) & 1) === 1, V = xs.map((x, j) => [x, ys[j]]);
+        if (closed && V.length > 1) V.push(V[0]);
+        const pts = [V[0]]; for (let j = 1; j < V.length; j++) pts.push(...bulgePts(V[j - 1], V[j], bl[j - 1] || 0));
+        if (V.length > 1) out.push({ layer, pts });
+      } else if (e.type === 'POLYLINE') {
+        const V = [], bl = []; let j = k + 1;
+        while (j < ents.length && ents[j].type === 'VERTEX') { V.push([gn(ents[j], 10), gn(ents[j], 20)]); bl.push(gn(ents[j], 42)); j++; }
+        if ((gn(e, 70) & 1) === 1 && V.length > 1) { V.push(V[0]); bl.push(0); }
+        const pts = [V[0]]; for (let q = 1; q < V.length; q++) pts.push(...bulgePts(V[q - 1], V[q], bl[q - 1] || 0));
+        if (V.length > 1) out.push({ layer, pts });
+        k = j; continue;
+      }
+      k++;
+    }
+    const layers = {}; out.forEach(o => { layers[o.layer] = (layers[o.layer] || 0) + 1; });
+    return { units, entities: out, layers };
+  }
+  // DXF entities to an x-y framing input. map: { layerName: 'girder'|'support'|'diaphragm'|'crossframe'|'ignore' }
+  // Girder pieces that meet end to end (within tol) are joined; support and diaphragm lines are taken as drawn.
+  // Cross-frame lines become added cross-frames on the two girders their ends touch.
+  const UNIT_FT = { 0: 1, 1: 1 / 12, 2: 1, 4: 1 / 304.8, 5: 1 / 30.48, 6: 3.280839895 };
+  function dxfToModel(dxf, map, opts) {
+    opts = opts || {};
+    const k = opts.scale > 0 ? opts.scale : (UNIT_FT[dxf.units] || 1), tol = (opts.tol > 0 ? opts.tol : 0.05);
+    const ents = dxf.entities.filter(e => map[e.layer] && map[e.layer] !== 'ignore').map(e => ({ role: map[e.layer], layer: e.layer, pts: e.pts.map(p => [p[0] * k, p[1] * k]) }));
+    // origin at the lower-left of the girder lines, so the numbers stay readable
+    const gp = ents.filter(e => e.role === 'girder').flatMap(e => e.pts);
+    if (!gp.length) throw new Error('No girder lines: map at least one layer to girders.');
+    const o = [Math.min(...gp.map(p => p[0])), Math.min(...gp.map(p => p[1]))];
+    ents.forEach(e => { e.pts = e.pts.map(p => [p[0] - o[0], p[1] - o[1]]); });
+    // join girder pieces into chains
+    let pieces = ents.filter(e => e.role === 'girder').map(e => e.pts.slice());
+    const chains = [];
+    while (pieces.length) {
+      let c = pieces.shift(), grew = true;
+      while (grew) {
+        grew = false;
+        for (let j = 0; j < pieces.length; j++) {
+          const q = pieces[j], s = c[0], e = c[c.length - 1];
+          if (dist(e, q[0]) <= tol) c = c.concat(q.slice(1));
+          else if (dist(e, q[q.length - 1]) <= tol) c = c.concat(q.slice(0, -1).reverse());
+          else if (dist(s, q[q.length - 1]) <= tol) c = q.slice(0, -1).concat(c);
+          else if (dist(s, q[0]) <= tol) c = q.slice(1).reverse().concat(c);
+          else continue;
+          pieces.splice(j, 1); grew = true; break;
+        }
+      }
+      chains.push(c);
+    }
+    // girders run in the same direction (the direction of the longest), numbered from the left
+    const longest = chains.reduce((a, b) => (poly(b).L > poly(a).L ? b : a));
+    const dir = unit(sub(longest[longest.length - 1], longest[0]));
+    chains.forEach((c, j) => { if (dot(sub(c[c.length - 1], c[0]), dir) < 0) chains[j] = c.reverse(); });
+    const twoPt = e => ({ a: e.pts[0], b: e.pts[e.pts.length - 1] });
+    const m = { mode: 'xy', ext: 0, girders: chains.map((c, j) => ({ id: 'G' + (j + 1), pts: c.map(p => [+p[0].toFixed(4), +p[1].toFixed(4)]) })),
+      supports: ents.filter(e => e.role === 'support').map((e, j) => Object.assign({ id: 'S' + (j + 1), kind: 'pier' }, twoPt(e))),
+      diaphragms: ents.filter(e => e.role === 'diaphragm').map((e, j) => Object.assign({ id: 'D' + (j + 1) }, twoPt(e))),
+      crossframes: { auto: false, add: [] }, origin: o, scale: k };
+    // name girders left to right, supports in order along the girders
+    const tmp = build(Object.assign({}, m, { crossframes: { auto: false } }));
+    const ren = new Map(tmp.order.map((id, j) => [id, 'G' + (j + 1)]));
+    m.girders.forEach(g => { g.id = ren.get(g.id); }); m.girders.sort((a, b) => +a.id.slice(1) - +b.id.slice(1));
+    const ref = tmp.girders.find(g => g.id === tmp.order[0]);
+    const supU = m.supports.map(s => { const P = poly(ref.P.pts), h = lineHits(s.a, unit(sub(s.b, s.a)), P); return h.length ? h[0].u : Infinity; });
+    const so = m.supports.map((s, j) => j).sort((a, b) => supU[a] - supU[b]);
+    m.supports = so.map((j, n) => Object.assign(m.supports[j], { id: n === 0 || n === so.length - 1 ? 'Abut ' + (n === 0 ? 1 : 2) : 'Pier ' + n, kind: n === 0 || n === so.length - 1 ? 'abutment' : 'pier' }));
+    // cross-frame lines: attach each end to the girder it touches
+    const fr = build(Object.assign({}, m, { crossframes: { auto: false } }));
+    ents.filter(e => e.role === 'crossframe').forEach(e => {
+      const ends = [e.pts[0], e.pts[e.pts.length - 1]].map(p => {
+        let best = null;
+        fr.girders.forEach(g => { for (let j = 0; j <= 400; j++) { const u = g.L * j / 400, d = dist(g.P.at(u), p); if (!best || d < best.d) best = { g, u, d }; } });
+        if (best) { // refine
+          let lo = Math.max(0, best.u - best.g.L / 400), hi = Math.min(best.g.L, best.u + best.g.L / 400);
+          for (let it = 0; it < 50; it++) { const a = lo + (hi - lo) / 3, b = hi - (hi - lo) / 3; if (dist(best.g.P.at(a), p) < dist(best.g.P.at(b), p)) hi = b; else lo = a; }
+          best.u = (lo + hi) / 2; best.d = dist(best.g.P.at(best.u), p);
+        }
+        return best;
+      });
+      if (ends[0] && ends[1] && ends[0].g !== ends[1].g && ends[0].d <= Math.max(1, 10 * tol) && ends[1].d <= Math.max(1, 10 * tol)) {
+        const [a, b] = ends[0].g.pos < ends[1].g.pos ? ends : [ends[1], ends[0]];
+        m.crossframes.add.push({ gA: a.g.id, uA: +a.u.toFixed(4), gB: b.g.id, uB: +b.u.toFixed(4) });
+      }
+    });
+    return m;
+  }
+
+  // ---------- DXF writer: the framing back out to CAD (R12 entities, which every CAD program reads) ----------
+  // girders as polylines, bearings as short lines along each support between the girders, diaphragms and cross-frames
+  // as lines, each on its own layer. Units: 'ft' or 'in'.
+  function toDXF(F, opts) {
+    opts = opts || {};
+    const k = opts.units === 'ft' ? 1 : 12, o = [];
+    const P = (c, v) => o.push(String(c), String(v));
+    const f = v => (+v * k).toFixed(4);
+    const line = (layer, a, b) => { P(0, 'LINE'); P(8, layer); P(10, f(a[0])); P(20, f(a[1])); P(30, 0); P(11, f(b[0])); P(21, f(b[1])); P(31, 0); };
+    P(0, 'SECTION'); P(2, 'HEADER'); P(9, '$ACADVER'); P(1, 'AC1009'); P(9, '$INSUNITS'); P(70, opts.units === 'ft' ? 2 : 1); P(0, 'ENDSEC');
+    P(0, 'SECTION'); P(2, 'ENTITIES');
+    F.girders.forEach(g => {
+      const step = Math.max(1, Math.round(2 / Math.max(0.01, g.L / (g.P.pts.length - 1)))); // a vertex about every 2 ft
+      const pts = g.P.pts.filter((_, j) => j % step === 0); if (pts[pts.length - 1] !== g.P.pts[g.P.pts.length - 1]) pts.push(g.P.pts[g.P.pts.length - 1]);
+      P(0, 'POLYLINE'); P(8, 'G2D-GIRDER'); P(66, 1); P(10, 0); P(20, 0); P(30, 0); P(70, 0);
+      pts.forEach(p => { P(0, 'VERTEX'); P(8, 'G2D-GIRDER'); P(10, f(p[0])); P(20, f(p[1])); P(30, 0); });
+      P(0, 'SEQEND'); P(8, 'G2D-GIRDER');
+    });
+    F.supports.forEach(q => {
+      const t = F.girders.flatMap(g => g.brg.filter(b => b.support === q.id).map(b => dot(sub(g.P.at(b.u), q.p), q.d)));
+      if (!t.length) return; const t0 = Math.min(...t) - 3, t1 = Math.max(...t) + 3;
+      line('G2D-SUPPORT', add(q.p, mul(q.d, t0)), add(q.p, mul(q.d, t1)));
+    });
+    F.members.forEach(m => line('G2D-DIAPHRAGM', m.pA, m.pB));
+    F.crossframes.forEach(x => line('G2D-XFRAME', x.pA, x.pB));
+    P(0, 'ENDSEC'); P(0, 'EOF');
+    return o.join('\n') + '\n';
+  }
+
+  root.G2D = { alignment, poly, lineHits, build, readDXF, dxfToModel, toDXF, fromConcentric, version: '0.1' };
+})(typeof window !== 'undefined' ? window : globalThis);
+</script>
+<script>
+(function () {
+  'use strict';
+  const G = window.G2D, $ = s => document.querySelector(s), KEY = 'g2d-model-v1';
+  const clone = o => JSON.parse(JSON.stringify(o));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const fx = (v, d) => { if (!isFinite(v)) return '–'; const k = d == null ? 2 : d, t = (+v).toFixed(k); return /^-0\.?0*$/.test(t) ? t.slice(1) : t; };
+  const CF = o => Object.assign({ auto: true, spacing: 20, orient: 'auto', atSupports: true, clear: 2, maxLb: 0, panels: [], remove: [], add: [] }, o || {});
+
+  // ---------- examples ----------
+  const EX = {
+    // NSBA Steel Bridge Design Handbook, Design Example 4 (2025): 160-210-160 ft on R = 700 ft at the centerline, four
+    // girders at 11 ft, radial supports, cross-frames at 20 ft in the end spans and 19.09 ft in the center span
+    curved: { mode: 'concentric', concentric: { R: 700, turn: 'L', nG: 4, spacing: 11, spans: [160, 210, 160], skews: [0, 0, 0, 0], ext: 1, crossframes: CF({ spacing: 20, maxLb: 25 }) } },
+    skew: { mode: 'concentric', concentric: { R: 0, turn: 'L', nG: 4, spacing: 10, spans: [120, 120], skews: [60, 60, 60], ext: 1, crossframes: CF({ spacing: 20 }) } },
+    flare: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 260 }] },
+      girders: [{ id: 'G1', offsets: [[1000, -15], [1260, -25]] }, { id: 'G2', offsets: [[1000, -5], [1260, -8]] }, { id: 'G3', offsets: [[1000, 5], [1260, 8]] }, { id: 'G4', offsets: [[1000, 15], [1260, 25]] }, { id: 'G5', offsets: [[1000, 25], [1260, 35]], startOn: 'D1' }],
+      supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1130, skew: 0, kind: 'pier' }, { id: 'Abut 2', sta: 1260, skew: 0, kind: 'abutment' }],
+      diaphragms: [{ id: 'D1', sta: 1060, skew: 0, from: 'G4', to: 'G5' }], crossframes: CF({ spacing: 20 }) } },
+    mixed: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 100, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 90 }, { type: 'arc', L: 320, R: 900, turn: 'R' }] },
+      girders: [-18, -9, 0, 9, 18].map((o, i) => ({ id: 'G' + (i + 1), offsets: [[100, o]] })),
+      supports: [{ id: 'Abut 1', sta: 120, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 275, skew: 25, kind: 'pier' }, { id: 'Abut 2', sta: 450, skew: 10, kind: 'abutment' }],
+      diaphragms: [], crossframes: CF({ spacing: 20, maxLb: 25 }) } },
+  };
+  const XY0 = { ext: 1, girders: [{ id: 'G1', pts: [[0, 10], [200, 14]], trim: true }, { id: 'G2', pts: [[0, 0], [200, 0]], trim: true }, { id: 'G3', pts: [[0, -10], [200, -14]], trim: true }],
+    supports: [{ id: 'Abut 1', a: [10, 20], b: [10, -20], kind: 'abutment' }, { id: 'Abut 2', a: [190, 25], b: [190, -25], kind: 'abutment' }], diaphragms: [], crossframes: CF({ spacing: 20 }) };
+  const fresh = () => ({ v: 1, mode: 'concentric', concentric: clone(EX.curved.concentric), alignment: clone(EX.flare.alignment), xy: clone(XY0) });
+
+  let doc = fresh();
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; } catch (e) { /* private window or blocked storage */ }
+  let dxf = null, dxfMap = {}, dxfScale = 0, dxfTol = 0.05; // DXF import state (not saved)
+  let F = null, sel = null;
+  const save = () => { try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { /* ignore */ } };
+
+  // the input for the current mode, and its cross-frame settings
+  const inputFor = m => (m === 'concentric' ? doc.concentric : m === 'alignment' ? doc.alignment : doc.xy);
+  const cfg = () => { const I = inputFor(doc.mode === 'dxf' ? 'xy' : doc.mode); I.crossframes = CF(I.crossframes); return I.crossframes; };
+  const engineModel = () => {
+    const m = doc.mode === 'dxf' ? 'xy' : doc.mode;
+    if (m === 'concentric') return { mode: 'concentric', concentric: doc.concentric };
+    return Object.assign({ mode: m }, inputFor(m));
+  };
+
+  // ---------- path get/set for the inputs ----------
+  const getP = (o, p) => p.split('.').reduce((a, k) => (a == null ? a : a[k]), o);
+  const setP = (o, p, v) => { const ks = p.split('.'), last = ks.pop(); const t = ks.reduce((a, k) => (a[k] == null ? (a[k] = {}) : a[k]), o); t[last] = v; };
+  const listTxt = a => (Array.isArray(a) ? a.join(', ') : '');
+  const parseList = s => { const t = String(s).trim(); if (!t) return []; const v = t.split(/[\s,;]+/).filter(Boolean).map(Number); return v.some(x => !isFinite(x)) ? null : v; };
+  const offTxt = a => (a || []).map(q => q[0] + ', ' + q[1]).join('\n');
+  const ptsTxt = offTxt;
+  const parsePairs = s => { const rows = String(s).split(/\n|;/).map(r => r.trim()).filter(Boolean); const v = rows.map(r => r.split(/[\s,]+/).filter(Boolean).map(Number)); return v.some(q => q.length !== 2 || q.some(x => !isFinite(x))) ? null : v; };
+
+  // ---------- rail ----------
+  const fNum = (lbl, unit, path, hint) => `<label class="f">${lbl}${unit ? ` <span class="u">${unit}</span>` : ''}<input class="n" inputmode="decimal" data-k="${path}" data-t="num" value="${esc(getP(doc, path))}">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
+  const fTxt = (lbl, path, ph, list) => `<label class="f">${lbl}<input class="t" data-k="${path}" data-t="txt" value="${esc(getP(doc, path) || '')}" placeholder="${esc(ph || '')}"${list ? ` list="${list}"` : ''}></label>`;
+  const fSel = (lbl, path, opts) => `<label class="f">${lbl}<select data-k="${path}" data-t="sel">${opts.map(([v, t]) => `<option value="${v}"${String(getP(doc, path)) === String(v) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
+  const fList = (lbl, unit, path, hint) => `<label class="f">${lbl}${unit ? ` <span class="u">${unit}</span>` : ''}<input class="n" data-k="${path}" data-t="list" value="${esc(listTxt(getP(doc, path)))}">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
+  const grp = (title, body, open) => `<details class="grp"${open ? ' open' : ''}><summary>${title}</summary><div class="gbody">${body}</div></details>`;
+  const kinds = [['abutment', 'Abutment'], ['pier', 'Pier']];
+
+  function lineRefs() {
+    const I = inputFor(doc.mode === 'dxf' ? 'xy' : doc.mode);
+    const ids = [...(I.supports || []), ...(I.diaphragms || [])].map(q => q.id);
+    return `<datalist id="refs">${ids.map(i => `<option value="${esc(i)}">`).join('')}</datalist><datalist id="gids">${(F ? F.order : []).map(i => `<option value="${esc(i)}">`).join('')}</datalist>`;
+  }
+
+  function railConcentric() {
+    const c = 'concentric';
+    return grp('Bridge', `<div class="fields">
+      ${fNum('Radius at the centerline', 'ft', c + '.R', '0 for a straight bridge')}
+      ${fSel('Curves to the', c + '.turn', [['L', 'Left'], ['R', 'Right']])}
+      ${fNum('Number of girders', '', c + '.nG')}
+      ${fNum('Girder spacing', 'ft', c + '.spacing', 'Radial, constant')}
+      </div><div class="fields one">
+      ${fList('Span lengths along the centerline', 'ft', c + '.spans', 'Separated by commas, e.g. 160, 210, 160')}
+      ${fList('Skew at each support', 'deg', c + '.skews', 'One per support, abutment to abutment; counterclockwise from radial is positive')}
+      </div><div class="fields">${fNum('Girder past the end bearings', 'ft', c + '.ext')}</div>
+      <p class="hint">Girders are numbered from the left looking up-station (G1 is on the inside of a left-hand curve).</p>`, true);
+  }
+
+  function railAlignment() {
+    const a = 'alignment', A = doc.alignment;
+    const els = (A.alignment.elements || []).map((e, i) => `<tr>
+      <td><select data-k="${a}.alignment.elements.${i}.type" data-t="sel"><option value="line"${e.type !== 'arc' ? ' selected' : ''}>Tangent</option><option value="arc"${e.type === 'arc' ? ' selected' : ''}>Curve</option></select></td>
+      <td><input class="n" data-k="${a}.alignment.elements.${i}.L" data-t="num" value="${esc(e.L)}" aria-label="Length"></td>
+      <td><input class="n" data-k="${a}.alignment.elements.${i}.R" data-t="num" value="${esc(e.type === 'arc' ? e.R : '')}" aria-label="Radius"${e.type === 'arc' ? '' : ' disabled'}></td>
+      <td><select data-k="${a}.alignment.elements.${i}.turn" data-t="sel" aria-label="Turn"${e.type === 'arc' ? '' : ' disabled'}><option value="L"${e.turn !== 'R' ? ' selected' : ''}>Left</option><option value="R"${e.turn === 'R' ? ' selected' : ''}>Right</option></select></td>
+      <td><button data-act="del" data-arr="${a}.alignment.elements" data-i="${i}" aria-label="Remove element">×</button></td></tr>`).join('');
+    const gs = (A.girders || []).map((g, i) => `<div class="row">
+      <div class="fields">${fTxt('Girder', `${a}.girders.${i}.id`)}<label class="f">Offsets <span class="u">sta, ft</span><textarea data-k="${a}.girders.${i}.offsets" data-t="pairs" rows="2">${esc(offTxt(g.offsets))}</textarea></label></div>
+      <div class="fields">${fTxt('Starts on', `${a}.girders.${i}.startOn`, 'end support', 'refs')}${fTxt('Ends on', `${a}.girders.${i}.endOn`, 'end support', 'refs')}</div>
+      <div class="toolbar"><button data-act="del" data-arr="${a}.girders" data-i="${i}">Remove ${esc(g.id)}</button></div></div>`).join('');
+    const sup = (A.supports || []).map((q, i) => `<tr>
+      <td><input class="t" data-k="${a}.supports.${i}.id" data-t="txt" value="${esc(q.id)}" aria-label="Name"></td>
+      <td><input class="n" data-k="${a}.supports.${i}.sta" data-t="num" value="${esc(q.sta)}" aria-label="Station"></td>
+      <td><input class="n" data-k="${a}.supports.${i}.skew" data-t="num" value="${esc(q.skew)}" aria-label="Skew"></td>
+      <td><select data-k="${a}.supports.${i}.kind" data-t="sel" aria-label="Kind">${kinds.map(([v, t]) => `<option value="${v}"${q.kind === v ? ' selected' : ''}>${t}</option>`).join('')}</select></td>
+      <td><button data-act="del" data-arr="${a}.supports" data-i="${i}" aria-label="Remove support">×</button></td></tr>`).join('');
+    const dia = (A.diaphragms || []).map((q, i) => `<tr>
+      <td><input class="t" data-k="${a}.diaphragms.${i}.id" data-t="txt" value="${esc(q.id)}" aria-label="Name"></td>
+      <td><input class="n" data-k="${a}.diaphragms.${i}.sta" data-t="num" value="${esc(q.sta)}" aria-label="Station"></td>
+      <td><input class="n" data-k="${a}.diaphragms.${i}.skew" data-t="num" value="${esc(q.skew)}" aria-label="Skew"></td>
+      <td><input class="t" data-k="${a}.diaphragms.${i}.from" data-t="txt" value="${esc(q.from || '')}" list="gids" aria-label="From girder"></td>
+      <td><input class="t" data-k="${a}.diaphragms.${i}.to" data-t="txt" value="${esc(q.to || '')}" list="gids" aria-label="To girder"></td>
+      <td><button data-act="del" data-arr="${a}.diaphragms" data-i="${i}" aria-label="Remove diaphragm">×</button></td></tr>`).join('');
+    return grp('Alignment', `<div class="fields">${fNum('Start station', 'ft', a + '.alignment.sta0')}${fNum('Start direction', 'deg', a + '.alignment.dir0', 'From east, counterclockwise')}${fNum('Start x', 'ft', a + '.alignment.x0')}${fNum('Start y', 'ft', a + '.alignment.y0')}</div>
+        <table class="mini"><colgroup><col style="width:30%"><col style="width:21%"><col style="width:21%"><col style="width:20%"><col></colgroup><thead><tr><th>Element</th><th>Length ft</th><th>Radius ft</th><th>Turn</th><th></th></tr></thead><tbody>${els}</tbody></table>
+        <div class="toolbar"><button data-act="add" data-arr="${a}.alignment.elements" data-tpl="el">Add element</button></div>`, true)
+      + grp('Girders', `<p class="hint">Offsets are from the alignment, positive to the right looking up-station. One pair is a constant offset; more pairs vary linearly between stations (flared and tapered girders). A girder that starts or ends on a diaphragm or a support line is cut there; otherwise it runs to its end supports.</p>${gs}<div class="toolbar"><button data-act="add" data-arr="${a}.girders" data-tpl="galign">Add girder</button></div>`, true)
+      + grp('Supports', `<table class="mini"><thead><tr><th>Name</th><th>Station</th><th>Skew°</th><th>Kind</th><th></th></tr></thead><tbody>${sup}</tbody></table><div class="toolbar"><button data-act="add" data-arr="${a}.supports" data-tpl="salign">Add support</button></div>
+        <div class="fields">${fNum('Girder past the end bearings', 'ft', a + '.ext')}</div>`, true)
+      + grp('Diaphragms', `<p class="hint">A diaphragm line across the girders, by station and skew. Limit it to the bay between two girders with From and To; a partial-length girder can then start or end on it.</p><table class="mini"><thead><tr><th>Name</th><th>Station</th><th>Skew°</th><th>From</th><th>To</th><th></th></tr></thead><tbody>${dia}</tbody></table><div class="toolbar"><button data-act="add" data-arr="${a}.diaphragms" data-tpl="dalign">Add diaphragm</button></div>`, !!(A.diaphragms || []).length);
+  }
+
+  function railXY() {
+    const a = 'xy', X = doc.xy;
+    const gs = (X.girders || []).map((g, i) => `<div class="row">
+      <div class="fields">${fTxt('Girder', `${a}.girders.${i}.id`)}<label class="f">Points <span class="u">x, y ft</span><textarea data-k="${a}.girders.${i}.pts" data-t="pairs" rows="3">${esc(ptsTxt(g.pts))}</textarea></label></div>
+      <div class="fields">${fTxt('Starts on', `${a}.girders.${i}.startOn`, '', 'refs')}${fTxt('Ends on', `${a}.girders.${i}.endOn`, '', 'refs')}</div>
+      <label class="c"><input type="checkbox" data-k="${a}.girders.${i}.trim" data-t="bool"${g.trim ? ' checked' : ''}> Cut at the end supports (plus the distance past the bearings)</label>
+      <div class="toolbar"><button data-act="del" data-arr="${a}.girders" data-i="${i}">Remove ${esc(g.id)}</button></div></div>`).join('');
+    const line2 = (arr, i, q, kind) => `<tr><td><input class="t" data-k="${a}.${arr}.${i}.id" data-t="txt" value="${esc(q.id)}" aria-label="Name"></td>
+      ${[['a', 0], ['a', 1], ['b', 0], ['b', 1]].map(([e, j]) => `<td><input class="n" data-k="${a}.${arr}.${i}.${e}.${j}" data-t="num" value="${esc(q[e][j])}" aria-label="${e}${j ? 'y' : 'x'}"></td>`).join('')}
+      ${kind ? `<td><select data-k="${a}.${arr}.${i}.kind" data-t="sel" aria-label="Kind">${kinds.map(([v, t]) => `<option value="${v}"${q.kind === v ? ' selected' : ''}>${t}</option>`).join('')}</select></td>` : ''}
+      <td><button data-act="del" data-arr="${a}.${arr}" data-i="${i}" aria-label="Remove">×</button></td></tr>`;
+    return grp('Girders', `<p class="hint">Each girder is a line through its points, in order. Curved girders need points close enough to follow the curve (an import from DXF does this for you).</p>${gs}<div class="toolbar"><button data-act="add" data-arr="${a}.girders" data-tpl="gxy">Add girder</button></div>`, true)
+      + grp('Support lines', `<p class="hint">Two points on each support line; it can run past the girders.</p><div class="tbl-wrap" style="max-height:none"><table class="mini"><thead><tr><th>Name</th><th>x1</th><th>y1</th><th>x2</th><th>y2</th><th>Kind</th><th></th></tr></thead><tbody>${(X.supports || []).map((q, i) => line2('supports', i, q, true)).join('')}</tbody></table></div>
+        <div class="toolbar"><button data-act="add" data-arr="${a}.supports" data-tpl="sxy">Add support</button></div><div class="fields">${fNum('Girder past the end bearings', 'ft', a + '.ext')}</div>`, true)
+      + grp('Diaphragm lines', `<div class="tbl-wrap" style="max-height:none"><table class="mini"><thead><tr><th>Name</th><th>x1</th><th>y1</th><th>x2</th><th>y2</th><th></th></tr></thead><tbody>${(X.diaphragms || []).map((q, i) => line2('diaphragms', i, q, false)).join('')}</tbody></table></div>
+        <div class="toolbar"><button data-act="add" data-arr="${a}.diaphragms" data-tpl="dxy">Add diaphragm</button></div>`, !!(X.diaphragms || []).length);
+  }
+
+  const ROLES = [['ignore', 'Ignore'], ['girder', 'Girders'], ['support', 'Support lines'], ['diaphragm', 'Diaphragms'], ['crossframe', 'Cross-frames']];
+  const UNITS = [[0, 'From the file'], [1 / 12, 'Inches'], [1, 'Feet'], [1 / 304.8, 'Millimeters'], [3.28084, 'Meters']];
+  function guessRole(name) {
+    const n = name.toUpperCase();
+    if (/GIRD|GDR|BEAM|STRINGER/.test(n)) return 'girder';
+    if (/X-?FR|XFRM|CROSS|BRAC/.test(n)) return 'crossframe';
+    if (/DIAPH|DIAP/.test(n)) return 'diaphragm';
+    if (/BRG|BEAR|SUPP|ABUT|PIER|CL[-_ ]?BRG/.test(n)) return 'support';
+    return 'ignore';
+  }
+  function railDXF() {
+    const uName = { 0: 'not set', 1: 'inches', 2: 'feet', 4: 'millimeters', 5: 'centimeters', 6: 'meters' };
+    let body = `<p class="hint">Open a framing plan saved as DXF (in your CAD program: Save As, DXF). Lines, polylines with arcs, and arcs are read. Put girders, support lines, diaphragms and cross-frames on their own layers, then say which layer is which. The file stays on your computer.</p>
+      <div class="toolbar"><label class="btn" for="dxfIn">Choose DXF file<input type="file" id="dxfIn" accept=".dxf" hidden></label><button data-act="sampledxf">Sample DXF</button></div>`;
+    if (dxf) {
+      const rows = Object.keys(dxf.layers).sort().map(L => `<tr><td class="l" style="font-family:var(--f-mono);font-size:12px;word-break:break-all">${esc(L)}</td><td style="text-align:right;font-family:var(--f-mono)">${dxf.layers[L]}</td>
+        <td><select data-dxflayer="${esc(L)}" aria-label="Role of layer ${esc(L)}">${ROLES.map(([v, t]) => `<option value="${v}"${dxfMap[L] === v ? ' selected' : ''}>${t}</option>`).join('')}</select></td></tr>`).join('');
+      body += `<p class="hint"><b>${esc(dxf.name)}</b>: ${dxf.entities.length} lines and arcs on ${Object.keys(dxf.layers).length} layers; drawing units ${uName[dxf.units] || 'code ' + dxf.units}.</p>
+        <div class="tbl-wrap" style="max-height:260px"><table class="mini layers"><thead><tr><th>Layer</th><th>Items</th><th>Role</th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="fields"><label class="f">Units<select id="dxfUnits">${UNITS.map(([v, t]) => `<option value="${v}"${+dxfScale === +v ? ' selected' : ''}>${t}</option>`).join('')}</select></label>
+        <label class="f">Join tolerance <span class="u">ft</span><input class="n" id="dxfTol" value="${dxfTol}"></label></div>
+        <div class="toolbar"><button class="primary" data-act="dxfbuild">Build framing</button></div>
+        <p class="hint">Girder pieces that meet end to end (within the tolerance) are joined. Each cross-frame line is attached to the girders its ends touch. The result opens as an X-Y input you can edit.</p>`;
+    }
+    return grp('DXF import', body, true);
+  }
+
+  function railCF() {
+    const c = cfg(), base = (doc.mode === 'concentric' ? 'concentric' : doc.mode === 'alignment' ? 'alignment' : 'xy') + '.crossframes';
+    const adds = (c.add || []).map((x, i) => `<tr>
+      <td><input class="t" data-k="${base}.add.${i}.gA" data-t="txt" value="${esc(x.gA)}" list="gids" aria-label="Girder A"></td>
+      <td><input class="n" data-k="${base}.add.${i}.uA" data-t="num" value="${esc(x.uA)}" aria-label="Distance on A"></td>
+      <td><input class="t" data-k="${base}.add.${i}.gB" data-t="txt" value="${esc(x.gB)}" list="gids" aria-label="Girder B"></td>
+      <td><input class="n" data-k="${base}.add.${i}.uB" data-t="num" value="${esc(x.uB)}" aria-label="Distance on B"></td>
+      <td><button data-act="del" data-arr="${base}.add" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('');
+    return grp('Cross-frames', `<label class="c"><input type="checkbox" data-k="${base}.auto" data-t="bool"${c.auto !== false ? ' checked' : ''}> Lay out cross-frames automatically</label>
+      <div class="fields">
+        ${fNum('Largest spacing', 'ft', base + '.spacing', 'Each span is split into equal panels no longer than this')}
+        ${fSel('Orientation', base + '.orient', [['auto', 'By skew (AASHTO 6.7.4.2)'], ['normal', 'Normal to girders'], ['skew', 'Parallel to skew']])}
+        ${fNum('Clear distance from bearings', 'ft', base + '.clear')}
+        ${fNum('Unbraced length limit', 'ft', base + '.maxLb', '0 for no check')}
+      </div><div class="fields one">${fList('Panels per span', '', base + '.panels', 'Optional, one per span, e.g. 8, 11, 8; blank uses the spacing')}</div>
+      <label class="c"><input type="checkbox" data-k="${base}.atSupports" data-t="bool"${c.atSupports !== false ? ' checked' : ''}> Cross-frames on the support lines</label>
+      <p class="hint">${(c.remove || []).length ? `${c.remove.length} removed (${esc(c.remove.join(', '))}). <button data-act="restore">Bring all back</button>` : 'Click a cross-frame in the plan to remove it.'}</p>
+      <h3>Added cross-frames</h3><p class="hint">By girder and distance along it from its start, ft.</p>
+      <table class="mini"><thead><tr><th>Girder</th><th>at ft</th><th>Girder</th><th>at ft</th><th></th></tr></thead><tbody>${adds}</tbody></table>
+      <div class="toolbar"><button data-act="add" data-arr="${base}.add" data-tpl="xadd">Add cross-frame</button></div>`, true);
+  }
+
+  function renderRail() {
+    let h = lineRefs();
+    if (doc.mode === 'concentric') h += railConcentric();
+    else if (doc.mode === 'alignment') h += railAlignment();
+    else if (doc.mode === 'xy') h += railXY();
+    else h += railDXF();
+    if (doc.mode !== 'dxf') h += railCF();
+    h += grp('Export', `<div class="toolbar"><button data-act="dxfout">Framing as DXF</button><button data-act="jsonout">Framing as JSON</button></div><p class="hint">The DXF has girders, support lines, diaphragms and cross-frames on their own layers, in inches, so the framing can go back to CAD or be read in again here.</p>`, false);
+    $('#rail').innerHTML = h;
+    document.querySelectorAll('#modeSel button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === doc.mode)));
+  }
+
+  // ---------- input handling ----------
+  const TPL = {
+    el: () => ({ type: 'line', L: 100 }),
+    galign: arr => ({ id: 'G' + (arr.length + 1), offsets: [[doc.alignment.alignment.sta0 || 0, arr.length ? (+arr[arr.length - 1].offsets[0][1] + 10) : 0]] }),
+    salign: arr => ({ id: 'Pier ' + Math.max(1, arr.length - 1), sta: (+(arr[arr.length - 1] || {}).sta || 0) + 100, skew: 0, kind: 'pier' }),
+    dalign: arr => ({ id: 'D' + (arr.length + 1), sta: (doc.alignment.alignment.sta0 || 0) + 50, skew: 0, from: '', to: '' }),
+    gxy: arr => ({ id: 'G' + (arr.length + 1), pts: [[0, -10 * arr.length], [200, -10 * arr.length]], trim: true }),
+    sxy: arr => ({ id: 'Support ' + (arr.length + 1), a: [100, 30], b: [100, -30], kind: 'pier' }),
+    dxy: arr => ({ id: 'D' + (arr.length + 1), a: [50, 30], b: [50, -30] }),
+    xadd: () => { const o = F ? F.order : ['G1', 'G2']; return { gA: o[0], uA: 10, gB: o[1], uB: 10 }; },
+  };
+  let tmr = 0;
+  const later = () => { clearTimeout(tmr); tmr = setTimeout(() => { save(); run(); }, 160); };
+
+  $('#rail').addEventListener('input', e => {
+    const t = e.target, k = t.dataset.k; if (!k) return;
+    let v, bad = false;
+    switch (t.dataset.t) {
+      case 'num': { const s = t.value.trim(); v = s === '' ? '' : Number(s); bad = s !== '' && !isFinite(v); break; }
+      case 'list': v = parseList(t.value); bad = v === null; break;
+      case 'pairs': v = parsePairs(t.value); bad = v === null || !v.length; break;
+      case 'bool': v = t.checked; break;
+      default: v = t.value;
+    }
+    t.setAttribute('aria-invalid', String(bad));
+    if (bad) return;
+    setP(doc, k, v);
+    if (t.tagName === 'SELECT' && /elements\.\d+\.type$/.test(k)) { const el = getP(doc, k.replace(/\.type$/, '')); if (v === 'arc' && !(el.R > 0)) { el.R = 1000; el.turn = el.turn || 'L'; } renderRail(); }
+    later();
+  });
+  $('#rail').addEventListener('change', e => {
+    const t = e.target;
+    if (t.id === 'dxfIn' && t.files && t.files[0]) {
+      const f = t.files[0], rd = new FileReader();
+      rd.onload = () => loadDXF(String(rd.result), f.name);
+      rd.readAsText(f);
+    } else if (t.dataset.dxflayer) { dxfMap[t.dataset.dxflayer] = t.value; }
+    else if (t.id === 'dxfUnits') { dxfScale = +t.value; }
+    else if (t.id === 'dxfTol') { dxfTol = +t.value > 0 ? +t.value : 0.05; }
+    else if (t.dataset.t === 'bool' || t.tagName === 'SELECT') { /* handled on input */ }
+  });
+  $('#rail').addEventListener('click', e => {
+    const b = e.target.closest('button[data-act]'); if (!b) return;
+    const act = b.dataset.act;
+    if (act === 'add') { const arr = getP(doc, b.dataset.arr) || []; arr.push(TPL[b.dataset.tpl](arr)); setP(doc, b.dataset.arr, arr); renderRail(); save(); run(); }
+    else if (act === 'del') { const arr = getP(doc, b.dataset.arr); arr.splice(+b.dataset.i, 1); renderRail(); save(); run(); }
+    else if (act === 'restore') { cfg().remove = []; renderRail(); save(); run(); }
+    else if (act === 'dxfbuild') buildFromDXF();
+    else if (act === 'sampledxf') sampleDXF();
+    else if (act === 'dxfout') { if (F && !F.fatal) download('framing.dxf', G.toDXF(F, { units: 'in' }), 'application/dxf'); }
+    else if (act === 'jsonout') { if (F && !F.fatal) download('framing.json', JSON.stringify(framingJSON(F), null, 1), 'application/json'); }
+  });
+
+  function loadDXF(text, name) {
+    try {
+      const d = G.readDXF(text); d.name = name;
+      if (!d.entities.length) throw new Error('No lines, polylines or arcs were found in this file.');
+      dxf = d; dxfMap = {}; Object.keys(d.layers).forEach(L => { dxfMap[L] = guessRole(L); }); dxfScale = 0;
+      msg([], []);
+    } catch (err) { dxf = null; msg(['That file could not be read as a DXF: ' + err.message], []); }
+    renderRail();
+  }
+  function buildFromDXF() {
+    if (!dxf) return;
+    try {
+      const m = G.dxfToModel(dxf, dxfMap, { scale: dxfScale || 0, tol: dxfTol });
+      const x = { ext: m.ext != null ? m.ext : 0, girders: m.girders.map(g => ({ id: g.id, pts: g.pts.map(p => [+p[0].toFixed(4), +p[1].toFixed(4)]), startOn: g.startOn || '', endOn: g.endOn || '', trim: !!g.trim })),
+        supports: m.supports.map(q => ({ id: q.id, a: q.a.map(v => +v.toFixed(4)), b: q.b.map(v => +v.toFixed(4)), kind: q.kind })),
+        diaphragms: m.diaphragms.map(q => ({ id: q.id, a: q.a.map(v => +v.toFixed(4)), b: q.b.map(v => +v.toFixed(4)) })),
+        crossframes: CF({ auto: !m.crossframes.add.length, add: m.crossframes.add }), origin: m.origin };
+      doc.xy = x; doc.mode = 'xy'; save(); renderRail(); run();
+      const n = m.crossframes.add.length;
+      note(`Imported ${x.girders.length} girders, ${x.supports.length} support lines, ${x.diaphragms.length} diaphragms and ${n} cross-frames from ${dxf.name}. ${n ? 'Automatic layout is off so the drawn cross-frames are kept; turn it on to lay them out instead.' : 'No cross-frame layer was mapped, so cross-frames are laid out automatically.'} Coordinates start at the lower left of the girders (drawing point ${fx(m.origin[0], 2)}, ${fx(m.origin[1], 2)} ft).`);
+    } catch (err) { msg(['The framing could not be built from the drawing: ' + err.message], []); }
+  }
+  function sampleDXF() {
+    try { const S = G.build({ mode: 'concentric', concentric: EX.curved.concentric }); download('sample-curved-framing.dxf', G.toDXF(S, { units: 'in' }), 'application/dxf'); } catch (e) { /* ignore */ }
+  }
+  function download(name, text, type) {
+    const u = URL.createObjectURL(new Blob([text], { type })); const a = document.createElement('a'); a.href = u; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(u), 2000);
+  }
+  // stable framing file for the next modules: girder lines, bearings, spans and every cross-frame and diaphragm end
+  function framingJSON(F) {
+    const r = v => +(+v).toFixed(4);
+    return { schema: 'opendot.g2d.framing/1', units: 'ft, deg', girders: F.girders.map(g => ({ id: g.id, length: r(g.L), start: g.startKind === 'member' ? 'on ' + g.startOn : 'free end', end: g.endKind === 'member' ? 'on ' + g.endOn : 'free end',
+      bearings: g.brg.map(b => ({ support: b.support, at: r(b.u), skew: r(b.skew) })), spans: g.spans.map(s => ({ from: s.from, to: s.to, length: r(s.L), radius: isFinite(s.R) ? r(s.R) : null })), points: g.P.pts.filter((_, j) => j % 4 === 0 || j === g.P.pts.length - 1).map(p => [r(p[0]), r(p[1])]) })),
+      supports: F.supports.map(q => ({ id: q.id, kind: q.kind, point: q.p.map(r), direction: q.d.map(v => +v.toFixed(6)) })),
+      crossframes: F.crossframes.map(x => ({ id: x.id, bay: x.bay, tag: x.tag, girderA: x.gA, atA: r(x.uA), girderB: x.gB, atB: r(x.uB), length: r(x.L), angleA: r(x.angA), angleB: r(x.angB) })),
+      diaphragms: F.members.map(m => ({ id: m.id, girderA: m.gA, atA: r(m.uA), girderB: m.gB, atB: r(m.uB), length: r(Math.hypot(m.pB[0] - m.pA[0], m.pB[1] - m.pA[1])) })) };
+  }
+
+  // ---------- messages ----------
+  function msg(errs, warns) {
+    $('#msgs').innerHTML = (errs.length ? `<div class="msg err" role="alert"><b>Fix these before the framing can be used</b>${errs.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : '')
+      + (warns.length ? `<div class="msg wrn"><b>Check</b>${warns.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : '');
+  }
+  function note(t) { const d = document.createElement('div'); d.className = 'msg wrn'; d.textContent = t; $('#msgs').prepend(d); }
+
+  // ---------- run ----------
+  function run() {
+    if (doc.mode === 'dxf') { F = null; drawPlan(); tables(); msg([], []); $('#planStatus').textContent = dxf ? 'Map the layers, then build the framing.' : 'Open a DXF file to start.'; return; }
+    try { F = G.build(engineModel()); }
+    catch (err) { F = { fatal: true }; msg([err.message], []); drawPlan(); tables(); return; }
+    msg(F.errors, F.warnings);
+    const nx = F.crossframes.length;
+    $('#planStatus').textContent = `${F.girders.length} girders · ${F.supports.length} supports · ${nx} cross-frames${F.members.length ? ' · ' + F.members.length + ' diaphragm members' : ''}`;
+    // datalist of girder ids may have changed
+    const gl = document.getElementById('gids'); if (gl) gl.innerHTML = F.order.map(i => `<option value="${esc(i)}">`).join('');
+    drawPlan(); tables();
+  }
+
+  // ---------- plan view ----------
+  const svg = $('#svg'), plan = $('#plan'), tip = $('#tip');
+  let view = null; // { cx, cy, s } world center and px per ft
+  let fitKey = '';
+  const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  function bbox() {
+    let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+    F.girders.forEach(g => g.P.pts.forEach(p => { x0 = Math.min(x0, p[0]); x1 = Math.max(x1, p[0]); y0 = Math.min(y0, p[1]); y1 = Math.max(y1, p[1]); }));
+    return { x0, y0, x1, y1 };
+  }
+  function fit() {
+    if (!F || F.fatal) return; const b = bbox(), w = plan.clientWidth, h = plan.clientHeight;
+    const s = Math.min((w - 70) / Math.max(1, b.x1 - b.x0), (h - 70) / Math.max(1, b.y1 - b.y0));
+    view = { cx: (b.x0 + b.x1) / 2, cy: (b.y0 + b.y1) / 2, s };
+  }
+  const pr = p => [plan.clientWidth / 2 + (p[0] - view.cx) * view.s, plan.clientHeight / 2 - (p[1] - view.cy) * view.s];
+  const unpr = (x, y) => [view.cx + (x - plan.clientWidth / 2) / view.s, view.cy - (y - plan.clientHeight / 2) / view.s];
+  function drawPlan() {
+    if (!F || F.fatal) { svg.innerHTML = `<text x="50%" y="50%" text-anchor="middle" fill="${css('--muted')}" font-size="13">${doc.mode === 'dxf' ? 'Open a DXF file and map its layers.' : 'No framing to show.'}</text>`; return; }
+    const key = doc.mode + '|' + F.girders.map(g => g.id + g.L.toFixed(1)).join(',');
+    if (!view || key !== fitKey) { fit(); fitKey = key; }
+    const W = plan.clientWidth, H = plan.clientHeight;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+    const showL = $('#showLbl').checked, showX = $('#showXfId').checked;
+    const path = pts => { const step = Math.max(1, Math.floor(pts.length / 400)); let d = ''; for (let i = 0; i < pts.length; i += step) { const q = pr(pts[i]); d += (i ? 'L' : 'M') + q[0].toFixed(1) + ' ' + q[1].toFixed(1); } const z = pr(pts[pts.length - 1]); return d + 'L' + z[0].toFixed(1) + ' ' + z[1].toFixed(1); };
+    let h = '';
+    // support lines across the girders that bear on them
+    F.supports.forEach(q => {
+      const t = F.girders.flatMap(g => g.brg.filter(b => b.support === q.id).map(b => (g.P.at(b.u)[0] - q.p[0]) * q.d[0] + (g.P.at(b.u)[1] - q.p[1]) * q.d[1]));
+      if (!t.length) return; const t0 = Math.min(...t) - 4, t1 = Math.max(...t) + 4;
+      const a = pr([q.p[0] + q.d[0] * t0, q.p[1] + q.d[1] * t0]), b = pr([q.p[0] + q.d[0] * t1, q.p[1] + q.d[1] * t1]);
+      h += `<line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--support)" stroke-width="1.5" stroke-dasharray="8 4 2 4"/>`;
+      if (showL) h += `<text x="${b[0]}" y="${b[1]}" dx="4" dy="-4" font-size="11" fill="var(--support)" font-family="var(--f-body)">${esc(q.id)}</text>`;
+    });
+    // removed cross-frames, then cross-frames, then diaphragm members
+    F.removed.forEach(x => { const a = pr(x.pA), b = pr(x.pB); h += `<g class="xf" data-x="${esc(x.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--xf-off)" stroke-width="1.2" stroke-dasharray="2 3" opacity=".8"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="12"/></g>`; });
+    F.crossframes.forEach(x => {
+      const a = pr(x.pA), b = pr(x.pB), on = sel === x.id;
+      h += `<g class="xf" data-x="${esc(x.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--xf)" stroke-width="${on ? 4 : x.tag === 'support' ? 2.2 : 1.5}"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="12"/></g>`;
+      if (showX) h += `<text x="${(a[0] + b[0]) / 2}" y="${(a[1] + b[1]) / 2}" dy="-3" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${esc(x.id)}</text>`;
+    });
+    F.members.forEach(m => { const a = pr(m.pA), b = pr(m.pB); h += `<g class="mb" data-m="${esc(m.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--diaph)" stroke-width="4" stroke-linecap="round"/></g>`; if (showL) h += `<text x="${(a[0] + b[0]) / 2}" y="${(a[1] + b[1]) / 2}" dy="-6" font-size="11" text-anchor="middle" fill="var(--diaph)">${esc(m.id)}</text>`; });
+    // girders on top, with bearings
+    F.girders.forEach(g => {
+      h += `<g class="gd" data-g="${esc(g.id)}"><path d="${path(g.P.pts)}" fill="none" stroke="var(--girder)" stroke-width="2.2"/><path d="${path(g.P.pts)}" fill="none" stroke="transparent" stroke-width="10"/></g>`;
+      g.brg.forEach(b => { const p = pr(g.P.at(b.u)); h += `<circle cx="${p[0]}" cy="${p[1]}" r="3.2" fill="var(--surface)" stroke="var(--support)" stroke-width="1.6"/>`; });
+      if (showL) { const p = pr(g.P.at(0)), t = g.P.tan(0), q = pr([g.P.at(0)[0] - t[0], g.P.at(0)[1] - t[1]]); const dx = q[0] - p[0], dy = q[1] - p[1], n = Math.hypot(dx, dy) || 1; h += `<text x="${p[0] + dx / n * 16}" y="${p[1] + dy / n * 16 + 4}" font-size="12" font-weight="600" text-anchor="middle" fill="var(--ink)" font-family="var(--f-display)">${esc(g.id)}</text>`; }
+    });
+    // north arrow and scale bar
+    const sb = niceLen(120 / view.s), sx = 14, sy = H - 16;
+    h += `<g font-size="10" fill="var(--muted)" font-family="var(--f-mono)"><line x1="${sx}" y1="${sy}" x2="${sx + sb * view.s}" y2="${sy}" stroke="var(--muted)" stroke-width="2"/><text x="${sx}" y="${sy - 5}">${sb} ft</text>
+      <path d="M${W - 56} 30 l5 -14 l5 14 z" fill="var(--muted)"/><text x="${W - 51}" y="42" text-anchor="middle">N</text></g>`;
+    svg.innerHTML = h;
+  }
+  const niceLen = v => { const p = Math.pow(10, Math.floor(Math.log10(v))); const m = v / p; return (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * p; };
+
+  // pan, zoom, hover, click
+  let drag = null;
+  svg.addEventListener('pointerdown', e => { if (!view) return; drag = { x: e.clientX, y: e.clientY, cx: view.cx, cy: view.cy, moved: false }; svg.setPointerCapture(e.pointerId); });
+  svg.addEventListener('pointermove', e => {
+    if (drag) {
+      const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+      if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; svg.classList.add('drag'); tip.hidden = true; }
+      if (drag.moved) { view.cx = drag.cx - dx / view.s; view.cy = drag.cy + dy / view.s; schedule(); }
+      return;
+    }
+    hover(e);
+  });
+  svg.addEventListener('pointerup', e => {
+    const d = drag; drag = null; svg.classList.remove('drag');
+    if (d && !d.moved) { const g = document.elementFromPoint(e.clientX, e.clientY); const x = g && g.closest && g.closest('.xf'); if (x) toggleXF(x.dataset.x); }
+  });
+  svg.addEventListener('pointerleave', () => { tip.hidden = true; });
+  svg.addEventListener('wheel', e => { if (!view) return; e.preventDefault(); const r = svg.getBoundingClientRect(); zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-e.deltaY * 0.0015)); }, { passive: false });
+  function zoomAt(x, y, k) { const w = unpr(x, y); view.s = Math.max(1e-3, Math.min(400, view.s * k)); const w2 = unpr(x, y); view.cx += w[0] - w2[0]; view.cy += w[1] - w2[1]; schedule(); }
+  $('#zIn').onclick = () => zoomAt(plan.clientWidth / 2, plan.clientHeight / 2, 1.4);
+  $('#zOut').onclick = () => zoomAt(plan.clientWidth / 2, plan.clientHeight / 2, 1 / 1.4);
+  $('#zFit').onclick = () => { fit(); drawPlan(); };
+  let raf = 0; const schedule = () => { if (!raf) raf = requestAnimationFrame(() => { raf = 0; drawPlan(); }); };
+  $('#showLbl').onchange = drawPlan; $('#showXfId').onchange = drawPlan;
+  new ResizeObserver(() => { if (F && !F.fatal) { fit(); drawPlan(); } }).observe(plan);
+
+  function hover(e) {
+    if (!F || F.fatal) return;
+    const t = e.target.closest && e.target.closest('.xf,.gd,.mb'); if (!t) { tip.hidden = true; return; }
+    let h = '';
+    if (t.dataset.x) {
+      const x = F.crossframes.find(q => q.id === t.dataset.x) || F.removed.find(q => q.id === t.dataset.x); if (!x) return;
+      const off = !F.crossframes.includes(x);
+      h = `<b>${esc(x.id)}</b> ${x.tag === 'support' ? '(support line ' + esc(x.support || '') + ')' : x.tag === 'added' ? '(added)' : ''}${off ? ' <span style="color:var(--bad)">removed</span>' : ''}<br>${esc(x.gA)} at ${fx(x.uA)} ft to ${esc(x.gB)} at ${fx(x.uB)} ft<br>Length ${fx(x.L)} ft · angle ${fx(x.angA, 1)}° / ${fx(x.angB, 1)}°<br><span style="color:var(--muted)">Click to ${off ? 'bring it back' : 'remove it'}</span>`;
+    } else if (t.dataset.g) {
+      const g = F.girders.find(q => q.id === t.dataset.g);
+      h = `<b>${esc(g.id)}</b> · ${fx(g.L)} ft<br>Spans ${g.spans.map(s => fx(s.L)).join(' · ')} ft<br>Largest unbraced length ${fx(g.LbMax)} ft`;
+    } else if (t.dataset.m) {
+      const m = F.members.find(q => q.id === t.dataset.m);
+      h = `<b>Diaphragm ${esc(m.id)}</b><br>${esc(m.gA)} at ${fx(m.uA)} ft to ${esc(m.gB)} at ${fx(m.uB)} ft`;
+    }
+    tip.innerHTML = h; tip.hidden = false;
+    const r = plan.getBoundingClientRect(); let x = e.clientX - r.left + 14, y = e.clientY - r.top + 14;
+    if (x + tip.offsetWidth > r.width - 6) x = e.clientX - r.left - tip.offsetWidth - 10;
+    if (y + tip.offsetHeight > r.height - 6) y = e.clientY - r.top - tip.offsetHeight - 10;
+    tip.style.left = x + 'px'; tip.style.top = y + 'px';
+  }
+  function toggleXF(id) {
+    const c = cfg(); c.remove = c.remove || [];
+    const i = c.remove.indexOf(id); if (i >= 0) c.remove.splice(i, 1); else c.remove.push(id);
+    sel = null; save(); renderRail(); run();
+  }
+
+  // ---------- tables ----------
+  function tables() {
+    const ok = F && !F.fatal;
+    $('#gStatus').textContent = ok ? F.order.join(' · ') + ' (left to right looking up-station)' : '';
+    if (!ok) { ['#gTbl', '#bTbl', '#sTbl', '#xTbl'].forEach(s => { $(s).innerHTML = ''; }); return; }
+    const gs = F.order.map(id => F.girders.find(g => g.id === id));
+    $('#gTbl').innerHTML = `<thead><tr><th class="l">Girder</th><th>Length ft</th><th class="l">Start</th><th class="l">End</th><th class="l">Spans ft</th><th class="l">Radius ft</th><th>Largest Lb ft</th></tr></thead><tbody>`
+      + gs.map(g => `<tr><td class="l"><b>${esc(g.id)}</b></td><td>${fx(g.L)}</td><td class="l">${esc(g.startKind === 'member' ? 'on ' + g.startOn : g.brg.length ? 'past ' + g.brg[0].support : 'free')}</td><td class="l">${esc(g.endKind === 'member' ? 'on ' + g.endOn : g.brg.length ? 'past ' + g.brg[g.brg.length - 1].support : 'free')}</td>
+        <td class="l" style="font-family:var(--f-mono)">${g.spans.map(s => fx(s.L)).join(' · ')}</td><td class="l" style="font-family:var(--f-mono)">${g.spans.map(s => (isFinite(s.R) ? fx(s.R, 1) : 'straight')).join(' · ')}</td><td>${fx(g.LbMax)}</td></tr>`).join('') + '</tbody>';
+    const bays = {}; F.crossframes.forEach(x => { (bays[x.bay] = bays[x.bay] || []).push(x); });
+    $('#bTbl').innerHTML = `<thead><tr><th class="l">Bay</th><th class="l">Girders</th><th>Cross-frames</th><th>On supports</th><th>Length ft</th><th>Angle °</th></tr></thead><tbody>`
+      + gs.slice(1).map((g, k) => { const b = bays[k + 1] || [], L = b.map(x => x.L), A = b.map(x => Math.max(Math.abs(x.angA), Math.abs(x.angB)));
+        return `<tr><td class="l">${k + 1}</td><td class="l">${esc(gs[k].id)}–${esc(g.id)}</td><td>${b.length}</td><td>${b.filter(x => x.tag === 'support').length}</td><td>${b.length ? fx(Math.min(...L)) + ' – ' + fx(Math.max(...L)) : '–'}</td><td>${b.length ? fx(Math.min(...A), 1) + ' – ' + fx(Math.max(...A), 1) : '–'}</td></tr>`; }).join('') + '</tbody>';
+    $('#sTbl').innerHTML = `<thead><tr><th class="l">Girder</th><th class="l">Support</th><th>At ft</th><th>Skew °</th></tr></thead><tbody>`
+      + gs.flatMap(g => g.brg.map(b => `<tr><td class="l">${esc(g.id)}</td><td class="l">${esc(b.support)}</td><td>${fx(b.u)}</td><td>${fx(b.skew, 2)}</td></tr>`)).join('') + '</tbody>';
+    const rows = F.crossframes.map(x => ({ id: x.id, bay: x.bay, kind: x.tag === 'support' ? 'support' : x.tag === 'added' ? 'added' : 'intermediate', gA: x.gA, uA: x.uA, gB: x.gB, uB: x.uB, L: x.L, aA: x.angA, aB: x.angB }))
+      .concat(F.members.map(m => ({ id: m.id, bay: '', kind: 'diaphragm', gA: m.gA, uA: m.uA, gB: m.gB, uB: m.uB, L: Math.hypot(m.pB[0] - m.pA[0], m.pB[1] - m.pA[1]), aA: NaN, aB: NaN })));
+    tables.rows = rows;
+    $('#xTbl').innerHTML = `<thead><tr><th class="l">Name</th><th class="l">Bay</th><th class="l">Type</th><th class="l">Girder A</th><th>at ft</th><th class="l">Girder B</th><th>at ft</th><th>Length ft</th><th>Angle A °</th><th>Angle B °</th></tr></thead><tbody>`
+      + rows.map(r => `<tr${r.kind !== 'diaphragm' ? ` data-x="${esc(r.id)}"` : ''}${sel === r.id ? ' class="sel"' : ''}><td class="l">${esc(r.id)}</td><td class="l">${r.bay}</td><td class="l">${r.kind}</td><td class="l">${esc(r.gA)}</td><td>${fx(r.uA)}</td><td class="l">${esc(r.gB)}</td><td>${fx(r.uB)}</td><td>${fx(r.L)}</td><td>${fx(r.aA, 2)}</td><td>${fx(r.aB, 2)}</td></tr>`).join('') + '</tbody>';
+  }
+  $('#xTbl').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = sel === tr.dataset.x ? null : tr.dataset.x; drawPlan(); tables(); });
+  $('#btnCsv').onclick = () => {
+    const r = tables.rows || []; const t = ['name,bay,type,girder_a,at_a_ft,girder_b,at_b_ft,length_ft,angle_a_deg,angle_b_deg'].concat(r.map(x => [x.id, x.bay, x.kind, x.gA, fx(x.uA, 4), x.gB, fx(x.uB, 4), fx(x.L, 4), isFinite(x.aA) ? fx(x.aA, 3) : '', isFinite(x.aB) ? fx(x.aB, 3) : ''].join(','))).join('\n');
+    const b = $('#btnCsv');
+    const done = ok => { b.textContent = ok ? 'Copied' : 'Select and copy'; setTimeout(() => { b.textContent = 'Copy CSV'; }, 1600); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(() => done(true), () => { download('crossframes.csv', t, 'text/csv'); done(true); }); else { download('crossframes.csv', t, 'text/csv'); done(true); }
+  };
+
+  // ---------- header controls ----------
+  document.querySelectorAll('#modeSel button').forEach(b => b.addEventListener('click', () => { doc.mode = b.dataset.mode; save(); renderRail(); run(); }));
+  $('#example').addEventListener('change', e => {
+    const k = e.target.value; if (!EX[k]) return; const x = clone(EX[k]);
+    doc.mode = x.mode; if (x.mode === 'concentric') doc.concentric = x.concentric; else doc.alignment = x.alignment;
+    e.target.value = ''; view = null; save(); renderRail(); run();
+  });
+  $('#btnSave').onclick = () => download('steel-2d-grillage-input.json', JSON.stringify(doc, null, 1), 'application/json');
+  $('#fileIn').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0]; if (!f) return; const rd = new FileReader();
+    rd.onload = () => { try { const d = JSON.parse(String(rd.result)); if (!(d && d.v === 1 && d.concentric && d.alignment && d.xy)) throw new Error('not a Steel 2D Grillage input file'); doc = d; view = null; save(); renderRail(); run(); } catch (err) { msg(['That file could not be opened: ' + err.message], []); } };
+    rd.readAsText(f); e.target.value = '';
+  });
+  $('#btnReset').onclick = () => { doc = fresh(); dxf = null; view = null; save(); renderRail(); run(); };
+
+  renderRail(); run();
+  window.__g2d = { get doc() { return doc; }, get F() { return F; } };
+})();
+</script>
+</body></html>

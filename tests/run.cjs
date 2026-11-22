@@ -154,5 +154,44 @@ guard('Just Live Load', () => {
   }
 });
 
+// ---------- Steel 2D Grillage (framing) ----------
+guard('Steel 2D Grillage', () => {
+  const G = load('steel-2d-grillage').G2D;
+  // NSBA Steel Bridge Design Handbook, Design Example 4 (2025): 160-210-160 ft on R = 700 ft at the centerline, four girders
+  // at 11 ft, radial supports, cross-frames at 20 ft (end spans) and 19.09 ft (center span) along the centerline
+  const E4 = { mode: 'concentric', concentric: { R: 700, turn: 'L', nG: 4, spacing: 11, spans: [160, 210, 160], skews: [0, 0, 0, 0], ext: 1, crossframes: { spacing: 20 } } };
+  const F = G.build(E4), g1 = F.girders.find(g => g.id === 'G1'), g4 = F.girders.find(g => g.id === 'G4');
+  is('E4 framing: no errors', F.errors.length, 0);
+  near('E4 G1 (inside) end span, ft', g1.spans[0].L, 160 * 683.5 / 700, 0.01, 'arc length; E4 Table 1: 156.23');
+  near('E4 G1 center span, ft', g1.spans[1].L, 210 * 683.5 / 700, 0.01, 'E4 Table 1: 205.05');
+  near('E4 G4 (outside) center span, ft', g4.spans[1].L, 214.95, 0.01, 'E4 Article 4.3');
+  near('E4 G4 radius, ft', g4.spans[1].R, 716.5, 0.05, '700 + 1.5 × 11');
+  const perBay = [1, 2, 3].map(b => F.crossframes.filter(x => x.bay === b && x.tag === 'intermediate').length);
+  is('E4 intermediate cross-frames per bay (7 + 10 + 7 from 8, 11, 8 panels)', perBay.join(','), '24,24,24');
+  is('E4 support cross-frames', F.crossframes.filter(x => x.tag === 'support').length, 12);
+  near('E4 cross-frames radial: largest angle from normal, deg', Math.max(...F.crossframes.map(x => Math.max(Math.abs(x.angA), Math.abs(x.angB)))), 0, 0.01);
+  near('E4 bearings radial: largest skew, deg', Math.max(...F.girders.flatMap(g => g.brg.map(b => Math.abs(b.skew)))), 0, 0.01);
+  near('E4 G4 largest unbraced length, ft', g4.LbMax, 163.77 / 8, 0.02, 'end span / 8 panels');
+  // DXF out (inches) and back in: same spans and cross-frames
+  const F2 = G.build(G.dxfToModel(G.readDXF(G.toDXF(F, { units: 'in' })), { 'G2D-GIRDER': 'girder', 'G2D-SUPPORT': 'support', 'G2D-XFRAME': 'crossframe' }, {}));
+  near('DXF round trip: largest span difference, ft', Math.max(...F2.girders.flatMap((g, i) => g.spans.map((s, j) => Math.abs(s.L - F.girders[i].spans[j].L)))), 0, 0.001);
+  is('DXF round trip: cross-frames', F2.crossframes.length, F.crossframes.length);
+  // 60° skew, straight: bearings read 60°, cross-frames normal to the girders and staggered, unbraced length within the spacing
+  const S = G.build({ mode: 'concentric', concentric: { R: 0, nG: 4, spacing: 10, spans: [120, 120], skews: [60, 60, 60], ext: 1, crossframes: { spacing: 20 } } });
+  near('60° skew: bearing skew, deg', S.girders[0].brg[1].skew, 60, 1e-6);
+  near('60° skew: cross-frames normal to girders, deg', Math.max(...S.crossframes.filter(x => x.tag === 'intermediate').map(x => Math.abs(x.angA))), 0, 0.01, 'AASHTO 6.7.4.2');
+  is('60° skew: unbraced lengths within 20 ft', Math.max(...S.girders.map(g => g.LbMax)) <= 20 + 1e-6, true);
+  // flared widening: G5 starts on diaphragm D1 between G4 and G5
+  const W = G.build({ mode: 'alignment', ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 260 }] },
+    girders: [{ id: 'G1', offsets: [[1000, -15], [1260, -25]] }, { id: 'G2', offsets: [[1000, -5], [1260, -8]] }, { id: 'G3', offsets: [[1000, 5], [1260, 8]] }, { id: 'G4', offsets: [[1000, 15], [1260, 25]] }, { id: 'G5', offsets: [[1000, 25], [1260, 35]], startOn: 'D1' }],
+    supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1130, skew: 0 }, { id: 'Abut 2', sta: 1260, skew: 0, kind: 'abutment' }],
+    diaphragms: [{ id: 'D1', sta: 1060, skew: 0, from: 'G4', to: 'G5' }], crossframes: { spacing: 20 } });
+  const g5 = W.girders.find(g => g.id === 'G5');
+  is('partial girder: no errors', W.errors.length, 0);
+  is('partial girder: G5 starts on D1', g5.startKind + ' ' + g5.startOn, 'member D1');
+  near('partial girder: G5 first span, D1 to Pier 1, ft', g5.spans[0].L, Math.hypot(70, 70 * 10 / 260), 0.01, 'flare 10 ft over 260 ft');
+  is('partial girder: one diaphragm member, G4 to G5', W.members.map(m => m.gA + '-' + m.gB).join(), 'G4-G5');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
