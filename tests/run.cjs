@@ -111,6 +111,13 @@ guard('Concrete Line Girder', () => {
     is('LRFD simplified, 2-span dg34 at 151.28 ft: negative moment governs', q.useNeg, true);
     near('LRFD simplified, dg34 at 151.28 ft: Mcre at the deck top, k-ft', q.simp.Mcre, 0.2 * Math.sqrt(m.deck.fc) * c.I / (c.hc - c.yb) / c.n / 12, 0.5, 'hand calculation');
     near('LRFD simplified, dg34 at 151.28 ft: Mcre, k-ft', q.simp.Mcre, 1730, 2, 'app value'); }
+  // concurrent shear uses the permanent-load factors of the maximum-moment combination (DC1 opposes the pier moment: 0.90)
+  { const m = clgEngineModel(fixture('clg-dg34.json')); m.opts = Object.assign({}, m.opts, { shearMethod: 'simplified' }); m.stirrups = [{ from: 0, to: 1, Av: 0.52, s: 12 }];
+    const r = P.run(m), q = r.shear.reduce((a, b) => (Math.abs(b.x - 151.28) < Math.abs(a.x - 151.28) ? b : a));
+    const g = (M, gx, gn) => (Math.sign(M) === -1 ? gx : gn), hand = Math.abs(g(q.MDC1, 1.25, 0.9) * q.VDC1 + g(q.MDC2, 1.25, 0.9) * q.VDC2 + g(q.MDW, 1.5, 0.65) * q.VDW + 1.75 * q.simp.VLc);
+    near('LRFD simplified, dg34 pier, 0.52 in.² at 12 in.: Vu,M with the moment-combination factors, k', q.simp.VuM, Math.min(hand, q.Vu), 0.01, 'hand combination');
+    near('LRFD simplified, dg34 pier, 0.52 in.² at 12 in.: shear ratio', q.ratio, 1.025, 0.002, 'GPT round 4');
+    near('LRFD simplified, dg34 pier, 0.52 in.² at 12 in.: local inventory shear RF', r.rating.rows.filter(x => /hear/.test(x.lim) && Math.abs(x.x - q.x) < 1e-6)[0].inv, 0.946, 0.002, 'GPT round 4'); }
   // pedestrian deflection: the largest deflection in the span, not only at midspan (40 + 120 ft)
   { const m = clgEngineModel(fixture('clg-dg34.json')); m.spans = [40, 120]; m.live = Object.assign({}, m.live, { design: 'ped', ped: { width: 8, clear: 12, mpf: true } });
     const r = P.run(m), d = r.deflection.find(q => q.span === 2);

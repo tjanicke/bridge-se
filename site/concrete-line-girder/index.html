@@ -1573,9 +1573,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           const rf = Math.sqrt(fc), ps = prestress(z, Lb, fpe);
           const Vd = Math.abs(p.VDC1 + p.VDC2 + p.VDW), Md = p.MDC1 + p.MDC2 + p.MDW;
           // Vi from the loading that gives Mmax (5.7.3.4.3), dead loads factored toward the same direction, never above Vu
+          // the permanent-load factors are those of the maximum-moment combination (as in factorP): the maximum factor
+          // where a component adds to the governing moment, the minimum where it opposes it
           const VLc = useNeg ? p.VcN : p.VcP; let VuM = Vu;
-          if (VLc != null) { const d = Math.sign(VLc) || Math.sign(p.VDC1 + p.VDC2 + p.VDW) || 1, fac = (v, gx, gn) => (Math.sign(v) === d || v === 0 ? gx : gn) * v;
-            VuM = Math.min(Vu, Math.abs(fac(p.VDC1, 1.25, 0.9) + fac(p.VDC2, 1.25, 0.9) + fac(p.VDW, 1.5, 0.65) + llc.gS * VLc)); }
+          if (VLc != null) { const sM = useNeg ? -1 : 1, gm = (M, gx, gn) => (Math.sign(M) === sM || M === 0 ? gx : gn);
+            VuM = Math.min(Vu, Math.abs(gm(p.MDC1, 1.25, 0.9) * p.VDC1 + gm(p.MDC2, 1.25, 0.9) * p.VDC2 + gm(p.MDW, 1.5, 0.65) * p.VDW + llc.gS * VLc)); }
           const Vi = Math.max(VuM - Vd, 0), Mmax = Math.max(Math.abs((useNeg ? p.MuN : p.MuP) - Md), 1e-6);
           // Mcre at the face the external loads put in tension (5.7.3.4.3-2): the bottom of the beam in positive moment;
           // in negative moment the top of the deck (no prestress or noncomposite-load stress there, deck concrete fr),
@@ -2617,7 +2619,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       const Vci = Math.max(0.02 * rf * bv * q.dv + S.Vd + S.Vi * S.Mcre / S.Mmax, 0.06 * rf * bv * q.dv);
       if (S.VLc != null) {
         L.push({ note: 'V_{LL,M} = ' + fn(S.VLc, 2) + ' k: live-load shear, with impact and distribution, from the loading placed for M_{max} (5.7.3.4.3)' });
-        L.push({ lhs: 'V_{u,M}', expr: '|Σγ_{p}V_{D} + γ_{LL}V_{LL,M}| ≤ V_{u}', res: fx(S.VuM, 1), unit: 'k' });
+        L.push({ lhs: 'V_{u,M}', expr: '|Σγ_{p}V_{D} + γ_{LL}V_{LL,M}| ≤ V_{u}', sub: 'γ_{p} of the maximum-moment combination (1.25/1.5 where the load adds to M_{max}, 0.90/0.65 where it opposes it)', res: fx(S.VuM, 1), unit: 'k' });
         L.push({ lhs: 'V_{i}', expr: 'V_{u,M} − V_{d}', sub: fx(S.VuM, 1) + ' − ' + fn(S.Vd, 2), res: fn(S.Vi, 2), unit: 'k' });
       }
       L.push({ lhs: 'V_{ci}', expr: '0.02√(f′_{c})b_{v}d_{v} + V_{d} + \\f{V_{i}M_{cre}}{M_{max}} ≥ 0.06√(f′_{c})b_{v}d_{v}', sub: '0.02√' + fn(fc, 2) + '×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(S.Vd, 1) + ' + \\f{' + fn(S.Vi, 1) + '×' + fx(S.Mcre, 0) + '}{' + fx(S.Mmax, 0) + '}', res: fx(Vci, 1), unit: 'k', ref: '5.7.3.4.3-1' });

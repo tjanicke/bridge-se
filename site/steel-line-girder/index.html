@@ -5232,7 +5232,8 @@ function run(){
     res=null; resModel=null; resKey=null; ['ratios','verdict'].forEach(id=>$(id).innerHTML='');
     // hide every result panel so nothing from the last good input stays on screen
     document.querySelectorAll('section[data-res],#cmpCard,#pourCard').forEach(c=>c.hidden=true);
-    if($('jsonTitle').textContent==='Results CSV'){ $('jsonCard').hidden=true; $('jsonTxt').value=''; } // no stale results to copy $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
+    if($('jsonTitle').textContent==='Results CSV'){ $('jsonCard').hidden=true; $('jsonTxt').value=''; } // no stale results to copy
+    $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
   }
 }
 function govPoint(){
