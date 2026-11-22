@@ -531,14 +531,24 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
     });
     return { As, ds: As > 0 ? Ay / As : 0, s: nPerFt > 0 ? 12 / nPerFt : null, db: dbMax, partial };
   }
+  // strain limits by bar grade (5.6.2.1, Table C5.6.2.1-1): εcl 0.0014 / 0.0020 / 0.0028 / 0.0030 / 0.0040 at fy 40 / 60 / 75 / 80 / 100 ksi,
+  // εtl 0.0050 up to 75 ksi and 0.0080 at 100 ksi, linear between
+  const lin = (x, xs, ys) => { if (x <= xs[0]) return ys[0]; for (let i = 1; i < xs.length; i++) if (x <= xs[i]) return ys[i - 1] + (ys[i] - ys[i - 1]) * (x - xs[i - 1]) / (xs[i] - xs[i - 1]); return ys[ys.length - 1]; };
+  const ecOf = fy => lin(fy, [40, 60, 75, 80, 100], [0.0014, 0.002, 0.0028, 0.003, 0.004]), etOf = fy => lin(fy, [75, 100], [0.005, 0.008]);
+  // rectangular stress block; where the bars do not reach yield, c from strain compatibility: α1f′cβ1cb = AsEs·0.003(ds − c)/c
   function flexure(As, ds, fc, fy, b) {
-    if (!(As > 0)) return { Mn: 0, phi: 0.9, c: 0, a: 0, et: 0, Mr: 0 };
+    if (!(As > 0)) return { Mn: 0, phi: 0.9, c: 0, a: 0, et: 0, Mr: 0, fs: fy, ecl: ecOf(fy), etl: etOf(fy) };
     const a1 = alpha1(fc), b1 = beta1(fc);
-    const c = As * fy / (a1 * fc * b1 * b), a = b1 * c, et = 0.003 * (ds - c) / c;
-    const ecl = 0.002, etl = 0.005;
+    let c = As * fy / (a1 * fc * b1 * b), fs = fy, yielded = true;
+    if (0.003 * (ds - c) / c < fy / ES) {
+      const A = a1 * fc * b1 * b, B = As * ES * 0.003, C = -As * ES * 0.003 * ds;
+      c = (-B + Math.sqrt(B * B - 4 * A * C)) / (2 * A); fs = Math.min(fy, ES * 0.003 * (ds - c) / c); yielded = false;
+    }
+    const a = b1 * c, et = 0.003 * (ds - c) / c;
+    const ecl = ecOf(fy), etl = etOf(fy);
     const phi = et >= etl ? 0.9 : et <= ecl ? 0.75 : 0.75 + 0.15 * (et - ecl) / (etl - ecl);
-    const Mn = As * fy * (ds - a / 2) / 12; // k-ft
-    return { Mn, phi, c, a, et, Mr: phi * Mn, a1, b1, fsOK: c / ds <= 0.003 / (0.003 + ecl) };
+    const Mn = As * fs * (ds - a / 2) / 12; // k-ft
+    return { Mn, phi, c, a, et, Mr: phi * Mn, a1, b1, fs, yielded, ecl, etl };
   }
   function cracked(As, ds, n, b) { const rho = As / (b * ds), k = Math.sqrt((rho * n) ** 2 + 2 * rho * n) - rho * n, j = 1 - k / 3; return { rho, k, j }; }
 
@@ -1274,15 +1284,23 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     L.push({ lhs: 'A_{s}', sub: (stl.partial ? 'bars partly developed at this point (5.10.8.1)' : 'developed bars') + ', ' + face, res: fn(stl.As, 3), unit: 'in.²/ft' });
     L.push({ lhs: 'd_{s}', expr: 'h − cover − d_{b}/2', sub: 'centroid of A_{s}', res: fn(stl.ds, 3), unit: 'in.' });
     L.push({ lhs: 'α_{1}, β_{1}', sub: "f′_{c} = " + fn(fc, 2) + ' ksi', res: fn(a1, 3) + ', ' + fn(b1, 3), ref: '5.6.2.2' });
-    const c = stl.As * fy / (a1 * fc * b1 * 12);
-    L.push({ lhs: 'c', expr: '\\f{A_{s}f_{y}}{α_{1}f′_{c}β_{1}b}', sub: '\\f{' + fn(stl.As, 3) + ' × ' + fn(fy, 0) + '}{' + fn(a1, 3) + ' × ' + fn(fc, 2) + ' × ' + fn(b1, 3) + ' × 12}', res: fn(c, 3), unit: 'in.', ref: '5.6.3.1.1-4' });
+    const cY = stl.As * fy / (a1 * fc * b1 * 12);
+    L.push({ lhs: 'c', expr: '\\f{A_{s}f_{y}}{α_{1}f′_{c}β_{1}b}', sub: '\\f{' + fn(stl.As, 3) + ' × ' + fn(fy, 0) + '}{' + fn(a1, 3) + ' × ' + fn(fc, 2) + ' × ' + fn(b1, 3) + ' × 12}' + (F.yielded === false ? ', bars assumed to yield' : ''), res: fn(cY, 3), unit: 'in.', ref: '5.6.3.1.1-4' });
+    let c = cY, fs = fy;
+    if (F.yielded === false) {
+      L.push({ lhs: 'ε_{s}', expr: '0.003(d_{s} − c)/c', sub: '0.003(' + fn(stl.ds, 3) + ' − ' + fn(cY, 3) + ')/' + fn(cY, 3) + ' < f_{y}/E_{s} = ' + fn(fy / 29000, 5) + ': the bars do not yield', res: fn(0.003 * (stl.ds - cY) / cY, 5) });
+      c = F.c; fs = F.fs;
+      L.push({ lhs: 'c', expr: 'α_{1}f′_{c}β_{1}cb = A_{s}E_{s}0.003(d_{s} − c)/c', sub: 'strain compatibility, E_{s} = 29,000 ksi', res: fn(c, 3), unit: 'in.', ref: '5.6.2.1' });
+      L.push({ lhs: 'f_{s}', expr: 'E_{s}0.003(d_{s} − c)/c', sub: '29000 × 0.003(' + fn(stl.ds, 3) + ' − ' + fn(c, 3) + ')/' + fn(c, 3), res: fn(fs, 2), unit: 'ksi' });
+    }
     const a = b1 * c, et = 0.003 * (stl.ds - c) / c;
     L.push({ lhs: 'a', expr: 'β_{1}c', res: fn(a, 3), unit: 'in.' });
     L.push({ lhs: 'ε_{t}', expr: '0.003(d_{s} − c)/c', sub: '0.003(' + fn(stl.ds, 3) + ' − ' + fn(c, 3) + ')/' + fn(c, 3), res: fn(et, 5), ref: '5.6.2.1' });
-    const phi = et >= 0.005 ? 0.9 : et <= 0.002 ? 0.75 : 0.75 + 0.15 * (et - 0.002) / 0.003;
-    L.push({ lhs: 'φ', expr: et >= 0.005 ? 'tension controlled' : '0.75 + 0.15(ε_{t} − 0.002)/(0.005 − 0.002)', res: fn(phi, 3), ref: '5.5.4.2' });
-    const Mn = stl.As * fy * (stl.ds - a / 2) / 12;
-    L.push({ lhs: 'M_{n}', expr: 'A_{s}f_{y}(d_{s} − a/2)/12', sub: fn(stl.As, 3) + ' × ' + fn(fy, 0) + '(' + fn(stl.ds, 3) + ' − ' + fn(a, 3) + '/2)/12', res: fn(Mn, 2), unit: 'k-ft/ft', ref: '5.6.3.2.3-1' });
+    const ecl = F.ecl != null ? F.ecl : 0.002, etl = F.etl != null ? F.etl : 0.005;
+    const phi = et >= etl ? 0.9 : et <= ecl ? 0.75 : 0.75 + 0.15 * (et - ecl) / (etl - ecl);
+    L.push({ lhs: 'φ', expr: et >= etl ? 'tension controlled, ε_{t} ≥ ε_{tl}' : et <= ecl ? 'compression controlled, ε_{t} ≤ ε_{cl}' : '0.75 + 0.15(ε_{t} − ε_{cl})/(ε_{tl} − ε_{cl})', sub: 'ε_{cl} = ' + fn(ecl, 4) + ', ε_{tl} = ' + fn(etl, 4) + ' for f_{y} = ' + fn(fy, 0) + ' ksi (Table C5.6.2.1-1)', res: fn(phi, 3), ref: '5.5.4.2' });
+    const Mn = stl.As * fs * (stl.ds - a / 2) / 12;
+    L.push({ lhs: 'M_{n}', expr: 'A_{s}f_{s}(d_{s} − a/2)/12', sub: fn(stl.As, 3) + ' × ' + fn(fs, 2) + '(' + fn(stl.ds, 3) + ' − ' + fn(a, 3) + '/2)/12', res: fn(Mn, 2), unit: 'k-ft/ft', ref: '5.6.3.2.3-1' });
     const Mr = phi * Mn;
     L.push({ lhs: 'φM_{n}', sub: fn(phi, 3) + ' × ' + fn(Mn, 2), res: fn(Mr, 2), unit: 'k-ft/ft' });
     return chk(L, Mr, F.Mr, 'φM_{n}', 'k-ft/ft', 'section analysis');
@@ -1800,7 +1818,7 @@ function renderMethod() {
     '<b>Analysis.</b> Continuous slab of constant stiffness (or simple spans), influence lines by Müller-Breslau; HL-93 design truck (14–30 ft rear axle) or tandem with IM 33% plus lane load, axles that relieve the effect neglected; 90% of two trucks plus lane for negative moment between the points of contraflexure. Fatigue truck with 30 ft rear axle spacing and IM 15%.',
     '<b>Live load distribution.</b> Equivalent strips (4.6.2.3): E = 84 + 1.44√(L₁W₁) ≤ 12W/N<sub>L</sub> for multiple lanes, 10 + 5√(L₁W₁) for one lane; skew factor r = 1.05 − 0.25 tan θ ≤ 1.0; multiple presence is embedded; fatigue uses the single-lane strip divided by 1.2. At negative moment points the strip uses the average of the adjacent spans.',
     '<b>Edge beam (4.6.2.1.4b, DG 3.2.11).</b> Width = parapet base + 12 in. + ¼ single-lane strip ≤ ½ strip or 72 in.; live load = 0.5(1 + IM) × vehicle + lane × (width − parapet base)/120 in. over the edge beam width. Dead load per foot as for the interior strip (parapets spread across the width, DG 3.2.11).',
-    '<b>Flexure (5.6.3.2).</b> Rectangular stress block, f<sub>s</sub> = f<sub>y</sub> checked by c/d<sub>s</sub> ≤ 0.6, φ from ε<sub>t</sub> (5.5.4.2). Minimum reinforcement: φM<sub>n</sub> ≥ min(M<sub>cr</sub>, 1.33M<sub>u</sub>), M<sub>cr</sub> = γ<sub>3</sub>γ<sub>1</sub>f<sub>r</sub>S with γ<sub>1</sub> = 1.6.',
+    '<b>Flexure (5.6.3.2).</b> Rectangular stress block, with strain compatibility where the bars do not yield, and φ from ε<sub>t</sub> between the grade\'s limits ε<sub>cl</sub> and ε<sub>tl</sub> (5.5.4.2; 0.0020 and 0.0050 for 60 ksi, up to 0.0040 and 0.0080 for 100 ksi, Table C5.6.2.1-1). Minimum reinforcement: φM<sub>n</sub> ≥ min(M<sub>cr</sub>, 1.33M<sub>u</sub>), M<sub>cr</sub> = γ<sub>3</sub>γ<sub>1</sub>f<sub>r</sub>S with γ<sub>1</sub> = 1.6.',
     '<b>Service (5.6.7) and fatigue (5.5.3).</b> Cracked transformed section with n = E<sub>s</sub>/E<sub>c</sub>, E<sub>c</sub> by Eq. 5.4.2.4-1; f<sub>ss</sub> = M<sub>s</sub>/(A<sub>s</sub>jd<sub>s</sub>) ≤ 0.6f<sub>y</sub>; s ≤ 700γ<sub>e</sub>/(β<sub>s</sub>f<sub>ss</sub>) − 2d<sub>c</sub>. Fatigue I: 1.75 × fatigue truck range ≤ 26 − 22f<sub>min</sub>/f<sub>y</sub>, f<sub>min</sub> from permanent load plus the Fatigue I minimum, interior strip.',
     '<b>Edge beam shear (5.7.3).</b> General procedure with ε<sub>s</sub> = (|M<sub>u</sub>|/d<sub>v</sub> + V<sub>u</sub>)/(E<sub>s</sub>A<sub>s</sub>), |M<sub>u</sub>| ≥ V<sub>u</sub>d<sub>v</sub>; β by Eq. 5.7.3.4.2-1 where A<sub>v</sub> ≥ A<sub>v,min</sub>, otherwise Eq. 5.7.3.4.2-2 with s<sub>xe</sub>. Checked from the critical section d<sub>v</sub> from the support face toward midspan. Longitudinal reinforcement by 5.7.3.5.',
     '<b>Distribution reinforcement.</b> IDOT ABD 15.8 percentages of the main reinforcement (simple or continuous spans), not less than shrinkage and temperature reinforcement (5.10.6).',

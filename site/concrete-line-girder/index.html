@@ -1037,6 +1037,45 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       llc.vehicles.forEach(v => { const t = axleEnv(ILa, hgrid, v.w, v.s); take(t.max * (1 + llc.IM) + lMax, t.min * (1 + llc.IM) + lMin); });
       return out;
     }
+    // LFD: live-load shear from the same HS loading arrangement that gives the largest positive and negative moment at s,
+    // for Vi in Eq. 9-27 (9.20.2.2: shear occurring simultaneously with Mmax). Axles, the lane load and its concentrated
+    // loads stay where the moment search placed them; a load exactly at s takes the larger one-sided shear. Impact and
+    // distribution are those of the shear envelope at s. Returns signed values per lane before γ.
+    function concurrentLFD(s, side, si, envM, envV, gV) {
+      const st = v => Math.round(v / hgrid), sc = Lf.scale, h = hgrid;
+      const ILM = IL(s, side).IM, g = dfAt(spans[si]), r = g.Vend / g.V;
+      const VA = scaleEnds(IL(s, 'r').IV, r), VB = scaleEnds(IL(s, 'l').IV, r);
+      const pick = (a, b) => (Math.abs(a) >= Math.abs(b) ? a : b);
+      // grid points either side of s: a load on either is taken as at s, just right (VA) or just left (VB) of it
+      let jR = 0; while (jR < xg.length - 1 && xg[jR] < s - 1e-7) jR++;
+      let jL = xg.length - 1; while (jL > 0 && xg[jL] > s + 1e-7) jL--;
+      const vR = j => (j === jL || j === jR ? VA[jR] : VA[j]), vL = j => (j === jL || j === jR ? VB[jL] : VA[j]);
+      const at = (ws, offs, i) => { let a = 0, b = 0; ws.forEach((w, k) => { const j = i - offs[k]; if (j >= 0 && j < ILM.length) { a += w * vR(j); b += w * vL(j); } }); return pick(a, b); };
+      const one = sign => { // sign +1: largest positive moment; -1: largest negative moment
+        const gov = sign > 0 ? envM.govMax : envM.govMin;
+        if (gov === 'truck' || gov === 'military') {
+          const cfgs = gov === 'military' ? [[[24, 24], [0, st(4)]]] : [];
+          if (gov === 'truck') for (let s2 = 14; s2 <= 30; s2++) cfgs.push([[8, 32, 32], [0, st(14), st(14 + s2)]], [[32, 32, 8], [0, st(s2), st(s2 + 14)]]);
+          let best = null;
+          cfgs.forEach(([w, o]) => { const f = movingF(ILM, w, o); for (let i = 0; i < f.length; i++) if (!best || sign * f[i] > sign * best.v) best = { v: f[i], w, o, i }; });
+          return best ? at(best.w, best.o, best.i) * (gov === 'truck' ? sc : 1) : 0;
+        }
+        // lane: 0.64 k/ft on the parts of the moment influence line with this sign, 18 k at the peak ordinate
+        // (and, for negative moment over a pier, at the peak in the second span as well)
+        let u = 0, jMax = -1; const spanPk = new Map();
+        for (let j = 0; j < ILM.length; j++) {
+          const v = ILM[j]; if (sign * v > 0) u += 0.64 * h * VA[j];
+          if (sign > 0 && (jMax < 0 || v > ILM[jMax])) jMax = j;
+          if (sign < 0) { const k = gSpanArr[j]; if (!spanPk.has(k) || v < ILM[spanPk.get(k)]) spanPk.set(k, j); }
+        }
+        let P = 0;
+        if (sign > 0) P = 18 * pick(vR(jMax), vL(jMax));
+        else { const pk = [...spanPk.values()].filter(j => ILM[j] < 0).sort((a, b) => ILM[a] - ILM[b]); if (pk[0] != null) P += 18 * pick(vR(pk[0]), vL(pk[0])); if (envM.two && pk[1] != null) P += 18 * pick(vR(pk[1]), vL(pk[1])); }
+        return (u + P) * sc;
+      };
+      const imp = v => v * (1 + (v >= 0 ? envV.Ip : envV.In)) * gV;
+      return { VcP: imp(one(1)), VcN: cont ? imp(one(-1)) : 0 };
+    }
     // distribution: per-girder loads need none; special permits use one lane with multiple presence removed (MBE 6A.4.5.4.2b)
     const gSel = g => perGirder ? { M: 1, V: 1 } : (llc.kind === 'permit' && llc.single ? { M: g.MF, V: g.VF } : g);
 
@@ -1083,7 +1122,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       p.MLLp = env.max * gPs.M; p.MLLn = env.min * gNs.M; p.dualGov = env.dualGov;
       p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V;
       p.MFLp = fat.max * gP.MF; p.MFLn = fat.min * gN.MF;
-      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax });
+      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax }, p.isPier ? {} : concurrentLFD(p.x, side, si0, env, envV, gPs.V));
       factorP(p);
     });
 
@@ -1368,7 +1407,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         let ny = 0, nn = 0; strands.forEach(g => { const q = strandState(g, z, Lb); ny += g.n * q.y; nn += g.n; });
         const yAll = ny / nn, dP = hc - yAll, dRaw = useNeg ? AsAt(p.x).ds : dP, dS = Math.max(dRaw, 0.8 * hc);
         const Vd = Math.abs(p.VDC1 + p.VDC2 + p.VDW), Md = Math.abs(p.MDC1 + p.MDC2 + p.MDW);
-        const Vi = Math.max(Vu - Vd, 0), Mmax = Math.max(Mu - Md, 1e-6);
+        // Vi: factored shear from the loading that gives Mmax (9.20.2.2), not the shear envelope
+        const VLc = useNeg ? p.VcN : p.VcP, VuM = VLc != null ? Math.min(Vu, Math.abs(1.3 * (p.VDC1 + p.VDC2 + p.VDW) + llc.gS * VLc)) : Vu;
+        const Vi = Math.max(VuM - Vd, 0), Mmax = Math.max(Mu - Md, 1e-6);
         let Mcr, fpeT, fdT, It, Yt;
         if (!useNeg) {
           It = comp ? cs.I : I; Yt = comp ? cs.yb : yb; fpeT = ps.F / A + ps.F * ps.e / Sb;
@@ -1397,7 +1438,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           iRatio = Vni > 0 ? Vui / (phiV * Vni) : 99;
         }
         return { x: p.x, z, frac, useNeg, Mu, Vu, MDC1: p.MDC1, MDC2: p.MDC2, MDW: p.MDW, MLLp: p.MLLp, MLLn: p.MLLn, VDC1: p.VDC1, VDC2: p.VDC2, VDW: p.VDW, VLLp: p.VLLp, VLLn: p.VLLn, dualGov: false, stSrc: st.src,
-          dv: dS, de: dRaw, Vp, es: null, beta: null, theta: 45, Vc, Vs, Vn, method: 'lfd', simp: { lfd: true, Vd, Vi, Md, Mmax, Mcr, fpeT, fdT, It, Yt, F: ps.F, e: ps.e, fpc, yc, Vci, Vcw, Vs0, VsMax, rf },
+          dv: dS, de: dRaw, Vp, es: null, beta: null, theta: 45, Vc, Vs, Vn, method: 'lfd', simp: { lfd: true, Vd, Vi, VuM, VLc, Md, Mmax, Mcr, fpeT, fdT, It, Yt, F: ps.F, e: ps.e, fpc, yc, Vci, Vcw, Vs0, VsMax, rf },
           ratio: Vu / (phiV * Vn), Av: st.Av, s: st.s, sReq, smax, sRatio: Math.max(st.s / smax, st.s / sTie), AvMin, AvRatio: AvMin / st.Av, Vui, Vni, iRatio, hs,
           Treq: null, Tmax: null, TreqUsed: null, Tprov: null, lRatio: null, phiF: 1, tags: p.tags, xFace };
       };
@@ -1510,7 +1551,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const il = IL(x, 'r');
       const env = llEnv(il.IM, dualAt(x), i, true, x), envV = llEnv(il.IV, false, i, false, x), gPs = gSel(gP), gNs = gSel(gN);
       p.MLLp = env.max * gPs.M; p.MLLn = env.min * gNs.M; p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V; p.dualGov = env.dualGov;
-      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax });
+      if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax }, concurrentLFD(x, 'r', i, env, envV, gPs.V));
       factorP(p);
       p.g = gP; p.gNeg = gN;
       const dvp = developed(p.z, b.Lb, flexFilt); p.flex = flexAt(dvp.Ae, dvp.y);
@@ -2610,6 +2651,13 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const hcT = res.comp ? C.cs.hc : C.shp.h;
     L.push({ lhs: 'd', expr: 'max(d_{p}, 0.8h)', sub: 'd_{p} = ' + fn(q.de, 2) + ', 0.8h = ' + fn(0.8 * hcT, 2), res: fn(q.dv, 2), unit: 'in.', ref: '9.20.2.2' });
     L.push({ lhs: 'M_{cr}', expr: '\\f{I}{Y_{t}}(6√(f′_{c}) + f_{pe} − f_{d})', sub: '\\f{' + fx(S.It, 0) + '}{' + fn(S.Yt, 2) + '}(' + fn(6 * rf, 3) + ' + ' + fn(S.fpeT, 3) + ' − ' + fn(S.fdT, 3) + ') / 12', res: fx(S.Mcr, 0), unit: 'k-ft', ref: '9-28' });
+    if (S.VLc != null) {
+      L.push({ note: 'V_{L+I,M} = ' + fn(S.VLc, 2) + ' k: live-load shear with the truck, lane or military loading placed for M_{max} (9.20.2.2)' });
+      const VD = q.VDC1 + q.VDC2 + q.VDW;
+      L.push({ lhs: 'V_{u,M}', expr: '|1.3[V_{D} + 1.67V_{L+I,M}]| ≤ V_{u}', sub: '|1.3[' + sg(VD) + ' + 1.67 × ' + ng(S.VLc) + ']|', res: fx(S.VuM, 1), unit: 'k', ref: '9.20.2.2' });
+      L.push({ lhs: 'V_{i}', expr: 'V_{u,M} − V_{d}', sub: fx(S.VuM, 1) + ' − ' + fn(S.Vd, 2), res: fn(S.Vi, 2), unit: 'k' });
+      L.push({ lhs: 'M_{max}', expr: 'M_{u} − M_{d}', sub: fx(q.Mu, 0) + ' − ' + fx(S.Md, 0), res: fx(S.Mmax, 1), unit: 'k-ft' });
+    }
     L.push({ lhs: 'V_{ci}', expr: '0.6√(f′_{c})b′d + V_{d} + \\f{V_{i}M_{cr}}{M_{max}} ≥ 1.7√(f′_{c})b′d', sub: fn(0.6 * rf, 4) + '×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(S.Vd, 2) + ' + \\f{' + fn(S.Vi, 2) + '×' + fx(S.Mcr, 0) + '}{' + fx(S.Mmax, 1) + '}', res: fx(S.Vci, 1), unit: 'k', ref: '9-27' });
     L.push({ lhs: 'f_{pc}', expr: '\\f{F}{A} − \\f{Fe(y_{c} − y_{b})}{I} + \\f{M_{DC1}(y_{c} − y_{b})}{I}', sub: 'F = ' + fx(S.F, 1) + ' k, e = ' + fn(S.e, 3) + ', y_{c} = ' + fn(S.yc, 2) + ' in.', res: fn(S.fpc, 3), unit: 'ksi', ref: '9.20.2.3' });
     L.push({ lhs: 'V_{cw}', expr: '(3.5√(f′_{c}) + 0.3f_{pc})b′d + V_{p}', sub: '(' + fn(3.5 * rf, 4) + ' + 0.3×' + fn(S.fpc, 3) + ')×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(q.Vp, 2), res: fx(S.Vcw, 1), unit: 'k', ref: '9-29' });
@@ -2729,20 +2777,24 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const titleTxt = mode === 'summary' ? 'Calculation summary' : mode === 'all' ? 'Comprehensive calculation — all analysis points' : 'Comprehensive calculation — tenth points and governing locations';
     const structure = meta.structure || '(structure number)';
     const F = new W.Flow({
-      info: { title: 'PPC line girder ' + titleTxt.toLowerCase() + ' — ' + structure, subject: edName, creator: 'Bridge SE Concrete Line Girder ' + (opts.appVersion || '') },
+      info: { title: 'Concrete line girder ' + titleTxt.toLowerCase() + ' — ' + structure, subject: edName, creator: 'Bridge SE Concrete Line Girder ' + (opts.appVersion || '') },
       header: (d, i, n, m) => { if (i === 1) return; d.text(m.l, 34, 'Concrete Line Girder · ' + structure, { font: 'B', size: 8, color: F.pal.ink }); d.text(d.W - m.r - W.textWidth(titleTxt, 'R', 8), 34, titleTxt, { size: 8, color: F.pal.mute }); d.line(m.l, 40, d.W - m.r, 40, { w: 0.4, color: F.pal.rule }); },
       footer: (d, i, n, m) => { const y = d.H - 30; d.line(m.l, y - 9, d.W - m.r, y - 9, { w: 0.4, color: F.pal.rule }); d.text(m.l, y, 'Bridge SE Concrete Line Girder ' + (opts.appVersion || '') + ' · ' + edName, { size: 6.6, color: F.pal.mute }); d.text(m.l, y + 8.5, 'Generated ' + stamp + ' · input ID ' + inputId, { size: 6.6, color: F.pal.mute }); const s = 'Designed by ' + (meta.designedBy || '______') + '    Checked by ______'; d.text(d.W - m.r - W.textWidth(s, 'R', 6.8), y, s, { size: 6.8, color: F.pal.mute }); const t = 'Sheet ' + i + ' of ' + n; d.text(d.W - m.r - W.textWidth(t, 'B', 6.8), y + 8.5, t, { font: 'B', size: 6.8, color: F.pal.ink }); }
     });
     const deck = res.kind === 'deck';
     // ---- title block
-    F.doc.text(F.m.l, 50, 'PPC LINE GIRDER CHECK', { font: 'B', size: 9, color: F.pal.accent });
+    F.doc.text(F.m.l, 50, 'CONCRETE LINE GIRDER CHECK', { font: 'B', size: 9, color: F.pal.accent });
     F.y = 58; F.doc.text(F.m.l, F.y + 18, titleTxt, { font: 'B', size: 17, color: F.pal.ink }); F.y += 30;
     F.doc.text(F.m.l, F.y + 9, edName, { size: 9, color: F.pal.mute }); F.y += 18;
     const girderDef = (deck ? 'Deck beam' : (model.girder === 'exterior' ? 'Exterior' : 'Interior') + ' beam') + ', ' + res.spans.length + ' span' + (res.spans.length > 1 ? 's' + (res.cont ? ', continuous for live load' : '') : '');
     const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Girder', meta.girder || girderDef]];
     F.box(4 * 20 + 46, (d, x0, y0, w) => {
       const rowH = 20, lw = 120;
-      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); d.text(x0 + lw + 8, y + 13.5, String(r[1]), { font: 'B', size: 9.5, color: F.pal.ink }); });
+      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); { // long names: smaller type down to 7 pt, then shortened with an ellipsis, so the text stays in its cell
+        const room = w - lw - 14; let t = String(r[1]), sz = 9.5;
+        while (sz > 7 && W.textWidth(t, 'B', sz) > room) sz -= 0.25;
+        if (W.textWidth(t, 'B', sz) > room) { while (t.length > 1 && W.textWidth(t + '…', 'B', sz) > room) t = t.slice(0, -1); t = t.trimEnd() + '…'; }
+        d.text(x0 + lw + 8, y + 13.5, t, { font: 'B', size: sz, color: F.pal.ink }); } });
       const y = y0 + 4 * rowH + 6, half = w / 2 - 4;
       [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
         d.rect(x, y, half, 36, { stroke: F.pal.mute, w: 0.6 });
@@ -2765,17 +2817,17 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     if (LFDR) {
       F.h3('Load rating, ' + RL.name + (R.complete ? '' : ' — partial: shear not rated'));
       F.table([{ h: 'Limit state', w: 2.4 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 3.6 }],
-        R.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Strength') ? 'A1 1.30, A2 ' + fn(R.A2inv, 2) + ' / ' + fn(R.A2op, 2) : (q.inv.basis || '') + (q.op ? '' : '; inventory only')]));
-      if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft, ' + fn(R.inventory.inv * RL.tons, 1) + ' tons)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft, ' + fn(R.operating.op * RL.tons, 1) + ' tons)' : '') + '.', { size: 8.4 });
+        R.summary.map(q => [q.lim, { t: fn(q.inv.inv, Math.abs(q.inv.inv - 1) < 0.005 && q.inv.inv !== 1 ? 3 : 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Strength') ? 'A1 1.30, A2 ' + fn(R.A2inv, 2) + ' / ' + fn(R.A2op, 2) : (q.inv.basis || '') + (q.op ? '' : '; inventory only')]));
+      if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, Math.abs(R.inventory.inv - 1) < 0.005 && R.inventory.inv !== 1 ? 3 : 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft, ' + fn(R.inventory.inv * RL.tons, 1) + ' tons)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft, ' + fn(R.operating.op * RL.tons, 1) + ' tons)' : '') + '.', { size: 8.4 });
     } else {
     F.h3((R.permitOnly ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'HL-93 design load rating (MBE LRFR)') + (R.complete ? '' : ' — partial: shear not rated'));
     F.table([{ h: 'Limit state', w: 2.4 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 3.6 }],
-      R.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Service') ? 'γLL ' + fn(R.gS3 || 0.8, 2) + ', fR = 0.19√f′c; inventory only' : 'γDC ' + fn(R.gDC || 1.25, 2) + ', γDW ' + R.gDW + ', γLL ' + (R.permitOnly && res.permit ? fn(res.permit.opts.gR, 2) : fn(R.gLinv || 1.75, 2) + ' / ' + fn(R.gLop || 1.35, 2)) + (/shear/.test(q.lim) ? '; φs = 1.0' : '; φcφs = ' + fn(R.phiCS, 2))]));
-    if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft)' : '') + '.', { size: 8.4 });
+      R.summary.map(q => [q.lim, { t: fn(q.inv.inv, Math.abs(q.inv.inv - 1) < 0.005 && q.inv.inv !== 1 ? 3 : 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Service') ? 'γLL ' + fn(R.gS3 || 0.8, 2) + ', fR = 0.19√f′c; inventory only' : 'γDC ' + fn(R.gDC || 1.25, 2) + ', γDW ' + R.gDW + ', γLL ' + (R.permitOnly && res.permit ? fn(res.permit.opts.gR, 2) : fn(R.gLinv || 1.75, 2) + ' / ' + fn(R.gLop || 1.35, 2)) + (/shear/.test(q.lim) ? '; φs = 1.0' : '; φcφs = ' + fn(R.phiCS, 2))]));
+    if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, Math.abs(R.inventory.inv - 1) < 0.005 && R.inventory.inv !== 1 ? 3 : 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft)' : '') + '.', { size: 8.4 });
     if (!LFDR && RL && RL.tons && R.inventory && !R.permitOnly) F.para(RL.veh + ': inventory ' + fn(R.inventory.inv * RL.tons, 1) + ' tons' + (R.operating ? ', operating ' + fn(R.operating.op * RL.tons, 1) + ' tons' : '') + '.', { size: 8.6 });
     if (PM && !R.permitOnly) {
       F.h3('Permit load rating (MBE 6A.4.5)');
-      F.table([{ h: 'Limit state', w: 2.4 }, { h: 'RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 5.5 }], PM.rating.summary.map(q => [q.lim, { t: fn(q.inv.inv, 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), 'γL ' + fn(PM.opts.gR, 2) + ', ' + PM.opts.typeName]));
+      F.table([{ h: 'Limit state', w: 2.4 }, { h: 'RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 5.5 }], PM.rating.summary.map(q => [q.lim, { t: fn(q.inv.inv, Math.abs(q.inv.inv - 1) < 0.005 && q.inv.inv !== 1 ? 3 : 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), 'γL ' + fn(PM.opts.gR, 2) + ', ' + PM.opts.typeName]));
     }
     }
     if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ' at x = ' + fn(res.controlling.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '.', { size: 8.6 });
@@ -2946,6 +2998,8 @@ const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;',
 const f0 = v => (v == null || !isFinite(v) ? '–' : Math.round(v).toLocaleString('en-US'));
 const f1 = v => (v == null || !isFinite(v) ? '–' : (+v).toLocaleString('en-US', { minimumFractionDigits: 1, maximumFractionDigits: 1 }));
 const f2 = v => (v == null || !isFinite(v) ? '–' : (+v).toFixed(2));
+// rating factors within 0.005 of 1.0 get a third decimal, so 0.9994 does not read as 1.00
+const fRF = v => (v == null || !isFinite(v) ? '–' : (+v).toFixed(Math.abs(v - 1) < 0.005 && v !== 1 ? 3 : 2));
 const f3 = v => (v == null || !isFinite(v) ? '–' : (+v).toFixed(3));
 const clone = o => JSON.parse(JSON.stringify(o));
 const STORE = 'ppc-line-girder-v1';
@@ -3377,7 +3431,7 @@ function liveText(L) {
 }
 function renderRatingLFR() {
   const r = R.rating, RL = R.ratingLoad;
-  const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : f2(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
+  const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : fRF(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
   const pl = r.complete ? '' : ' — partial', tons = v => (v != null && isFinite(v) ? ' · ' + f1(v * RL.tons) + ' tons' : '');
   let h = '<div class="card-h"><h2>Load rating, ' + esc(RL.name) + '</h2><span class="status">MBE 6B.5.3.3 · A1 ' + f2(r.A1) + ' · A2 ' + f2(r.A2inv) + ' inventory, ' + f2(r.A2op) + ' operating</span></div>';
   if (!r.complete) h += '<div class="warnbox" style="margin-bottom:12px"><div><b>Partial rating: flexure and service limits only.</b> Shear is not rated because no shear reinforcement is entered.</div></div>';
@@ -3385,14 +3439,14 @@ function renderRatingLFR() {
     tile('Operating' + pl, r.operating && r.operating.op, r.operating ? r.operating.lim + ' at x = ' + f2(r.operating.x) + ' ft' + tons(r.operating.op) : '') + '</div>';
   const basis = q => q.lim.startsWith('Strength') ? 'A1 ' + f2(r.A1) + ', A2 ' + f2(r.A2inv) + ' / ' + f2(r.A2op) + (/shear/.test(q.lim) ? ', φ 0.90' : ', φ 1.00') : (q.inv.basis || '') + (q.op ? '' : '; inventory only');
   h += '<div class="tbl-wrap" style="margin-top:12px;max-height:none"><table class="res"><thead><tr><th class="l">Limit state</th><th>Inventory RF</th><th>at x, ft</th><th>Operating RF</th><th>at x, ft</th><th class="l">Basis</th></tr></thead><tbody>' +
-    r.summary.map(q => '<tr><td class="l">' + esc(q.lim) + '</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + f2(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>' + (q.op ? f2(q.op.op) : '–') + '</td><td>' + (q.op ? f2(q.op.x) : '–') + '</td><td class="l">' + esc(basis(q)) + '</td></tr>').join('') + '</tbody></table></div>';
+    r.summary.map(q => '<tr><td class="l">' + esc(q.lim) + '</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + fRF(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>' + (q.op ? f2(q.op.op) : '–') + '</td><td>' + (q.op ? f2(q.op.x) : '–') + '</td><td class="l">' + esc(basis(q)) + '</td></tr>').join('') + '</tbody></table></div>';
   h += '<p class="hint" style="margin-top:8px">Load factor rating (MBE 6B): RF = (C − A1·D) / (A2·L(1 + I)) with the design distribution and impact; the service limits are inventory checks with unfactored loads, and strand tension also at operating (0.9f*y). Tons = RF × ' + f1(RL.tons) + ' (' + esc(RL.veh) + '). Legal and permit vehicles are not included.</p>';
   $('#c-rating').innerHTML = h;
 }
 function renderRating() {
   if (R.lfd) return renderRatingLFR();
   const r = R.rating, PM = R.permit, RL = R.ratingLoad, PO = r.permitOnly;
-  const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : f2(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
+  const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : fRF(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
   let h = '<div class="card-h"><h2>' + (PO ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating, ' + esc(RL.name) + ' (LRFR factors)' : 'HL-93 design load rating (LRFR)') + '</h2><span class="status">φc ' + r.phiC.toFixed(2) + ' · φs ' + r.phiS.toFixed(2) + ' (φcφs ≥ 0.85) · shear φs = 1.0 (SSM 4.3.3.2) · γDW ' + r.gDW.toFixed(2) + '</span></div>';
   if (!r.complete) h += '<div class="warnbox" style="margin-bottom:12px"><div><b>Partial rating: flexure and Service III only.</b> Shear is not rated because no shear reinforcement is entered. Enter the deck-beam stirrups from the IDOT base sheets to obtain a complete rating.</div></div>';
   const pl = r.complete ? '' : ' — partial';
@@ -3402,9 +3456,9 @@ function renderRating() {
     tile('Inventory' + pl, r.inventory && r.inventory.inv, r.inventory ? r.inventory.lim + ' at x = ' + f2(r.inventory.x) + ' ft' + tons(r.inventory.inv) : '') +
     tile('Operating' + pl, r.operating && r.operating.op, r.operating ? r.operating.lim + ' at x = ' + f2(r.operating.x) + ' ft' + tons(r.operating.op) : '') +
     (PM ? tile('Permit', PM.min && PM.min.inv, PM.min ? PM.min.lim + ' at x = ' + f2(PM.min.x) + ' ft · γL ' + f2(PM.opts.gR) : '') : '')) + '</div>';
-  const prow = PM && !PO ? PM.rating.summary.map(q => '<tr><td class="l">' + esc(q.lim) + ', permit</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + f2(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>–</td><td>–</td><td class="l">' + esc('γL ' + f2(PM.opts.gR) + ', ' + PM.opts.typeName) + '</td></tr>').join('') : '';
+  const prow = PM && !PO ? PM.rating.summary.map(q => '<tr><td class="l">' + esc(q.lim) + ', permit</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + fRF(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>–</td><td>–</td><td class="l">' + esc('γL ' + f2(PM.opts.gR) + ', ' + PM.opts.typeName) + '</td></tr>').join('') : '';
   h += '<div class="tbl-wrap" style="margin-top:12px;max-height:none"><table class="res"><thead><tr><th class="l">Limit state</th><th>' + (PO ? 'Permit RF' : 'Inventory RF') + '</th><th>at x, ft</th><th>' + (PO ? '' : 'Operating RF') + '</th><th>' + (PO ? '' : 'at x, ft') + '</th><th class="l">Basis</th></tr></thead><tbody>' +
-    r.summary.map(q => '<tr><td class="l">' + esc(q.lim) + '</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + f2(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>' + (q.op && !PO ? f2(q.op.op) : '–') + '</td><td>' + (q.op && !PO ? f2(q.op.x) : '–') + '</td><td class="l">' +
+    r.summary.map(q => '<tr><td class="l">' + esc(q.lim) + '</td><td class="' + (q.inv.inv < 1 ? 'over' : '') + '">' + fRF(q.inv.inv) + '</td><td>' + f2(q.inv.x) + '</td><td>' + (q.op && !PO ? f2(q.op.op) : '–') + '</td><td>' + (q.op && !PO ? f2(q.op.x) : '–') + '</td><td class="l">' +
       esc(q.lim.startsWith('Service') ? 'γLL ' + f2(r.gS3) + ', f_R = 0.19√f′c; inventory only' : PO ? 'γDC ' + f2(r.gDC) + ', γDW ' + r.gDW + ', γL ' + f2(PM.opts.gR) + ', ' + PM.opts.typeName : 'γDC ' + f2(r.gDC) + ', γDW ' + r.gDW + ', γLL ' + f2(r.gLinv) + ' / ' + f2(r.gLop)) + '</td></tr>').join('') + prow + '</tbody></table></div>';
   h += '<p class="hint" style="margin-top:8px">' + (PO || PM ? 'Permit rating per MBE 6A.4.5: ' + esc(PM.opts.typeName) + (PM.opts.single ? ', one lane loaded with the 1.2 multiple presence factor removed' : ', multi-lane distribution factors') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '. The MBE intends permit ratings for bridges that rate at least 1.0 for legal loads. ' : '') +
     (RL ? (RL.tons ? 'Pedestrian bridge: rated for the ' + RL.veh + ' maintenance vehicle with the MBE LRFR factors (the Guide Spec and the MBE give no pedestrian rating method). ' : 'Pedestrian bridge: rated for the 90 psf pedestrian load with the MBE LRFR factors. ') : '') +
@@ -3671,7 +3725,7 @@ function lfdNotes() {
     '<b>Release.</b> ' + (Lf.release === 'lift' ? 'At the lifting points.' : 'At transfer, the beam spanning between its ends on the casting bed.') + ' Prestress transferred over 50 strand diameters (9.20.2.4). Limits 0.60f′ci and ' + (Lf.relTension === 'none' ? 'the lesser of 200 psi and 3√f′ci (no bonded reinforcement)' : '7.5√f′ci with bonded reinforcement') + ' (9.15.2.1).',
     '<b>Service.</b> 9.15.2.2 after losses: compression 0.60f′c under all loads, 0.40f′c under prestress and dead load, and 0.40f′c under live load plus half the prestress and dead load, for the beam top and the deck top (deck f′c); tension under the full live load plus impact at the bottom of the beam, ' + (Lf.corrosive ? '3√f′c (severe corrosive exposure)' : '6√f′c') + '. Uncracked sections (9.17.1).',
     '<b>Flexure.</b> 9.17 for bonded strands with f*su = f′s[1 − (γ*/β1)(ρ*f′s/f′c)], γ* = 0.28, ρ* = A*s/bd: rectangular (9-13) when the stress block lies in the ' + (I ? 'deck (deck f′c)' : 'top slab') + ', otherwise flanged (9-14) with b′ = ' + (I ? 'the beam top flange width' : 'both side walls') + '; φ = 1.0 (9.14). Strands not fully developed (ℓd = (f*su − ⅔f<sub>se</sub>)D, twice that for debonded strands, 9.28) are credited in proportion to their stress. Maximum steel by the 0.36β1 index (9.18.1); minimum steel φMn ≥ 1.2M*cr, waived at 1.33Mu (9.18.2).' + (R.cont ? ' Negative moment: deck reinforcement with the beam bottom flange in compression at the girder f′c (9.7.2.3), φ = 0.90; minimum 1.2M<sub>cr</sub> on the deck concrete (8.17.1); crack control z = ' + Lf.z + ' k/in. (8.16.8.4)' + (Lf.rebarFatigue ? ' and reinforcement fatigue 21 − 0.33f<sub>min</sub> + 8(r/h), r/h = 0.3 (8.16.8.3)' : '') + '.' : ''),
-    '<b>Shear.</b> ' + (R.shearChecked ? '9.20 from the critical section h/2 from the face of support (9.20.1.4; bearing pad or pier face): V<sub>ci</sub> = 0.6√f′c b′d + V<sub>d</sub> + V<sub>i</sub>M<sub>cr</sub>/M<sub>max</sub> ≥ 1.7√f′c b′d with M<sub>cr</sub> = (I/Y<sub>t</sub>)(6√f′c + f<sub>pe</sub> − f<sub>d</sub>), V<sub>i</sub> = V<sub>u</sub> − V<sub>d</sub> and M<sub>max</sub> = M<sub>u</sub> − M<sub>d</sub>; V<sub>cw</sub> = (3.5√f′c + 0.3f<sub>pc</sub>)b′d + V<sub>p</sub> with f<sub>pc</sub> at the composite centroid (or the web–flange junction); d ≥ 0.8h; V<sub>s</sub> = A<sub>v</sub>f<sub>sy</sub>d/s ≤ 8√f′c b′d; φ = 0.90. Spacing ≤ 0.75h and 24 in. (halved above 4√f′c b′d), A<sub>v</sub> ≥ 50b′s/f<sub>sy</sub>.' + (I ? ' Horizontal shear (9.20.4): V<sub>u</sub> ≤ φV<sub>nh</sub>, with ' + (Lf.hsSurface === 'smooth' ? 'a clean surface not intentionally roughened, 80b<sub>v</sub>d with minimum ties' : 'the surface roughened to ¼ in., 350b<sub>v</sub>d with minimum ties plus 160f<sub>y</sub>/40,000 per percent of ties above the minimum') + '; the stirrups are taken as the ties, b<sub>v</sub> = top flange width, tie spacing ≤ 4 × web and 24 in.' : '') + ' Negative-moment regions use the deck steel depth and the slab cracking moment.' : 'Not checked: no shear reinforcement entered.'),
+    '<b>Shear.</b> ' + (R.shearChecked ? '9.20 from the critical section h/2 from the face of support (9.20.1.4; bearing pad or pier face): V<sub>ci</sub> = 0.6√f′c b′d + V<sub>d</sub> + V<sub>i</sub>M<sub>cr</sub>/M<sub>max</sub> ≥ 1.7√f′c b′d with M<sub>cr</sub> = (I/Y<sub>t</sub>)(6√f′c + f<sub>pe</sub> − f<sub>d</sub>), M<sub>max</sub> = M<sub>u</sub> − M<sub>d</sub> and V<sub>i</sub> = V<sub>u,M</sub> − V<sub>d</sub>, where V<sub>u,M</sub> is the factored shear from the same truck, lane or military loading position that gives M<sub>max</sub> (9.20.2.2: shear occurring simultaneously with M<sub>max</sub>; an axle at the section takes the larger one-sided shear), never more than V<sub>u</sub>; V<sub>cw</sub> = (3.5√f′c + 0.3f<sub>pc</sub>)b′d + V<sub>p</sub> with f<sub>pc</sub> at the composite centroid (or the web–flange junction); d ≥ 0.8h; V<sub>s</sub> = A<sub>v</sub>f<sub>sy</sub>d/s ≤ 8√f′c b′d; φ = 0.90. Spacing ≤ 0.75h and 24 in. (halved above 4√f′c b′d), A<sub>v</sub> ≥ 50b′s/f<sub>sy</sub>.' + (I ? ' Horizontal shear (9.20.4): V<sub>u</sub> ≤ φV<sub>nh</sub>, with ' + (Lf.hsSurface === 'smooth' ? 'a clean surface not intentionally roughened, 80b<sub>v</sub>d with minimum ties' : 'the surface roughened to ¼ in., 350b<sub>v</sub>d with minimum ties plus 160f<sub>y</sub>/40,000 per percent of ties above the minimum') + '; the stirrups are taken as the ties, b<sub>v</sub> = top flange width, tie spacing ≤ 4 × web and 24 in.' : '') + ' Negative-moment regions use the deck steel depth and the slab cracking moment.' : 'Not checked: no shear reinforcement entered.'),
     '<b>Rating.</b> MBE 6B.5.3.3 load factor rating for ' + esc(Lf.vehicle) + ': strength RF = (φR<sub>n</sub> − 1.3D)/(A2 L(1 + I)), A2 = ' + f2(R.rating.A2inv) + ' inventory and ' + f2(R.rating.A2op) + ' operating, for flexure and shear; inventory concrete tension (6√f′c), compression (0.6f′c, and 0.4f′c with half the prestress and dead load); strand tension 0.8f*y inventory and 0.9f*y operating with f*y = 0.9f′s, the strand stress taking f<sub>se</sub> plus the elastic increase from the dead load placed after transfer. Tons = RF × ' + f1(36 * Lf.scale) + '.',
   ];
   if (R.lfd.military) items.push('The alternate military loading is not scaled with the HS designation and is rated with the same factors.');
@@ -3684,6 +3738,7 @@ function renderMethod() {
     const diffs = ['TxDOT 0-4751-1 Example A.1 computes the service stresses with composite properties at n = 1 (S<sub>bc</sub> = 16,877 in.³, S<sub>tg</sub> = 54,084 in.³) and the strength checks at n = 0.846. This tool uses n = 0.846 throughout, so the top-of-beam stress under prestress and dead load is about 2.25 ksi against the 2.233 ksi limit the example reaches exactly, and the bottom tension is about −0.44 ksi (example −0.412).',
       'The example interpolates the strand eccentricity at the shear critical section with the distance from the bearing (2.583 ft) measured as if from the beam end; this tool uses the beam end 0.5435 ft beyond the bearing, giving e = 11.60 in. (example 11.51 in.), V<sub>cw</sub> = 221 k and a shear ratio of about 1.00 with the #4 stirrups at 22 in.',
       'The example takes the transfer loss as ES + ½CR<sub>s</sub> and f<sub>cir</sub> with the beam moment at the hold-down point; this tool uses ES and the midspan beam moment (9.16.2.1). Total losses agree within 0.2 ksi.',
+      'The example takes V<sub>i</sub> in V<sub>ci</sub> from the maximum shear at the section, calling it conservative; this tool uses the shear from the loading that gives M<sub>max</sub> (9.20.2.2), which gives a lower V<sub>ci</sub>. With the example\'s stirrups the shear rating is unchanged, because V<sub>cw</sub> governs near the ends.',
       'The example uses the moment distribution factor and the span impact for shear; this tool takes impact on the loaded length to the far reaction (3.8.2.2), about 0.2% more live load shear at the critical section.'];
     const excl = ['Service load design (allowable stress) checks other than the 9.15 prestressed concrete stresses', 'Legal and permit vehicles', 'Lifting and shipping stability', 'Anchorage zone reinforcement (9.22)', 'Time-dependent restraint moments in continuous spans'];
     $('#c-method').innerHTML = '<div class="card-h"><h2>Method</h2></div><ul class="notes">' + items.map(t => '<li>' + t + '</li>').join('') + '</ul>' +

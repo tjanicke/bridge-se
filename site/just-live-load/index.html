@@ -632,7 +632,8 @@ const ConsysEngine = (() => {
 
       if (h.fatigue) {
         const IMf = num(h.imFat, 15) / 100;
-        const F = runVehicle(m, { weights: [8, 32, 32], spacings: [14, 30], varIndex: -1 }, { step, neglect: neglectDesign });
+        // the fatigue range comes from the whole truck with every axle present (3.6.1.4): no axle neglect here
+        const F = runVehicle(m, { weights: [8, 32, 32], spacings: [14, 30], varIndex: -1 }, { step, neglect: false });
         const ff = { id: 'fat', name: 'LRFD Fatigue', code: 'AASHTO LRFD', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] };
         for (let r = 0; r < nr; r++) {
           const q = m.resp[r], df = q.type === 'M' ? dfM : dfV;

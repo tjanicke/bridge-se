@@ -1859,7 +1859,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
             const sg = Math.sign(VL);
             const D = { DC: sg * (p.VDC1[side] + p.VDC2[side]), DW: sg * p.VDW[side] };
             const Vu = strengthDemand(D, Math.abs(VL));
-            push(p, { lim: 'Strength I', cat: 'shear', sec: id, what: 'Shear, ' + (side ? 'right' : 'left'), art: sc.type === 'unstiffened' ? '6.10.9.2' : (sc.type.includes('end') ? '6.10.9.3.3' : '6.10.9.3.2'), unit: 'k', demand: Vu, cap: phiV * sc.Vn, ratio: Vu / (phiV * sc.Vn), note: sc.type + (sc.do ? ', do = ' + sc.do + ' in.' : '') + ', C = ' + sc.C.toFixed(3),
+            push(p, { lim: 'Strength I', cat: 'shear', sec: id, dir: sg, what: 'Shear, ' + (side ? 'right' : 'left'), art: sc.type === 'unstiffened' ? '6.10.9.2' : (sc.type.includes('end') ? '6.10.9.3.3' : '6.10.9.3.2'), unit: 'k', demand: Vu, cap: phiV * sc.Vn, ratio: Vu / (phiV * sc.Vn), note: sc.type + (sc.do ? ', do = ' + sc.do + ' in.' : '') + ', C = ' + sc.C.toFixed(3),
               calc: { t: 'shear', sc: Object.assign({}, sc), D: g.D, tw: g.tw, Fyw: P.F.w, Afl: g.At + g.Ab, phi: phiV, eta, comps: { DC: D.DC, DW: D.DW, LL: Math.abs(VL) } },
               rating: { cap: phiV * sc.Vn, DC: D.DC, DW: D.DW, L: Math.abs(VL), sgn: 1 } });
           }
@@ -2101,7 +2101,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   function tubRestrictions(m, T) {
     const d = m.df || {}, out = [];
     const item = (ok, txt) => out.push({ ok, txt });
-    item(!(+d.skew > 0), 'bearing lines not skewed' + (+d.skew > 0 ? ' (skew ' + d.skew + '°)' : ''));
+    const sk = Math.abs(+d.skew || 0); // either skew direction is outside the method
+    item(!(sk > 0), 'bearing lines not skewed' + (sk > 0 ? ' (skew ' + d.skew + '°)' : ''));
     if (T.w > 0 && T.a > 0) item(T.a >= 0.8 * T.w - 1e-9 && T.a <= 1.2 * T.w + 1e-9, 'adjacent tubs a = ' + T.a + ' in. within 0.8w–1.2w (w = ' + T.w + ' in.)');
     else item(false, 'top flange spacings w and a not entered');
     if (T.overhang > 0 && T.a > 0) item(T.overhang * 12 <= 0.6 * T.a + 1e-9 && T.overhang <= 6 + 1e-9, 'deck overhang ' + T.overhang + ' ft ≤ 0.6a and ≤ 6.0 ft');
@@ -2336,7 +2337,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
             const sg = Math.sign(VL);
             const D = { DC: perWeb(P, sg * (p.VDC1[side] + p.VDC2[side])), DW: perWeb(P, sg * p.VDW[side]) }, L = perWeb(P, Math.abs(VL));
             const Vu = strengthDemand(D, L);
-            push(p, { lim: 'Strength I', cat: 'shear', sec: id, what: 'Shear, one web, ' + (side ? 'right' : 'left'), art: sc.type === 'unstiffened' ? '6.10.9.2' : (sc.type.includes('end') ? '6.10.9.3.3' : '6.10.9.3.2'), unit: 'k', demand: Vu, cap: phiV * sc.Vn, ratio: Vu / (phiV * sc.Vn),
+            push(p, { lim: 'Strength I', cat: 'shear', sec: id, dir: sg, what: 'Shear, one web, ' + (side ? 'right' : 'left'), art: sc.type === 'unstiffened' ? '6.10.9.2' : (sc.type.includes('end') ? '6.10.9.3.3' : '6.10.9.3.2'), unit: 'k', demand: Vu, cap: phiV * sc.Vn, ratio: Vu / (phiV * sc.Vn),
               note: 'Vui = Vu/(2 cos θ) (6.11.9-1), D along the web; ' + sc.type + (sc.do ? ', do = ' + sc.do + ' in.' : '') + ', C = ' + sc.C.toFixed(3),
               calc: { t: 'shear', sc: Object.assign({}, sc), D: g.D, tw: g.tw, Fyw: P.F.w, Afl, phi: phiV, eta, comps: { DC: D.DC, DW: D.DW, LL: L } },
               rating: { cap: phiV * sc.Vn, DC: D.DC, DW: D.DW, L, sgn: 1 } });
@@ -2514,6 +2515,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     proportions.filter(q => q.boxNote).forEach(q => warnings.push({ kind: 'Section ' + q.sec, text: q.boxNote + '.' }));
     const inf = allChecks.filter(c => c.ratio === Infinity).length;
     if (inf) warnings.push({ kind: 'Instability', text: inf + ' checks have an unbounded ratio: the top-flange stress reaches the elastic buckling stress under amplified lateral bending (6.10.1.6-4).' });
+    // scope of the line-girder tub method: 6.11.2.3 met (unless the user enters both distribution factors) and full-length top lateral bracing
+    const ovr = +m.df.overrideM > 0 && +m.df.overrideV > 0;
+    const scopeWhy = RS.items.filter(q => !q.ok).map(q => '6.11.2.3 not met, ' + q.txt);
+    if (T.lateral !== 'full') scopeWhy.push((T.lateral === 'partial' ? 'partial-length' : 'no') + ' top lateral bracing, so constructibility is incomplete');
+    const scope = { ok: !scopeWhy.length, why: scopeWhy, ovr };
     const bad = allChecks.filter(c => Number.isNaN(c.ratio) || Number.isNaN(c.demand) || Number.isNaN(c.cap));
     if (bad.length) throw new Error('Calculation error: ' + bad.length + ' checks produced invalid numbers, first at x = ' + bad[0].x.toFixed(2) + ' ft (' + bad[0].lim + ', ' + bad[0].what + '). Check the section and material inputs.');
 
@@ -2531,7 +2537,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const secTable = m.sections.map(s => ({ id: s.id, name: s.name, P: props[s.id] }));
     const panels = segs.map(sg => ({ a: sg.a, b: sg.b, Lb: sg.Lb / 12 }));
     return { ed, eta, x, supX, pois, checks: allChecks, summary, rating, deflection, proportions, secTable, braces, segs: [], panels, kind: 'tub',
-      tub: { cfg: T, DF, restrictions: RS, zeros, fr }, wSW: ctx.wSW, eSec, adttSL, dfSpan: [], pour: null, flOn, vibration: null, llc, warnings, ms: Date.now() - t0 };
+      tub: { cfg: T, DF, restrictions: RS, zeros, fr, scope }, wSW: ctx.wSW, eSec, adttSL, dfSpan: [], pour: null, flOn, vibration: null, llc, warnings, ms: Date.now() - t0 };
   }
 
   // LRFD run: the design live load (HL-93 or pedestrian), plus permit trucks under Strength II when asked
@@ -2543,7 +2549,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const ctx = prepare(m, ed);
     const runCase_ = tub ? runCaseTub : runCase;
     const L = liveOpts(m);
-    const keyOf = c => [c.i, c.sec, c.lim, c.what, c.stage || ''].join('|');
+    // checks of two runs of the same model line up by point, section, limit state, check, stage and response sign;
+    // repeats of the same key are paired in order
+    const keyOf = c => [c.i, c.sec, c.lim, c.what, c.stage || '', c.dir || ''].join('|');
+    const keyAll = cs => { const n = new Map(); return cs.map(c => { const k = keyOf(c), j = n.get(k) || 0; n.set(k, j + 1); return k + '#' + j; }); };
+    const keyMap = cs => { const ks = keyAll(cs); return new Map(cs.map((c, j) => [ks[j], c])); };
     const pedLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, gSv: 1.3, ped: L.ped } : null;
     const designLL = pedLL || { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 };
     let base = null;
@@ -2553,8 +2563,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
       if (L.ped.veh) {
         const hr = runCase_(m, ed, ctx, { kind: 'H', name: L.ped.veh, gS: 1.75, gSv: 1.3, ped: L.ped });
-        const map = new Map(hr.checks.map(c => [keyOf(c), c]));
-        base.checks.forEach(c => { const q = map.get(keyOf(c)); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
+        const map = keyMap(hr.checks), bk = keyAll(base.checks);
+        base.checks.forEach((c, j) => { const q = map.get(bk[j]); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
         base.rating = hr.rating;
       }
     }
@@ -2565,9 +2575,10 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const pd = runCase_(m, ed, ctx, pl);
       // special permits use one lane loaded (multiple presence removed) for design and rating; the rating IM may be reduced
       const pr = P.IMrate !== 0.33 ? runCase_(m, ed, ctx, Object.assign({}, pl, { IM: P.IMrate })) : pd;
-      const rmap = new Map(pr.checks.map(c => [keyOf(c), c]));
+      const rmap = keyMap(pr.checks), pk = keyAll(pd.checks);
       const pc = pd.checks.filter(c => c.lim === 'Strength II' || c.lim === 'Service II');
-      pc.forEach(c => { c.permit = true; const q = rmap.get(keyOf(c)); c.RFp = q ? q.RFinv : undefined; c.rfNAp = q ? q.rfNA : false; c.ratingP = q ? q.rating : null; delete c.RFinv; delete c.RFop; });
+      const pkOf = new Map(pd.checks.map((c, j) => [c, pk[j]]));
+      pc.forEach(c => { c.permit = true; const q = pr === pd ? c : rmap.get(pkOf.get(c)); c.RFp = q ? q.RFinv : undefined; c.rfNAp = q ? q.rfNA : false; c.ratingP = q ? q.rating : null; delete c.RFinv; delete c.RFop; });
       const rmin = pred => pc.filter(c => pred(c) && c.RFp != null && !Number.isNaN(c.RFp) && c.RFp !== Infinity).reduce((a, c) => (!a || c.RFp < a.RFp ? c : a), null);
       const permit = { opts: P, strength: rmin(c => c.lim === 'Strength II'), service: rmin(c => c.lim === 'Service II') };
       if (!base) { base = pd; base.checks = pd.checks.filter(c => !c.rating || c.permit); base.rating = {}; }
@@ -3654,7 +3665,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
   const dU = u => (u === 'k-ft' ? 0 : u === 'k' ? 1 : u === 'in.' || u === 'b/t' ? 2 : 2);
   const sigF = v => fn(v, Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 1 : Math.abs(v) >= 10 ? 2 : 3);
   const fr = v => (v === Infinity ? '∞ (unbounded)' : fn(v, 3)); // performance ratio
-  const frf = (v, na) => ((na && v > 10) || v === Infinity ? 'N/A' : fn(v, 2)); // rating factor; N/A only above 10 under negligible live load
+  const frf = (v, na) => ((na && v > 10) || v === Infinity ? 'N/A' : fn(v, Math.abs(v - 1) < 0.005 && v !== 1 ? 3 : 2)); // a third decimal within 0.005 of 1.0 // rating factor; N/A only above 10 under negligible live load
   const close = (a, b, tol = 0.005) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
   const hash = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
   const RED = [0.70, 0.14, 0.09], GRN = [0.12, 0.48, 0.27], AMB = [0.62, 0.40, 0.04];
@@ -4010,7 +4021,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Girder', meta.girder || ((res.kind === 'tub' ? 'Tub girder' : (model.df && model.df.girder === 'exterior' ? 'Exterior' : 'Interior') + ' girder') + ', ' + model.spans.length + ' span' + (model.spans.length > 1 ? 's' : ''))]];
     F.box(4 * 20 + 46, (d, x0, y0, w) => {
       const rowH = 20, lw = 120;
-      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); d.text(x0 + lw + 8, y + 13.5, String(r[1]), { font: 'B', size: 9.5, color: F.pal.ink }); });
+      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); { // long names: smaller type down to 7 pt, then shortened with an ellipsis, so the text stays in its cell
+        const room = w - lw - 14; let t = String(r[1]), sz = 9.5;
+        while (sz > 7 && W.textWidth(t, 'B', sz) > room) sz -= 0.25;
+        if (W.textWidth(t, 'B', sz) > room) { while (t.length > 1 && W.textWidth(t + '…', 'B', sz) > room) t = t.slice(0, -1); t = t.trimEnd() + '…'; }
+        d.text(x0 + lw + 8, y + 13.5, t, { font: 'B', size: sz, color: F.pal.ink }); } });
       const y = y0 + 4 * rowH + 6, half = w / 2 - 4;
       [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
         d.rect(x, y, half, 36, { stroke: F.pal.mute, w: 0.6 });
@@ -4036,7 +4051,9 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     if (rows.some(r => Number.isNaN(r.ratio))) throw new Error('A governing ratio is not a number; the report was not produced.');
     F.h2('Results');
     const hiTxt = worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2);
-    F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : 'All design criteria satisfied; highest ratio ' + hiTxt + '.', { font: 'B', size: 10, color: nOver ? RED : GRN });
+    const scOut = res.kind === 'tub' && res.tub.scope && !res.tub.scope.ok;
+    if (scOut) F.para('Outside the scope of the tub girder method (' + res.tub.scope.why.join('; ') + '). The ratios and rating factors in this report are for diagnosis only; a refined analysis is needed.', { font: 'B', size: 10, color: RED });
+    F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : (scOut ? 'No criterion exceeds 1.0; highest ratio ' : 'All design criteria satisfied; highest ratio ') + hiTxt + '.', { font: 'B', size: 10, color: nOver || scOut ? RED : GRN });
     F.table([{ h: 'Criterion', w: 2.1 }, { h: 'Governing check', w: 3.4 }, { h: 'Location, ft', w: 1.2 }, { h: 'Sec', w: 0.6 }, { h: 'Demand', w: 1.3, a: 'r' }, { h: 'Capacity', w: 1.3, a: 'r' }, { h: 'Ratio', w: 0.8, a: 'r' }, { h: 'Article', w: 1.2 }], rows);
     // rating
     const R = res.rating || {};
@@ -5046,7 +5063,9 @@ function renderRail(){
 
 // typed numbers: decimals, or fractions such as 11/16 and 1 3/4 (also 1-3/4); NaN if not a number
 function parseNum(str){
-  const v=String(str).trim().replace(/,/g,'');
+  let v=String(str).trim();
+  // commas only as thousands separators (1,250 or 12,500.5); "1,2" is not a number
+  if(v.includes(',')){ if(!/^[-+]?\d{1,3}(,\d{3})+(\.\d*)?$/.test(v)) return NaN; v=v.replace(/,/g,''); }
   if(v==='') return NaN;
   if(/^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(v)) return +v;
   const f=v.match(/^([-+]?)(?:(\d+)[\s-]+)?(\d+)\/(\d+)$/);
@@ -5058,7 +5077,10 @@ function onRailInput(ev){
   // a number box with text that is not a number: flag it and keep the last good value
   if(t.classList&&t.classList.contains('n')&&t.tagName==='INPUT'){
     const bad=t.value.trim()!==''&&!isFinite(parseNum(t.value));
-    if(bad){ if(ev.type==='change'){ t.setAttribute('aria-invalid','true'); t.title='Enter a number, e.g. 0.6875 or 11/16'; } return; } // still typing: wait for a full number
+    // not a number: while typing, wait (and hold the report); once the field is left, flag it and stop the results
+    // until it is fixed, so nothing is shown or exported for a value that is no longer on screen
+    if(bad){ t.dataset.pending='1'; $('status').textContent='Waiting for a number…'; if(ev.type==='change'){ t.setAttribute('aria-invalid','true'); t.title='Enter a number, e.g. 0.6875, 1,250 or 11/16'; run(); } return; }
+    delete t.dataset.pending;
     if(t.hasAttribute('aria-invalid')){ t.removeAttribute('aria-invalid'); t.removeAttribute('title'); }
   }
   const nv=()=>t.value.trim()===''?0:parseNum(t.value);
@@ -5147,6 +5169,8 @@ function run(){
   refreshIO();
   clearTimeout(otherTimer); resOther=null;
   try{
+    const badIn=[...document.querySelectorAll('#rail input[aria-invalid="true"]')];
+    if(badIn.length) throw new Error('Not a number: '+badIn.map(i=>i.getAttribute('aria-label')||(i.closest('label')&&i.closest('label').textContent.trim())||i.dataset.path||'an input').join('; ')+'. Enter a number such as 0.6875, 1,250 or 11/16.');
     if(model.spans.some(s=>!(+s>0))) throw new Error('Every span needs a length greater than zero.');
     const snap=structuredClone(model); res=LGCheck.run(snap); resModel=snap; resKey=modelKey(snap);
     if($('deckHint')) $('deckHint').textContent=deckHint();
@@ -5212,6 +5236,8 @@ function renderRatios(){
       <span class="sub">${esc(v.lim?v.lim+(v.c&&v.c.permit?', permit':'')+' · ':(C.sub+' · '))}${esc(v.where)}</span></button>`;
   });
   $('ratios').innerHTML=tiles.join('');
+  const scopeOut=res.kind==='tub'&&res.tub.scope&&!res.tub.scope.ok;
+  if(scopeOut){ $('overall').innerHTML=`<b class="bad">Outside the scope of the tub girder method</b><span class="status">${esc(res.tub.scope.why.join('; '))}. Ratios and ratings below are for diagnosis only (refined analysis needed). Worst ratio ${fmt(worst?worst.ratio:0,2)}.</span>`; return; }
   $('overall').innerHTML = nOver
     ? `<b class="bad">${nOver} of ${cats().length} criteria exceed 1.0</b><span class="status">Worst: ${worst.C.lbl.toLowerCase()} ${fmt(worst.ratio,2)}${worst.c&&worst.c.permit?' (permit)':''}. Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`
     : `<b class="ok">All design checks satisfied</b><span class="status">Highest ratio ${fmt(worst?worst.ratio:0,2)} (${worst?worst.C.lbl.toLowerCase():''}${worst&&worst.c&&worst.c.permit?', permit':''}). Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`;
@@ -5219,7 +5245,8 @@ function renderRatios(){
 
 function renderVerdict(){
   const R=res.rating;
-  const tile=(lbl,c,key,sub)=>c?`<div class="rf"><span class="lbl">${lbl}</span><span class="val ${rfClass(c[key])}">${fmt(c[key],2)}</span><span class="sub">${esc(c.what)} · Pt ${c.label} (x = ${fmt(c.x,1)} ft) · ${esc(c.sec)}</span>${sub?`<span class="sub">${sub(c)}</span>`:''}</div>`:'';
+  const rf3=v=>fmt(v,Math.abs(v-1)<0.005&&v!==1?3:2);
+  const tile=(lbl,c,key,sub)=>c?`<div class="rf"><span class="lbl">${lbl}</span><span class="val ${rfClass(c[key])}">${rf3(c[key])}</span><span class="sub">${esc(c.what)} · Pt ${c.label} (x = ${fmt(c.x,1)} ft) · ${esc(c.sec)}</span>${sub?`<span class="sub">${sub(c)}</span>`:''}</div>`:'';
   if(resLFD()){
     const T=R.tons, V=R.vehicle;
     $('verdict').innerHTML = R.strength ? (
@@ -5237,7 +5264,8 @@ function renderVerdict(){
   if(LV.permit!=='only') h+= R.strength ? (tile('Inventory, Strength I',R.strength,'RFinv',who)+tile('Operating, Strength I',R.strengthOp,'RFop',whoOp)+tile('Inventory, Service II',R.service,'RFinv')+tile('Operating, Service II',R.serviceOp,'RFop')) : '';
   if(PM){ const P=PM.opts, g=`γL ${fmt(P.gR,2)} · ${P.typeName}`;
     h+=tile('Permit, Strength II',PM.strength,'RFp',()=>g)+tile('Permit, Service II',PM.service,'RFp',()=>'γL 1.0 · '+P.typeName); }
-  if(PM&&res.controlling){ const C=res.controlling; h=`<div class="rf ctrl"><span class="lbl">Controlling rating factor</span><span class="val ${rfClass(C.v)}">${fmt(C.v,2)}</span><span class="sub">${esc(C.what)} · ${esc(C.c.what)} · Pt ${C.c.label} (x = ${fmt(C.c.x,1)} ft)</span></div>`+h; }
+  if(PM&&res.controlling){ const C=res.controlling; h=`<div class="rf ctrl"><span class="lbl">Controlling rating factor</span><span class="val ${rfClass(C.v)}">${rf3(C.v)}</span><span class="sub">${esc(C.what)} · ${esc(C.c.what)} · Pt ${C.c.label} (x = ${fmt(C.c.x,1)} ft)</span></div>`+h; }
+  if(h&&res.kind==='tub'&&res.tub.scope&&!res.tub.scope.ok) h=`<p class="hint bad" style="grid-column:1/-1;margin:0">Outside the scope of the tub girder method: these rating factors are diagnostic only.</p>`+h;
   $('verdict').innerHTML = h || '<p class="hint">No results.</p>';
 }
 
@@ -5710,7 +5738,8 @@ async function saveFile(name,bytes){
 }
 $('repCard').addEventListener('click',async e=>{ const b=e.target.closest('button[data-mode]'); if(!b) return;
   // never pair edited inputs with old results: finish any pending run on the current input first
-  clearTimeout(timer); if(!res||resKey!==modelKey(model)) run();
+  clearTimeout(timer); if(!res||resKey!==modelKey(model)||document.querySelector('#rail input[data-pending]')) run();
+  if(document.querySelector('#rail input[data-pending]')){ $('repStatus').textContent='No report: a number box holds text that is not a number. Correct it first.'; return; }
   if(!res||resKey!==modelKey(model)){ $('repStatus').textContent='No report: the current input does not run. Correct the input error first.'; return; }
   const runModel=resModel, runRes=res;
   const mode=b.dataset.mode; b.setAttribute('aria-busy','true'); $('repStatus').textContent='Building the PDF…';
