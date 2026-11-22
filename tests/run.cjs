@@ -206,5 +206,36 @@ guard('Steel 2D Grillage', () => {
   is('partial girder: G3-G5 support cross-frame at Abut 1', W.crossframes.filter(x => x.gA === 'G3' && x.gB === 'G5' && x.tag === 'support').length, 1);
 });
 
+// ---------- Steel 2D Grillage: grid solver (phase 2) ----------
+guard('Steel 2D Grillage solver', () => {
+  const G = load('steel-2d-grillage').G2D;
+  const sec = G.plate({ D: 60, tw: 0.5, bt: 16, tt: 1, bb: 18, tb: 1.25 });
+  // two straight girders, two equal 100 ft spans, 2 k/ft on each: a continuous beam each (3wL/8, 10wL/8, -wL^2/8, 9wL^2/128)
+  const F2 = G.build({ mode: 'concentric', concentric: { R: 0, nG: 2, spacing: 10, spans: [100, 100], skews: [0, 0, 0], ext: 0, crossframes: { spacing: 20 } } });
+  const r2 = G.solve(G.model(F2, { props: () => sec, brace: { I: 1000, J: 5, e: 0 }, warping: true, h: 5 }), 'nc', { line: () => 2 });
+  is('grid: two-span reactions, kip', r2.reac.filter(x => x.g === 'G1').map(x => +x.R.toFixed(3)).join(), '75,250,75');
+  near('grid: pier moment, kip-ft', G.at(r2, 'G1', 100).M, -2500, 0.01, '-wL^2/8');
+  near('grid: moment at 0.375 L, kip-ft', G.at(r2, 'G1', 37.5).M, 1406.25, 0.01, '9wL^2/128');
+  // curved girder, R = 300 ft, 150 ft arc, w = 0 and twist = 0 at both ends, 2 k/ft (St. Venant): midspan moment and end torque
+  // from an independent flexibility solution on the circle: 5775.3 kip-ft and 961.6 kip-ft
+  const Fc = G.build({ mode: 'concentric', concentric: { R: 305, turn: 'L', nG: 2, spacing: 10, spans: [150 * 305 / 300], skews: [0, 0], ext: 0, crossframes: { auto: false } } });
+  const rc = G.solve(G.model(Fc, { props: () => sec, brace: { I: 1, J: 1, e: 0 }, warping: false, h: 1, twistAtBearings: true }), 'nc', { line: () => 2 });
+  near('grid: curved girder midspan moment, kip-ft', G.at(rc, 'G1', 75).M, 5775.3, 2, 'flexibility solution 5775.3');
+  near('grid: curved girder end torque, kip-ft', Math.abs(G.at(rc, 'G1', 0.01).T), 961.6, 1.5, 'flexibility solution 961.6');
+  // warping torsion: fork-supported girder, 50 kip-ft torque at midspan: twist T/(2GJ)[L/2 - tanh(pL/2)/p], bimoment T tanh(pL/2)/(2p)
+  const Fw = G.build({ mode: 'concentric', concentric: { R: 0, nG: 2, spacing: 10, spans: [100], skews: [0, 0], ext: 0, crossframes: { auto: false } } });
+  const mw = G.model(Fw, { props: () => sec, brace: { I: 1, J: 1, e: 0 }, warping: true, h: 5, twistAtBearings: true });
+  const nd = mw.nodeAt('G1', 50), rw = G.solve(mw, 't', { moments: [{ node: nd, Mx: 50 }] });
+  const GJ = 11200 * 144 * sec.J / 20736, ECw = 29000 * 144 * sec.Cw / 2985984, pp = Math.sqrt(GJ / ECw);
+  near('grid: warping torsion, midspan twist, rad', rw.d[nd.dof + 1], 50 / (2 * GJ) * (50 - Math.tanh(pp * 50) / pp), 1e-5, 'closed form');
+  near('grid: warping torsion, midspan bimoment, kip-ft^2', Math.abs(rw.gRes.find(e => e.g === 'G1' && Math.abs(e.ub - 50) < 1e-6).B2), 50 * Math.tanh(pp * 50) / (2 * pp), 0.1, 'closed form');
+  // cross-frame truss condensation: rigid-body modes carry no force; very stiff diagonals bend as the chord couple
+  const T = G.truss(12.5, { type: 'X', h: 68, e: 6, top: { A: 8.44 }, bot: { A: 8.44 }, diag: { A: 8.44 } });
+  const mv = (K, v) => Math.max(...K.map(r => Math.abs(r.reduce((s, x, j) => s + x * v[j], 0))));
+  near('truss: rigid translation and rotation, largest force', Math.max(mv(T.K4, [1, 0, 1, 0]), mv(T.K4, [0, 1e-3, -12.5e-3, 1e-3])), 0, 1e-8);
+  const Tr = G.truss(12.5, { type: 'X', h: 68, e: 0, top: { A: 8.44 }, bot: { A: 8.44 }, diag: { A: 1e6 } }), k = Tr.K4, det = k[2][2] * k[3][3] - k[2][3] ** 2;
+  near('truss: stiff diagonals bend as the chord couple, in^4', 12.5 / (29000 * 144 * (k[2][2] / det)) * 20736, 8.44 * 68 * 68 / 2, 1, 'A h^2 / 2');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);

@@ -23,7 +23,7 @@
 :root{
   --bg:#eef1ef; --surface:#fbfcfb; --sunk:#e3e8e5; --ink:#17201d; --muted:#56655f; --line:#cdd6d2;
   --accent:#0b6e4f; --accent-ink:#ffffff; --ok:#1f7a45; --warn:#a86a0c; --bad:#b42318;
-  --girder:#17201d; --support:#2557a4; --xf:#0a7d57; --xf-off:#b42318; --diaph:#a8870a; --grid:#dfe5e2;
+  --girder:#17201d; --support:#2557a4; --s1:#2a6fdb; --s2:#e07b16; --s3:#1d9a6c; --s4:#9b4fd0; --s5:#d1405a; --s6:#7a8a00; --s7:#00869e; --s8:#8a5a2b; --xf:#0a7d57; --xf-off:#b42318; --diaph:#a8870a; --grid:#dfe5e2;
   --f-display:"Archivo Narrow","Arial Narrow",Arial,sans-serif;
   --f-body:"Public Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
@@ -31,11 +31,11 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
   --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
-  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; color-scheme:dark}}
+  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; --s1:#6ea2ff; --s2:#ffa24a; --s3:#3fcf95; --s4:#c48cff; --s5:#ff7a90; --s6:#c3d34a; --s7:#4cc9e0; --s8:#d49a62; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#0f1513; --surface:#161e1b; --sunk:#1d2724; --ink:#e3ebe7; --muted:#93a39d; --line:#2b3733;
   --accent:#3fb68b; --accent-ink:#06130e; --ok:#4cc27e; --warn:#e3a63c; --bad:#f07060;
-  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; color-scheme:dark}
+  --girder:#e3ebe7; --support:#7ea7e8; --xf:#3fb68b; --xf-off:#f07060; --diaph:#d4bf5e; --grid:#1f2a26; --s1:#6ea2ff; --s2:#ffa24a; --s3:#3fcf95; --s4:#c48cff; --s5:#ff7a90; --s6:#c3d34a; --s7:#4cc9e0; --s8:#d49a62; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:14px/1.45 var(--f-body);margin:0;
   padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:18px 40px}
@@ -117,6 +117,17 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .notes{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px;max-width:100ch}
 .notes b{color:var(--ink)}
 .layers td{vertical-align:middle}
+.railh{font-size:1.05rem;margin:10px 2px 0;color:var(--muted)}
+.anbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;margin-bottom:10px}
+.anbar label.f{min-width:190px}
+.seg.small button{padding:6px 10px;font-size:13px}
+.chart{position:relative;border:1px solid var(--line);border-radius:8px;background:var(--bg);height:min(46vh,380px)}
+.chart svg{display:block;width:100%;height:100%}
+.chart .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font-size:12px;box-shadow:0 2px 8px rgb(0 0 0/.15);font-family:var(--f-mono)}
+.legend .sw{display:inline-block;width:18px;height:3px;border-radius:2px;vertical-align:middle;margin-right:6px}
+table.res td.neg{color:var(--bad)}
+h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;width:auto}
+
 .row{border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:6px}
 .gbody>.row:first-of-type{border-top:0;padding-top:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
@@ -126,8 +137,8 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 
 <header>
   <div>
-    <h1>Steel 2D Grillage <span class="badge">Preview · framing</span></h1>
-    <p>Framing plans for steel I-girder bridges: curved, highly skewed, flared and tapered girders, girders that end on diaphragms, and cross-frame layouts. This first stage builds and checks the framing; the grillage analysis (AASHTO LRFD 10th edition) comes next. Everything runs in your browser; files you open are not uploaded.</p>
+    <h1>Steel 2D Grillage <span class="badge">Preview · dead load</span></h1>
+    <p>Framing plans for steel I-girder bridges: curved, highly skewed, flared and tapered girders, girders that end on diaphragms, and cross-frame layouts. The grid analysis now covers dead load in stages (steel, deck, DC2, DW) with warping torsion and cross-frames modeled as condensed trusses; live load and the AASHTO 10th edition checks come next. Everything runs in your browser; files you open are not uploaded.</p>
   </div>
   <div class="actions">
     <div>
@@ -175,6 +186,27 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
         <label><input type="checkbox" id="showXfId"> Cross-frame names</label>
       </div>
       <p class="hint" style="margin-top:6px">Drag to pan, scroll or use + and − to zoom. Click a cross-frame to remove it or bring it back.</p>
+    </section>
+    <section class="card" id="anCard">
+      <div class="card-h"><h2>Dead-load analysis</h2><div class="toolbar"><span class="status" id="anStatus"></span><button id="btnRun" class="primary">Run analysis</button></div></div>
+      <div id="anMsgs"></div>
+      <div class="anbar">
+        <label class="f">Load<select id="anStage">
+          <option value="steel">DC1 steel</option><option value="deck">DC1 deck</option><option value="dc1">DC1 total</option>
+          <option value="dc2">DC2</option><option value="dw">DW</option><option value="all" selected>DC1 + DC2 + DW</option></select></label>
+        <div><span class="lbl" id="qLbl">Result</span><div class="seg small" role="group" aria-labelledby="qLbl" id="anQty">
+          <button data-q="M" aria-pressed="true">Moment</button><button data-q="V">Shear</button><button data-q="T">Torque</button><button data-q="w">Deflection</button><button data-q="flb">Lateral flange</button></div></div>
+      </div>
+      <div class="chart" id="anChart"><svg id="anSvg" role="img" aria-label="Results along the girders"></svg><div class="tip" id="anTip" hidden></div></div>
+      <div class="legend" id="anLegend"></div>
+      <p class="hint" id="anNote"></p>
+      <div class="cols2">
+        <div><h3>At tenth points, <select id="anGirder" aria-label="Girder"></select></h3><div class="tbl-wrap"><table class="res" id="anTbl"></table></div></div>
+        <div><h3>Bearing reactions, kip</h3><div class="tbl-wrap"><table class="res" id="anReac"></table></div></div>
+      </div>
+      <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +)</span></h3>
+      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button></div>
+      <div class="tbl-wrap"><table class="res" id="anXf"></table></div>
     </section>
     <section class="card">
       <div class="card-h"><h2>Girders</h2><span class="status" id="gStatus"></span></div>
@@ -761,6 +793,535 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 
   root.G2D = { alignment, poly, lineHits, build, readDXF, dxfToModel, toDXF, fromConcentric, version: '0.1' };
 })(typeof window !== 'undefined' ? window : globalThis);
+
+// Steel 2D Grillage: section properties and the grid solver (phase 2). Units: kip, ft inside the solver; section
+// input in inches. Attaches to root.G2D.
+(function (root) {
+  'use strict';
+  const G2D = root.G2D || (root.G2D = {});
+  const E = 29000 * 144, GS = 11200 * 144; // ksf
+  const IN2 = 1 / 144, IN4 = 1 / 20736, IN6 = 1 / 2985984;
+
+  // ---------- section properties (inches) ----------
+  // plate girder: D, tw web; bt, tt top flange; bb, tb bottom flange
+  function plate(s) {
+    const At = s.bt * s.tt, Aw = s.D * s.tw, Ab = s.bb * s.tb, A = At + Aw + Ab;
+    const yb = s.tb / 2, yw = s.tb + s.D / 2, yt = s.tb + s.D + s.tt / 2, d = s.tb + s.D + s.tt;
+    const y = (Ab * yb + Aw * yw + At * yt) / A;
+    const I = s.tw * s.D ** 3 / 12 + Aw * (yw - y) ** 2 + s.bt * s.tt ** 3 / 12 + At * (yt - y) ** 2 + s.bb * s.tb ** 3 / 12 + Ab * (yb - y) ** 2;
+    const Iyt = s.tt * s.bt ** 3 / 12, Iyb = s.tb * s.bb ** 3 / 12;
+    const h = s.D + (s.tt + s.tb) / 2; // between flange centroids
+    // St. Venant: open thin-walled section, flanges with the end correction (1 - 0.63 t/b)
+    const J = s.D * s.tw ** 3 / 3 + s.bt * s.tt ** 3 / 3 * (1 - 0.63 * s.tt / s.bt) + s.bb * s.tb ** 3 / 3 * (1 - 0.63 * s.tb / s.bb);
+    const Cw = h * h * Iyt * Iyb / (Iyt + Iyb);
+    return { A, d, ybar: y, I, Iyt, Iyb, Iy: Iyt + Iyb + s.D * s.tw ** 3 / 12, h, J, Cw, Sb: I / y, St: I / (d - y), Atf: At, Abf: Ab };
+  }
+  // composite with a deck of effective width b, structural thickness ts, its bottom th above the top of the top
+  // flange, transformed by n. Deck torsion as an open plate b ts^3/3 (1 - 0.63 ts/b), also divided by n
+  function composite(st, deck, n) {
+    const Ad = deck.b * deck.ts / n, yd = st.d + deck.th + deck.ts / 2, A = st.A + Ad;
+    const y = (st.A * st.ybar + Ad * yd) / A;
+    const I = st.I + st.A * (y - st.ybar) ** 2 + deck.b * deck.ts ** 3 / 12 / n + Ad * (yd - y) ** 2;
+    const Jd = deck.b * deck.ts ** 3 / 3 * (1 - 0.63 * deck.ts / deck.b) / n * (deck.jf == null ? 1 : deck.jf);
+    return Object.assign({}, st, { A, ybar: y, I, J: st.J + Jd, Sb: I / y, St: I / (st.d - y), Sd: I / (yd + deck.ts / 2 - y) * n, n });
+  }
+
+  // ---------- skyline (profile) LDL^T solver ----------
+  function Skyline(N) { this.N = N; this.top = new Int32Array(N).fill(1 << 30); }
+  Skyline.prototype.touch = function (dofs) { const m = Math.min(...dofs.filter(d => d >= 0)); dofs.forEach(d => { if (d >= 0 && m < this.top[d]) this.top[d] = m; }); };
+  Skyline.prototype.alloc = function () {
+    const N = this.N, ptr = new Int32Array(N + 1);
+    for (let i = 0; i < N; i++) { if (this.top[i] > i) this.top[i] = i; ptr[i + 1] = ptr[i] + (i - this.top[i] + 1); }
+    this.ptr = ptr; this.a = new Float64Array(ptr[N]);
+  };
+  Skyline.prototype.add = function (i, j, v) { if (i < 0 || j < 0) return; if (j > i) { const t = i; i = j; j = t; } this.a[this.ptr[i] + (j - this.top[i])] += v; };
+  Skyline.prototype.get = function (i, j) { if (j > i) { const t = i; i = j; j = t; } return j < this.top[i] ? 0 : this.a[this.ptr[i] + (j - this.top[i])]; };
+  Skyline.prototype.factor = function () {
+    const { N, top, ptr, a } = this;
+    for (let i = 0; i < N; i++) {
+      const ti = top[i], pi = ptr[i] - ti;
+      for (let j = ti; j < i; j++) {
+        const tj = top[j], pj = ptr[j] - tj, k0 = Math.max(ti, tj);
+        let s = a[pi + j];
+        for (let k = k0; k < j; k++) s -= a[pi + k] * a[pj + k]; // row i holds g = l d (unscaled) so far, row j holds l
+        a[pi + j] = s;
+      }
+      let d = a[pi + i];
+      for (let k = ti; k < i; k++) { const l = a[pi + k] / a[ptr[k] + (k - top[k])]; d -= l * a[pi + k]; a[pi + k] = l; }
+      if (!(Math.abs(d) > 1e-12)) throw new Error('The grid is unstable at degree of freedom ' + i + ' (a girder or part of the framing is not held).');
+      a[pi + i] = d;
+    }
+  };
+  Skyline.prototype.solve = function (b) {
+    const { N, top, ptr, a } = this, x = Float64Array.from(b);
+    for (let i = 0; i < N; i++) { const pi = ptr[i] - top[i]; let s = x[i]; for (let k = top[i]; k < i; k++) s -= a[pi + k] * x[k]; x[i] = s; }
+    for (let i = 0; i < N; i++) x[i] /= a[ptr[i] + (i - top[i])];
+    for (let i = N - 1; i >= 0; i--) { const pi = ptr[i] - top[i], xi = x[i]; for (let k = top[i]; k < i; k++) x[k] -= a[pi + k] * xi; }
+    return x;
+  };
+
+  // ---------- grid model ----------
+  // F: framing from G2D.build. M: {
+  //   props(girderId, u, stage) -> {I (in4), J (in4), Cw (in6)}  section properties along each girder, per stage
+  //   brace: {I, J, e}  equivalent beam for cross-frames and diaphragms (in4, ft offset of the connection from the girder)
+  //   warping: true|false, h: target element length (ft), twistAtBearings: false }
+  function model(F, M) {
+    const h = M.h || 5, nodes = [], gNodes = new Map();
+    const key = new Map();
+    // girder nodes: ends, bearings, cross-frame and diaphragm ends, section changes, plus subdivision
+    F.girders.forEach(g => {
+      const us = [0, g.L, ...g.brg.map(b => b.u)];
+      F.crossframes.forEach(x => { if (x.gA === g.id) us.push(x.uA); if (x.gB === g.id) us.push(x.uB); });
+      F.members.forEach(m => { if (m.gA === g.id) us.push(m.uA); if (m.gB === g.id) us.push(m.uB); });
+      (M.breaks ? M.breaks(g.id) : []).forEach(u => { if (u > 0 && u < g.L) us.push(u); });
+      (M.extra ? M.extra(g.id) : []).forEach(u => { if (u > 0 && u < g.L) us.push(u); });
+      (M.stripLines || []).forEach(q => { if (q.gA === g.id) us.push(q.uA); if (q.gB === g.id) us.push(q.uB); });
+      us.sort((a, b) => a - b);
+      const base = []; us.forEach(u => { if (!base.length || u - base[base.length - 1] > 0.01) base.push(u); else if (u === g.L) base[base.length - 1] = u; });
+      const all = [];
+      base.forEach((u, i) => { if (i) { const L = u - base[i - 1], n = Math.ceil(L / h - 1e-9); for (let k = 1; k < n; k++) all.push(base[i - 1] + L * k / n); } all.push(u); });
+      const list = all.map(u => { const p = g.P.at(u); const n = { id: nodes.length, g: g.id, u, x: p[0], y: p[1] }; nodes.push(n); return n; });
+      gNodes.set(g.id, list);
+    });
+    const nodeAt = (gid, u) => { const L = gNodes.get(gid); let best = L[0]; L.forEach(n => { if (Math.abs(n.u - u) < Math.abs(best.u - u)) best = n; }); return best; };
+    // order nodes by position along the bridge (projection on the middle girder) to keep the profile narrow
+    const ref = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]);
+    const proj = p => { // nearest point on ref polyline, coarse then fine
+      const pts = ref.P.pts, s = ref.P.s; let bi = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i += 8) { const d = (pts[i][0] - p[0]) ** 2 + (pts[i][1] - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } }
+      for (let i = Math.max(0, bi - 8); i < Math.min(pts.length, bi + 9); i++) { const d = (pts[i][0] - p[0]) ** 2 + (pts[i][1] - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } }
+      return s[bi];
+    };
+    const ord = nodes.map(n => ({ n, t: proj([n.x, n.y]) + 1e-6 * F.order.indexOf(n.g) })).sort((a, b) => a.t - b.t);
+    const ndof = M.warping ? 4 : 3;
+    ord.forEach((o, k) => { o.n.dof = k * ndof; });
+    const N = nodes.length * ndof;
+    // elements
+    const gEls = [];
+    F.girders.forEach(g => {
+      const L = gNodes.get(g.id);
+      for (let i = 1; i < L.length; i++) gEls.push({ g: g.id, a: L[i - 1], b: L[i], um: (L[i - 1].u + L[i].u) / 2 });
+    });
+    const bEls = [];
+    F.crossframes.forEach(x => bEls.push({ kind: 'xf', id: x.id, a: nodeAt(x.gA, x.uA), b: nodeAt(x.gB, x.uB), src: x }));
+    F.members.forEach(m => bEls.push({ kind: 'diaphragm', id: m.id, a: nodeAt(m.gA, m.uA), b: nodeAt(m.gB, m.uB), src: m }));
+    // transverse deck strips (composite stages): lines normal to each girder every M.strips ft to the next girder
+    (M.stripLines || []).forEach((q, k) => bEls.push({ kind: 'deck', id: 'S' + (k + 1), a: nodeAt(q.gA, q.uA), b: nodeAt(q.gB, q.uB), src: q }));
+    const bearings = [];
+    F.girders.forEach(g => g.brg.forEach(b => bearings.push({ g: g.id, support: b.support, node: nodeAt(g.id, b.u) })));
+    return { F, M, nodes, gNodes, gEls, bEls, bearings, N, ndof, nodeAt };
+  }
+
+  // local stiffness of a girder element, DOFs [w1, ts1, tn1, psi1, w2, ts2, tn2, psi2] (psi only with warping)
+  // bending: phi = dw/ds = -tn. torsion: St. Venant GJ plus warping ECw with cubic twist (psi = dtheta/ds)
+  function girderK(L, EI, GJ, ECw, warp) {
+    const n = warp ? 8 : 6, K = Array.from({ length: n }, () => new Float64Array(n));
+    const iw = [0, warp ? 4 : 3], it = [1, warp ? 5 : 4], ip = [2, warp ? 6 : 5];
+    const b = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]].map(r => r.map(v => v * EI / L ** 3));
+    const bi = [iw[0], ip[0], iw[1], ip[1]], bs = [1, -1, 1, -1]; // phi = -tn
+    for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) K[bi[r]][bi[c]] += b[r][c] * bs[r] * bs[c];
+    if (warp) {
+      const ti = [1, 3, 5, 7];
+      const sv = [[36, 3 * L, -36, 3 * L], [3 * L, 4 * L * L, -3 * L, -L * L], [-36, -3 * L, 36, -3 * L], [3 * L, -L * L, -3 * L, 4 * L * L]].map(r => r.map(v => v * GJ / (30 * L)));
+      const wv = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]].map(r => r.map(v => v * ECw / L ** 3));
+      for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) K[ti[r]][ti[c]] += sv[r][c] + wv[r][c];
+    } else {
+      const k = GJ / L; K[it[0]][it[0]] += k; K[it[1]][it[1]] += k; K[it[0]][it[1]] -= k; K[it[1]][it[0]] -= k;
+    }
+    return K;
+  }
+  // equivalent beam between two girder nodes (cross-frame or diaphragm), with rigid offsets e at each end along it;
+  // local DOFs [w1, ts1, tn1, w2, ts2, tn2]
+  function braceK(L, e, EI, GJ) {
+    const Lb = Math.max(0.1, L - 2 * e);
+    const K0 = girderK(Lb, EI, GJ, 0, false);
+    // beam ends from nodes: w_b1 = w1 - e tn1 (phi = -tn), w_b2 = w2 + e tn2
+    const T = Array.from({ length: 6 }, (_, i) => { const r = new Float64Array(6); r[i] = 1; return r; });
+    T[0][2] = -e; T[3][5] = e;
+    const K = Array.from({ length: 6 }, () => new Float64Array(6));
+    for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) { let s = 0; for (let a = 0; a < 6; a++) for (let b = 0; b < 6; b++) s += T[a][i] * K0[a][b] * T[b][j]; K[i][j] = s; }
+    return { K, T, K0, Lb };
+  }
+  // ---------- cross-frame truss, condensed exactly to the grid ----------
+  // A planar truss in the cross-frame's own plane (s along it from girder A to B, z up), pin-jointed members with axial
+  // stiffness only. Each girder end is a rigid vertical line (the web at the connection) at the girder line, moving with
+  // the grid DOFs w (vertical), tn (rotation about the axis normal to the cross-frame, i.e. girder twist) and a
+  // horizontal translation u that the grid does not carry. The truss is condensed onto (w1, tn1, w2, tn2) with u1 held
+  // (rigid-body) and u2 and any interior node free, so the frame carries no net axial force, as a grid assumes.
+  // cf: { type: 'X'|'K'|'Kinv', h (in, chord work point to work point), e (in, connection offset from the web),
+  //   top, bot, diag: { A (in2), R (stiffness factor, AASHTO 4.6.3.3.4: 0.65 single angle, 0.75 flange-connected tee) },
+  //   topChord: true|false, deckZ (in above the bottom work point: the deck ties the two girders laterally at that
+  //   height, so the frame's ends cannot spread there; composite stages) }
+  function truss(L, cf) {
+    const h = cf.h / 12, e = (cf.e || 0) / 12, xa = e, xb = L - e, xm = L / 2;
+    const nodes = [[xa, h], [xa, 0], [xb, h], [xb, 0]]; // A top, A bottom, B top, B bottom
+    const mem = [];
+    const m = (i, j, p, name) => { if (p && p.A > 0) mem.push({ i, j, EA: E * p.A * IN2 * (p.R == null ? 1 : p.R), name }); };
+    const type = cf.type || 'X';
+    if (type === 'X') {
+      if (cf.topChord !== false) m(0, 2, cf.top, 'top chord');
+      m(1, 3, cf.bot, 'bottom chord'); m(0, 3, cf.diag, 'diagonal 1'); m(1, 2, cf.diag, 'diagonal 2'); // 1: A top to B bottom
+    } else if (type === 'K') { // V: diagonals from the top corners to the middle of the bottom chord
+      nodes.push([xm, 0]);
+      if (cf.topChord !== false) m(0, 2, cf.top, 'top chord');
+      m(1, 4, cf.bot, 'bottom chord A'); m(4, 3, cf.bot, 'bottom chord B'); m(0, 4, cf.diag, 'diagonal 1'); m(2, 4, cf.diag, 'diagonal 2');
+    } else { // inverted V: diagonals from the bottom corners to the middle of the top chord
+      nodes.push([xm, h]);
+      m(0, 4, cf.top, 'top chord A'); m(4, 2, cf.top, 'top chord B'); m(1, 3, cf.bot, 'bottom chord'); m(1, 4, cf.diag, 'diagonal 1'); m(3, 4, cf.diag, 'diagonal 2');
+    }
+    const nn = nodes.length, nt = 2 * nn;
+    const Kt = Array.from({ length: nt }, () => new Float64Array(nt));
+    mem.forEach(q => {
+      const [x1, z1] = nodes[q.i], [x2, z2] = nodes[q.j], l = Math.hypot(x2 - x1, z2 - z1), c = (x2 - x1) / l, sn = (z2 - z1) / l, k = q.EA / l;
+      q.l = l; q.c = c; q.sn = sn; q.k = k;
+      const d = [2 * q.i, 2 * q.i + 1, 2 * q.j, 2 * q.j + 1], v = [-c, -sn, c, sn];
+      for (let a = 0; a < 4; a++) for (let b = 0; b < 4; b++) Kt[d[a]][d[b]] += k * v[a] * v[b];
+    });
+    // generalized DOFs q: [w1, tn1, w2, tn2, u2, interior node s, z] (u1 = 0). Node displacement: s = u + tn z,
+    // z = w - tn (x - xg); see the sign note in braceK
+    const nq = 5 + (nn - 4) * 2, Am = Array.from({ length: nt }, () => new Float64Array(nq));
+    const zD = isFinite(cf.deckZ) ? cf.deckZ / 12 : null;
+    // with the deck tie, end B's horizontal movement at deck level equals end A's: u2 = (tn1 - tn2) zD
+    const tie = (node, end) => { const [x, z] = nodes[node], xg = end ? L : 0, iw = end ? 2 : 0, it = end ? 3 : 1;
+      Am[2 * node][it] = z; if (end) { if (zD == null) Am[2 * node][4] = 1; else { Am[2 * node][1] += zD; Am[2 * node][3] -= zD; } }
+      Am[2 * node + 1][iw] = 1; Am[2 * node + 1][it] = -(x - xg); };
+    tie(0, 0); tie(1, 0); tie(2, 1); tie(3, 1);
+    if (nn > 4) { Am[8][5] = 1; Am[9][6] = 1; }
+    const Kq = Array.from({ length: nq }, () => new Float64Array(nq));
+    for (let i = 0; i < nq; i++) for (let j = 0; j < nq; j++) { let s = 0; for (let a = 0; a < nt; a++) { if (!Am[a][i]) continue; for (let b = 0; b < nt; b++) s += Am[a][i] * Kt[a][b] * Am[b][j]; } Kq[i][j] = s; }
+    // condense the slaves (u2, interior) onto the masters (w1, tn1, w2, tn2)
+    const ms = [0, 1, 2, 3], sl = Array.from({ length: nq - 4 }, (_, i) => 4 + i).filter(i => !(i === 4 && zD != null));
+    const Kss = sl.map(i => sl.map(j => Kq[i][j])), Ksm = sl.map(i => ms.map(j => Kq[i][j]));
+    const inv = sl.length ? invert(Kss) : [], X = inv.map(r => ms.map((_, j) => -r.reduce((s, v, k) => s + v * Ksm[k][j], 0))); // slaves = X masters
+    const K4 = ms.map(i => ms.map(j => Kq[i][j] + sl.reduce((s, si, k) => s + Kq[i][si] * X[k][j], 0)));
+    return { K4, X, sl, Am, mem, nodes, nq, zD };
+  }
+  function invert(M) {
+    const n = M.length, A = M.map((r, i) => [...r, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
+    for (let c = 0; c < n; c++) {
+      let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(A[r][c]) > Math.abs(A[p][c])) p = r;
+      if (Math.abs(A[p][c]) < 1e-14) throw new Error('A cross-frame is unstable as drawn (check its members).');
+      [A[c], A[p]] = [A[p], A[c]]; const d = A[c][c]; for (let j = 0; j < 2 * n; j++) A[c][j] /= d;
+      for (let r = 0; r < n; r++) if (r !== c) { const f = A[r][c]; if (f) for (let j = 0; j < 2 * n; j++) A[r][j] -= f * A[c][j]; }
+    }
+    return A.map(r => r.slice(n));
+  }
+  // member axial forces (kip, tension +) from the brace's local DOFs [w1, ts1, tn1, w2, ts2, tn2]
+  function trussForces(T, dl) {
+    const m = [dl[0], dl[2], dl[3], dl[5]], q = new Float64Array(T.nq);
+    m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0); });
+    const u = T.Am.map(r => r.reduce((s, v, j) => s + v * q[j], 0));
+    const out = T.mem.map(p => ({ name: p.name, N: p.k * (p.c * (u[2 * p.j] - u[2 * p.i]) + p.sn * (u[2 * p.j + 1] - u[2 * p.i + 1])) }));
+    // with the deck tie, the deck takes the net horizontal force of the frame (equal and opposite to the members')
+    if (T.zD != null) out.push({ name: 'deck tie', N: -T.mem.reduce((s, p, k) => s + out[k].N * p.c, 0) });
+    return out;
+  }
+
+  // transformation from global node DOFs [w, rx, ry, (psi)] to local [w, ts, tn, (psi)] for an axis (cx, cy)
+  const rot = (cx, cy) => [[1, 0, 0, 0], [0, cx, cy, 0], [0, -cy, cx, 0], [0, 0, 0, 1]];
+
+  // solve one load stage. stage: name passed to props; loads: { line(gid, u) -> k/ft downward, points: [{node, P}] }
+  function solve(md, stage, loads) {
+    const { nodes, gEls, bEls, bearings, N, ndof, M } = md, warp = !!M.warping;
+    const S = new Skyline(N), f = new Float64Array(N);
+    const gd = n => Array.from({ length: ndof }, (_, i) => n.dof + i);
+    const els = [];
+    gEls.forEach(el => { const d = [...gd(el.a), ...gd(el.b)]; S.touch(d); });
+    bEls.forEach(el => { const d = [...gd(el.a).slice(0, 3), ...gd(el.b).slice(0, 3)]; S.touch(d); el.off = false; });
+    S.alloc();
+    const assemble = (dofs, K) => { for (let i = 0; i < dofs.length; i++) for (let j = 0; j <= i; j++) if (K[i][j]) S.add(dofs[i], dofs[j], K[i][j]); };
+    // girder elements
+    gEls.forEach(el => {
+      const dx = el.b.x - el.a.x, dy = el.b.y - el.a.y, L = Math.hypot(dx, dy), cx = dx / L, cy = dy / L;
+      const p = M.props(el.g, el.um, stage);
+      const Kl = girderK(L, E * p.I * IN4, GS * p.J * IN4, warp ? E * (p.Cw || 0) * IN6 : 0, warp);
+      const R = rot(cx, cy), nl = ndof, T = Array.from({ length: 2 * nl }, () => new Float64Array(2 * nl));
+      for (let e = 0; e < 2; e++) for (let i = 0; i < nl; i++) for (let j = 0; j < nl; j++) T[e * nl + i][e * nl + j] = R[i][j];
+      const K = mulTKT(T, Kl), dofs = [...gd(el.a), ...gd(el.b)];
+      assemble(dofs, K);
+      // uniform load on the chord (downward w, k/ft): fixed-end forces, local [w, ., tn]: V = wL/2 up at each end
+      const w = loads.line ? loads.line(el.g, el.um) : 0;
+      if (w) {
+        const fe = new Float64Array(2 * nl); // equivalent nodal loads (global, upward positive)
+        fe[0] = -w * L / 2; fe[nl] = -w * L / 2;
+        // moments: phi-direction end moments -wL^2/12, +wL^2/12; local tn = -phi
+        const m1 = -w * L * L / 12, m2 = w * L * L / 12; // conjugate to phi1, phi2
+        const t1 = -m1, t2 = -m2; // conjugate to tn
+        // local tn -> global rx, ry: rx = -cy tn, ry = cx tn
+        fe[1] = -cy * t1; fe[2] = cx * t1; fe[nl + 1] = -cy * t2; fe[nl + 2] = cx * t2;
+        dofs.forEach((d, i) => { f[d] += fe[i]; });
+        el.w = w;
+      } else el.w = 0;
+      // distributed torque about the girder axis (k-ft/ft, right-hand about the direction of increasing u): half to each end
+      const mt = loads.torque ? loads.torque(el.g, el.um) : 0;
+      if (mt) { const h2 = mt * L / 2; f[el.a.dof + 1] += h2 * cx; f[el.a.dof + 2] += h2 * cy; f[el.b.dof + 1] += h2 * cx; f[el.b.dof + 2] += h2 * cy; }
+      Object.assign(el, { L, cx, cy, Kl, T, dofs });
+    });
+    // braces
+    bEls.forEach(el => {
+      const dx = el.b.x - el.a.x, dy = el.b.y - el.a.y, L = Math.hypot(dx, dy), cx = dx / L, cy = dy / L;
+      const spec = el.kind === 'deck' ? M.deck : el.kind === 'diaphragm' && M.diaphragm ? M.diaphragm : M.brace;
+      const pr = typeof spec === 'function' ? spec(stage, el) : spec;
+      if (!pr) { el.off = true; return; } el.off = false;
+      let B;
+      if (pr.truss) { // exact condensation; torsion about the frame's own axis is negligible (a planar truss)
+        const Tr = truss(L, pr.truss), K = Array.from({ length: 6 }, () => new Float64Array(6)), ix = [0, 2, 3, 5];
+        for (let i = 0; i < 4; i++) for (let j = 0; j < 4; j++) K[ix[i]][ix[j]] = Tr.K4[i][j];
+        const kt = GS * (pr.J || 1) * IN4 / L; K[1][1] += kt; K[4][4] += kt; K[1][4] -= kt; K[4][1] -= kt;
+        const I6 = Array.from({ length: 6 }, (_, i) => { const r = new Float64Array(6); r[i] = 1; return r; });
+        B = { K, T: I6, K0: K, Tr };
+      } else B = braceK(L, (pr.e || 0) / 12, E * pr.I * IN4, GS * pr.J * IN4);
+      const R = rot(cx, cy), T = Array.from({ length: 6 }, () => new Float64Array(6));
+      for (let e = 0; e < 2; e++) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) T[e * 3 + i][e * 3 + j] = R[i][j];
+      const K = mulTKT(T, B.K), dofs = [...gd(el.a).slice(0, 3), ...gd(el.b).slice(0, 3)];
+      assemble(dofs, K);
+      Object.assign(el, { L, cx, cy, B, T, dofs });
+    });
+    // point loads (downward k)
+    (loads.points || []).forEach(q => { f[q.node.dof] -= q.P; });
+    // nodal moments (kip-ft) about the global x and y axes, e.g. a torque about a girder's tangent
+    (loads.moments || []).forEach(q => { f[q.node.dof + 1] += q.Mx || 0; f[q.node.dof + 2] += q.My || 0; });
+    // supports: vertical restraint at bearings (penalty, so reactions come straight out), optional twist restraint;
+    // warping DOFs at the free ends of girders stay free
+    const big = 1e12;
+    bearings.forEach(b => { S.add(b.node.dof, b.node.dof, big); });
+    if (M.twistAtBearings) bearings.forEach(b => { const g = md.F.girders.find(x => x.id === b.g), t = g.P.tan(b.node.u); S.add(b.node.dof + 1, b.node.dof + 1, big * t[0] * t[0]); S.add(b.node.dof + 2, b.node.dof + 2, big * t[1] * t[1]); S.add(b.node.dof + 1, b.node.dof + 2, big * t[0] * t[1]); });
+    S.factor();
+    const d = S.solve(f);
+    // results
+    const reac = bearings.map(b => ({ g: b.g, support: b.support, R: -big * d[b.node.dof] }));
+    const gRes = gEls.map(el => {
+      const dl = new Float64Array(el.dofs.length);
+      for (let i = 0; i < dl.length; i++) { let s = 0; for (let j = 0; j < dl.length; j++) s += el.T[i][j] * d[el.dofs[j]]; dl[i] = s; }
+      const fl = new Float64Array(dl.length);
+      for (let i = 0; i < dl.length; i++) { let s = 0; for (let j = 0; j < dl.length; j++) s += el.Kl[i][j] * dl[j]; fl[i] = s; }
+      const nl = ndof, w = el.w, L = el.L;
+      // add fixed-end actions (local): forces on element ends
+      fl[0] += w * L / 2; fl[nl] += w * L / 2; // vertical (up) end forces on the element from the nodes
+      const phi1 = w * L * L / 12, phi2 = -w * L * L / 12; fl[2] += -phi1; fl[nl + 2] += -phi2;
+      // sign convention: V (upward shear on the left end) = fl[0]; bending moment M (sagging +) at left = -(moment conjugate to phi at end 1)
+      const Mphi1 = -fl[2], Mphi2 = -fl[nl + 2];
+      return { g: el.g, ua: el.a.u, ub: el.b.u, L, w, V1: fl[0], M1: -Mphi1, M2: Mphi2, V2: -fl[nl], T1: -fl[1], T2: fl[nl + 1], B1: warp ? fl[3] : 0, B2: warp ? -fl[nl + 3] : 0, w1: d[el.a.dof], w2: d[el.b.dof] };
+    });
+    const bRes = bEls.filter(el => !el.off).map(el => {
+      const dl = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.T[i][j] * d[el.dofs[j]]; dl[i] = s; }
+      const db = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.T[i][j] * dl[j]; db[i] = s; }
+      const fb = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.K0[i][j] * db[j]; fb[i] = s; }
+      // bending moment at each end of the equivalent beam (sagging +) and shear; truss member forces when modeled so
+      const o = { id: el.id, kind: el.kind, gA: el.a.g, gB: el.b.g, V: fb[0], MA: fb[2], MB: -fb[5], T: -fb[1] };
+      if (el.B.Tr) o.members = trussForces(el.B.Tr, dl);
+      return o;
+    });
+    return { d, reac, gRes, bRes };
+  }
+  function mulTKT(T, K) {
+    const n = K.length, A = Array.from({ length: n }, () => new Float64Array(n)), B = Array.from({ length: n }, () => new Float64Array(n));
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { let s = 0; for (let k = 0; k < n; k++) s += K[i][k] * T[k][j]; A[i][j] = s; }
+    for (let i = 0; i < n; i++) for (let j = 0; j < n; j++) { let s = 0; for (let k = 0; k < n; k++) s += T[k][i] * A[k][j]; B[i][j] = s; }
+    return B;
+  }
+  // girder action at a distance u along it from the element results (moment between nodes with the uniform load)
+  function at(res, gid, u) {
+    const els = res.gRes.filter(e => e.g === gid);
+    let e = els.find(x => u >= x.ua - 1e-9 && u <= x.ub + 1e-9) || els[els.length - 1];
+    const x = (u - e.ua) / (e.ub - e.ua) * e.L;
+    return { M: e.M1 + e.V1 * x - e.w * x * x / 2, V: e.V1 - e.w * x, T: e.T1 + (e.T2 - e.T1) * x / e.L, w: e.w1 + (e.w2 - e.w1) * x / e.L };
+  }
+
+  Object.assign(G2D, { plate, composite, model, solve, at, girderK, braceK, truss, trussForces, Skyline });
+})(typeof window !== 'undefined' ? window : globalThis);
+
+// Steel 2D Grillage: dead-load analysis (phase 2). Typed sections, deck, loads and cross-frames; four stages:
+// steel and deck on the steel section, DC2 and DW on the long-term composite section (3n). Attaches to root.G2D.
+(function (root) {
+  'use strict';
+  const G = root.G2D;
+  const num = v => (v === '' || v == null ? NaN : +v);
+  const STAGES = [
+    { id: 'steel', name: 'DC1 steel', comp: false },
+    { id: 'deck', name: 'DC1 deck', comp: false },
+    { id: 'dc2', name: 'DC2', comp: true },
+    { id: 'dw', name: 'DW', comp: true },
+  ];
+  const DEF = {
+    sections: [{ girders: '', on: '', rows: [{ L: 0, D: 60, tw: 0.5, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }],
+    // haunch: from the top of the web to the bottom of the deck (the top flange is inside it), as MDX and the NSBA
+    // examples define it; hw: haunch width for its weight
+    deck: { ts: 8, wear: 0.5, haunch: 4, hw: 18, fc: 4, wc: 0.150, ohL: 3.5, ohR: 3.5, sip: 15, n: 0, strips: true, stripSpacing: 0 },
+    // DC2 items: to 'equal' (shared by all girders), a list of girders ('G1, G4'), or 'left' / 'right' deck edge with
+    // its distance in from the edge (ft): a line load and a torque on the exterior girder, shared out by the grid
+    loads: { steelExtra: 5, xfWeight: 1.0, dc2: [{ name: 'Left barrier', w: 0.4, to: 'left', at: 0.75 }, { name: 'Right barrier', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
+    // cross-frame: truss members by area; AASHTO 4.6.3.3.4c axial stiffness factors for single angles and
+    // flange-connected tees: Rnc noncomposite (0.65), Rc composite (0.75); 1 for other members. ends: the type used
+    // on the support lines
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: 0, e: 0, zb: 0, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
+    diaphragm: { I: 1500, J: 5 },
+    options: { warping: true, twistAtBearings: false, h: 2.5 },
+  };
+
+  // ---------- sections along each girder ----------
+  // a table of plates from the girder's start; the last row runs to its end. A table entered on one girder serves the
+  // others named with it, its lengths scaled to each girder's length (radial on a concentric curve)
+  function sectionFn(F, sections) {
+    const byG = new Map(), errs = [];
+    const all = F.order.slice();
+    (sections || []).forEach((t, k) => {
+      const ids = String(t.girders || '').split(/[\s,;]+/).filter(Boolean);
+      const list = ids.length ? ids : all.filter(id => !byG.has(id));
+      const rows = (t.rows || []).map(r => ({ L: num(r.L), D: num(r.D), tw: num(r.tw), bt: num(r.bt), tt: num(r.tt), bb: num(r.bb), tb: num(r.tb) }));
+      rows.forEach((r, i) => { ['D', 'tw', 'bt', 'tt', 'bb', 'tb'].forEach(q => { if (!(r[q] > 0)) errs.push(`Section table ${k + 1}, row ${i + 1}: ${q} must be a positive number.`); });
+        if (i < rows.length - 1 && !(r.L > 0)) errs.push(`Section table ${k + 1}, row ${i + 1}: give its length (only the last row runs to the end).`); });
+      if (!rows.length) { errs.push(`Section table ${k + 1} has no plates.`); return; }
+      const ref = F.girders.find(g => g.id === (t.on || list[0])) || F.girders.find(g => g.id === list[0]);
+      list.forEach(id => { const g = F.girders.find(x => x.id === id); if (!g) { errs.push(`Section table ${k + 1} names ${id}, which is not a girder.`); return; } byG.set(id, { rows, scale: ref ? g.L / ref.L : 1 }); });
+    });
+    F.order.forEach(id => { if (!byG.has(id)) errs.push(`No section is given for ${id}.`); });
+    const cache = new Map();
+    const at = (gid, u) => {
+      const t = byG.get(gid); if (!t) return null;
+      let x = 0, i = 0; while (i < t.rows.length - 1 && u > x + t.rows[i].L * t.scale + 1e-9) { x += t.rows[i].L * t.scale; i++; }
+      const key = gid + '|' + i; if (!cache.has(key)) cache.set(key, G.plate(t.rows[i]));
+      return cache.get(key);
+    };
+    const breaks = gid => { const t = byG.get(gid); if (!t) return []; const o = []; let x = 0; t.rows.slice(0, -1).forEach(r => { x += r.L * t.scale; o.push(x); }); return o; };
+    return { at, breaks, errs, rowAt: (gid, u) => { const t = byG.get(gid); let x = 0, i = 0; while (i < t.rows.length - 1 && u > x + t.rows[i].L * t.scale + 1e-9) { x += t.rows[i].L * t.scale; i++; } return t.rows[i]; } };
+  }
+
+  // ---------- tributary width: half the distance to the next girder each side, normal to the girder ----------
+  function tribFn(F, deck) {
+    const cache = new Map();
+    return (gid, u) => {
+      const key = gid + '|' + Math.round(u * 2);
+      if (cache.has(key)) return cache.get(key);
+      const g = F.girders.find(x => x.id === gid), p = g.P.at(u), t = g.P.tan(u), d = [-t[1], t[0]];
+      let L = Infinity, R = Infinity;
+      F.girders.forEach(o => { if (o === g) return; G.lineHits(p, d, o.P).forEach(h => { if (h.u <= 1e-6 || h.u >= o.L - 1e-6) return; if (h.t > 1e-6) L = Math.min(L, h.t); else if (h.t < -1e-6) R = Math.min(R, -h.t); }); });
+      const left = isFinite(L) ? L / 2 : num(deck.ohL) || 0, right = isFinite(R) ? R / 2 : num(deck.ohR) || 0;
+      const o = { b: left + right, left, right, extL: !isFinite(L), extR: !isFinite(R), sL: L, sR: R };
+      cache.set(key, o); return o;
+    };
+  }
+
+  // modular ratio: AASHTO 10th Eq. 5.4.2.4-1, Ec = 120,000 K1 wc^2 f'c^0.33 (K1 = 1, wc = 0.145 kcf for normal weight)
+  const modular = fc => 29000 / (120000 * 0.145 ** 2 * fc ** 0.33);
+
+  // ---------- the analysis ----------
+  function analyze(F, A) {
+    A = A || {};
+    const deck = Object.assign({}, DEF.deck, A.deck), loads = Object.assign({}, DEF.loads, A.loads);
+    const cf = Object.assign({}, DEF.crossframe, A.crossframe), opt = Object.assign({}, DEF.options, A.options);
+    const errs = [], warns = [];
+    const S = sectionFn(F, A.sections || DEF.sections); errs.push(...S.errs);
+    if (!(num(deck.ts) > 0)) errs.push('Deck thickness must be positive.');
+    const n = num(deck.n) > 0 ? num(deck.n) : modular(num(deck.fc) || 4), n3 = 3 * n;
+    if (cf.model === 'truss' && !(num(cf.h) > 0)) {
+      // default work-point depth: 75% of the shallowest web, a common detail
+      const D = Math.min(...F.order.map(id => { const g = F.girders.find(x => x.id === id); return S.rowAt ? (S.rowAt(id, g.L / 2) || {}).D || 60 : 60; }));
+      cf.h = Math.round(0.75 * D);
+      warns.push(`Cross-frame depth between work points not given; ${cf.h} in (75% of the web) used.`);
+    }
+    if (errs.length) return { errs, warns };
+    const trib = tribFn(F, deck);
+    const thOf = (gid, u) => Math.max(0, (num(deck.haunch) || 0) - S.rowAt(gid, u).tt); // bottom of deck above the top flange
+    const compAt = (gid, u, nn) => { const st = S.at(gid, u), tb = trib(gid, u); return G.composite(st, { b: tb.b * 12, ts: num(deck.ts), th: thOf(gid, u), jf: deck.strips ? 0.5 : 1 }, nn); }; // with deck strips, the plate's twisting stiffness is shared half and half
+    // transverse deck strips for composite stages: from each girder, normal lines to the next girder every s ft
+    const stripLines = [];
+    if (deck.strips) {
+      const s = num(deck.stripSpacing) > 0 ? num(deck.stripSpacing) : opt.h || 2.5;
+      F.order.slice(0, -1).forEach(id => {
+        const g = F.girders.find(x => x.id === id);
+        for (let u = s / 2; u < g.L; u += s) {
+          const p = g.P.at(u), t = g.P.tan(u), d = [t[1], -t[0]]; // to the right
+          let best = null;
+          F.girders.forEach(o => { if (o === g || F.order.indexOf(o.id) < F.order.indexOf(id)) return; G.lineHits(p, d, o.P).forEach(h => { if (h.t > 1e-6 && h.u > 1e-6 && h.u < o.L - 1e-6 && (!best || h.t < best.t)) best = { g: o.id, u: h.u, t: h.t }; }); });
+          if (best) stripLines.push({ gA: id, uA: u, gB: best.g, uB: best.u, w: s, L: best.t });
+        }
+      });
+    }
+    // cross-frame spec per stage: truss (with the deck tie in composite stages) or an equivalent beam
+    const braceSpec = (stage, el) => {
+      if (cf.model !== 'truss') return { I: num(cf.beam.I), J: num(cf.beam.J), e: num(cf.e) || 0 };
+      const comp = (STAGES.find(x => x.id === stage) || {}).comp, R = comp ? (num(cf.Rc) > 0 ? num(cf.Rc) : 1) : (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1);
+      const sA = S.at(el.a.g, el.a.u), sB = S.at(el.b.g, el.b.u), d = Math.max(sA.d, sB.d);
+      const mem = q => ({ A: num(q && q.A) || 0, R });
+      const type = el.src && el.src.tag === 'support' ? cf.endType || cf.type : cf.type;
+      const tr = { type, h: num(cf.h), e: num(cf.e) || 0, top: mem(cf.top), bot: mem(cf.bot), diag: mem(cf.diag), topChord: cf.topChord !== false };
+      if (comp && cf.deckTie) tr.deckZ = d + Math.max(thOf(el.a.g, el.a.u), thOf(el.b.g, el.b.u)) + num(deck.ts) / 2 - (num(cf.zb) || 0);
+      return { truss: tr, J: 1 };
+    };
+    const md = G.model(F, {
+      props: (gid, u, stage) => {
+        const st = (STAGES.find(x => x.id === stage) || {}).comp ? compAt(gid, u, n3) : S.at(gid, u);
+        return { I: st.I, J: st.J, Cw: st.Cw };
+      },
+      brace: braceSpec,
+      diaphragm: { I: num((A.diaphragm || DEF.diaphragm).I), J: num((A.diaphragm || DEF.diaphragm).J), e: 0 },
+      deck: (stage, el) => {
+        const st = STAGES.find(x => x.id === stage); if (!st || !st.comp) return null;
+        const w = el.src.w * 12, t = num(deck.ts);
+        return { I: w * t ** 3 / 12 / n3, J: w * t ** 3 / 6 / n3, e: 0 };
+      },
+      stripLines, breaks: S.breaks, extra: gid => tenthPoints(F, gid), warping: !!opt.warping, twistAtBearings: !!opt.twistAtBearings, h: num(opt.h) || 2.5,
+    });
+    // loads by stage (k/ft downward; points in k)
+    const wc = num(deck.wc) || 0.150;
+    const nG = F.order.length;
+    const dc2To = it => { const t = String(it.to || 'equal').toLowerCase(); if (t === 'equal') return F.order; if (t === 'left') return [F.order[0]]; if (t === 'right') return [F.order[nG - 1]]; return String(it.to).split(/[\s,;]+/).filter(Boolean); };
+    // edge loads: torque on the exterior girder = w x eccentricity. A positive torque about the tangent lifts the
+    // girder's left side, so a load on the left edge gives a negative torque and one on the right a positive torque
+    const dc2Torque = (gid, u) => (loads.dc2 || []).reduce((s, it) => {
+      const t = String(it.to || '').toLowerCase(); if (t !== 'left' && t !== 'right') return s;
+      const g0 = t === 'left' ? F.order[0] : F.order[nG - 1]; if (gid !== g0) return s;
+      const tb = trib(gid, u), oh = t === 'left' ? tb.left : tb.right, ecc = Math.max(0, oh - (num(it.at) || 0));
+      return s + (t === 'left' ? -1 : 1) * (num(it.w) || 0) * ecc;
+    }, 0);
+    const line = {
+      steel: (gid, u) => S.at(gid, u).A / 144 * 0.490 * (1 + (num(loads.steelExtra) || 0) / 100),
+      // deck: tributary width at full thickness plus the haunch; SIP forms only between flange edges in the bays
+      deck: (gid, u) => { const tb = trib(gid, u), r = S.rowAt(gid, u), bf = r.bt / 12;
+        const clear = (tb.extL ? 0 : Math.max(0, tb.left - bf / 2)) + (tb.extR ? 0 : Math.max(0, tb.right - bf / 2));
+        return tb.b * (num(deck.ts) + (num(deck.wear) || 0)) / 12 * wc + (num(deck.hw) || r.bt) * (num(deck.haunch) || 0) / 144 * wc + clear * (num(deck.sip) || 0) / 1000; },
+      dc2: (gid) => (loads.dc2 || []).reduce((s, it) => { const ids = dc2To(it); return ids.includes(gid) ? s + (num(it.w) || 0) / ids.length : s; }, 0),
+      dw: (gid, u) => { const tb = trib(gid, u), e = num(loads.dwEdge) || 0; const b = tb.b - (tb.extL ? Math.min(e, tb.left) : 0) - (tb.extR ? Math.min(e, tb.right) : 0); return Math.max(0, b) * (num(loads.dw) || 0) / 1000; },
+    };
+    const xfW = num(loads.xfWeight) || 0, pts = [];
+    if (xfW) { F.crossframes.forEach(x => { pts.push({ node: md.nodeAt(x.gA, x.uA), P: xfW / 2 }); pts.push({ node: md.nodeAt(x.gB, x.uB), P: xfW / 2 }); }); F.members.forEach(m => { pts.push({ node: md.nodeAt(m.gA, m.uA), P: xfW / 2 }); pts.push({ node: md.nodeAt(m.gB, m.uB), P: xfW / 2 }); }); }
+    const res = {};
+    STAGES.forEach(st => {
+      const r = G.solve(md, st.id, { line: line[st.id], points: st.id === 'steel' ? pts : [], torque: st.id === 'dc2' ? dc2Torque : null });
+      res[st.id] = r;
+    });
+    // tributary sanity
+    if (F.members.length && cf.model === 'truss') warns.push('Diaphragms are modeled as beams (I, J given under Diaphragms).');
+    return { md, res, stages: STAGES, n, n3, S, trib, stripLines, line, errs, warns, cf, deck, loads, opt };
+  }
+
+  // tenth points of each span of a girder (u along it)
+  function tenthPoints(F, gid) {
+    const g = F.girders.find(x => x.id === gid), o = [];
+    g.spans.forEach((s, k) => { for (let i = 0; i <= 10; i++) { if (i === 0 && k > 0) continue; o.push(s.u0 + s.L * i / 10); } });
+    return o;
+  }
+
+  // results along one girder at its tenth points for one stage: M, V, T, deflection, flange lateral moment from warping
+  function girderTable(R, gid, stage) {
+    const F = R.md.F, g = F.girders.find(x => x.id === gid), r = R.res[stage], out = [];
+    g.spans.forEach((s, k) => {
+      for (let i = 0; i <= 10; i++) {
+        if (i === 0 && k > 0) continue;
+        const u = s.u0 + s.L * i / 10, a = G.at(r, gid, u);
+        const el = r.gRes.filter(e => e.g === gid).find(e => u >= e.ua - 1e-9 && u <= e.ub + 1e-9);
+        const B = el ? (Math.abs(u - el.ua) < Math.abs(u - el.ub) ? el.B1 : el.B2) : 0;
+        const st = R.S.at(gid, u), Ml = B / (st.h / 12); // flange lateral moment, k-ft, each flange
+        const row = R.S.rowAt(gid, u);
+        out.push({ span: k + 1, pt: i, u, M: a.M, V: a.V, T: a.T, w: a.w * 12, B, Ml, flb: Math.abs(Ml) * 12 * 6 / (row.tb * row.bb ** 2), flt: Math.abs(Ml) * 12 * 6 / (row.tt * row.bt ** 2) });
+      }
+    });
+    return out;
+  }
+
+  Object.assign(G, { analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular });
+})(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>
 (function () {
@@ -793,12 +1354,36 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       supports: [{ id: 'Abut 1', sta: 120, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 275, skew: 25, kind: 'pier' }, { id: 'Abut 2', sta: 450, skew: 10, kind: 'abutment' }],
       diaphragms: [], crossframes: CF({ spacing: 20, maxLb: 25 }) } },
   };
+
+  // ---------- dead-load analysis input (phase 2) ----------
+  const AN0 = () => ({
+    sections: [{ girders: '', on: '', rows: [{ L: 0, D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }],
+    deck: { ts: 8, wear: 0.5, haunch: 3.5, hw: 16, fc: 4, wc: 0.150, ohL: 3.5, ohR: 3.5, sip: 15, n: '', strips: true },
+    loads: { steelExtra: 5, xfWeight: 0.8, dc2: [{ name: 'Left barrier', w: 0.4, to: 'left', at: 0.75 }, { name: 'Right barrier', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
+    diaphragm: { I: 1500, J: 5 },
+    options: { warping: true, twistAtBearings: false, h: 2.5 },
+  });
+  // NSBA Example 4 plates (Figure 3), deck and loads (Sections 3, 5.2). Its 3D analysis used no stiffness reductions
+  EX.curved.analysis = Object.assign(AN0(), {
+    sections: [{"girders": "G1", "on": "", "rows": [{"L": 114, "D": 84, "tw": 0.5625, "bt": 16, "tt": 1, "bb": 16, "tb": 1}, {"L": 24.73, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 21, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 23.27, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 123.51, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 23.27, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 21, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 24.73, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 113, "D": 84, "tw": 0.5625, "bt": 16, "tt": 1, "bb": 16, "tb": 1}]}, {"girders": "G2", "on": "", "rows": [{"L": 116.1, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 25.14, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 18, "tt": 2.5, "bb": 19, "tb": 3}, {"L": 24.16, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 125.04, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 24.16, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 18, "tt": 2.5, "bb": 19, "tb": 3}, {"L": 25.14, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 115.1, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}]}, {"girders": "G3", "on": "", "rows": [{"L": 117.9, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 25.86, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 20, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 24.84, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 126.96, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 20, "tb": 1}, {"L": 24.84, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 20, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 25.86, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 116.9, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}]}, {"girders": "G4", "on": "", "rows": [{"L": 34, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1}, {"L": 85.7, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.625}, {"L": 26.57, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 28, "tt": 2.5, "bb": 27, "tb": 3}, {"L": 25.43, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 129.09, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.5}, {"L": 25.43, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 28, "tt": 2.5, "bb": 27, "tb": 3}, {"L": 26.57, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 85.7, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.625}, {"L": 33, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1}]}],
+    deck: { ts: 9, wear: 0.5, haunch: 4, hw: 20, fc: 4, wc: 0.150, ohL: 3.75, ohR: 3.75, sip: 15, n: 7.56, strips: true },
+    loads: { steelExtra: 7, xfWeight: 0, dc2: [{ name: 'Left parapet', w: 0.495, to: 'left', at: 0.6 }, { name: 'Right parapet', w: 0.495, to: 'right', at: 0.6 }], dw: 30, dwEdge: 1.5 },
+    crossframe: { model: 'truss', type: 'X', endType: 'Kinv', h: 85, e: 0, zb: 0.75, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
+  });
+  // the MDX system run's plates (one table on G1, scaled to the other girders), deck and loads
+  EX.mdx4.analysis = Object.assign(AN0(), {
+    sections: [{ girders: '', on: 'G1', rows: [{"L": 123.623, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}, {"L": 19.82, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.25}, {"L": 44.467, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.75, "bb": 24, "tb": 2}, {"L": 28.949, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.25}, {"L": 104.723, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}, {"L": 24.712, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.5, "bb": 24, "tb": 1.5}, {"L": 49.408, "D": 80, "tw": 0.6875, "bt": 22, "tt": 2, "bb": 24, "tb": 2.75}, {"L": 33.215, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.5, "bb": 24, "tb": 1.5}, {"L": 109.947, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.5}, {"L": 25.587, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.5}, {"L": 44.467, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.75, "bb": 24, "tb": 2.5}, {"L": 26.661, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.5}, {"L": 0, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}] }],
+    deck: { ts: 8, wear: 0.5, haunch: 5, hw: 22, fc: 4, wc: 0.150, ohL: 3.75, ohR: 3.75, sip: 0, n: 8, strips: true },
+    loads: { steelExtra: 8, xfWeight: 1.4, dc2: [{ name: 'Exterior girders', w: 0.6, to: 'G1, G4' }, { name: 'Interior girders', w: 0.5, to: 'G2, G3' }], dw: 35, dwEdge: 1.5 },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: 68, e: 6, zb: 6, top: { A: 8.44 }, bot: { A: 8.44 }, diag: { A: 8.44 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8103, J: 4.8 } },
+  });
   const XY0 = { ext: 1, girders: [{ id: 'G1', pts: [[0, 10], [200, 14]], trim: true }, { id: 'G2', pts: [[0, 0], [200, 0]], trim: true }, { id: 'G3', pts: [[0, -10], [200, -14]], trim: true }],
     supports: [{ id: 'Abut 1', a: [10, 20], b: [10, -20], kind: 'abutment' }, { id: 'Abut 2', a: [190, 25], b: [190, -25], kind: 'abutment' }], diaphragms: [], crossframes: CF({ spacing: 20 }) };
-  const fresh = () => ({ v: 1, mode: 'concentric', concentric: clone(EX.curved.concentric), alignment: clone(EX.flare.alignment), xy: clone(XY0) });
+  const fresh = () => ({ v: 1, mode: 'concentric', concentric: clone(EX.curved.concentric), alignment: clone(EX.flare.alignment), xy: clone(XY0), analysis: clone(EX.curved.analysis) });
 
   let doc = fresh();
-  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; } catch (e) { /* private window or blocked storage */ }
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; if (!doc.analysis) doc.analysis = AN0(); } catch (e) { /* private window or blocked storage */ }
   let dxf = null, dxfMap = {}, dxfScale = 0, dxfTol = 0.05; // DXF import state (not saved)
   let F = null, sel = null;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { /* ignore */ } };
@@ -953,6 +1538,57 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       <div class="toolbar"><button data-act="add" data-arr="${base}.add" data-tpl="xadd">Add cross-frame</button></div>`, true);
   }
 
+  // ---------- rail: dead-load analysis input ----------
+  const fChk = (lbl, path) => `<label class="c"><input type="checkbox" data-k="${path}" data-t="bool"${getP(doc, path) ? ' checked' : ''}> ${lbl}</label>`;
+  function railAnalysis() {
+    const A = doc.analysis, b = 'analysis';
+    const secs = (A.sections || []).map((t, k) => {
+      const rows = (t.rows || []).map((r, i) => `<tr>${['L', 'D', 'tw', 'bt', 'tt', 'bb', 'tb'].map(q => `<td><input class="n" data-k="${b}.sections.${k}.rows.${i}.${q}" data-t="num" value="${esc(r[q])}" aria-label="${q}"${q === 'L' && i === t.rows.length - 1 ? ' placeholder="to end" ' : ''}></td>`).join('')}
+        <td><button data-act="del" data-arr="${b}.sections.${k}.rows" data-i="${i}" aria-label="Remove row">×</button></td></tr>`).join('');
+      return `<div class="row"><div class="fields">${fTxt('Girders', `${b}.sections.${k}.girders`, 'all others')}${fTxt('Lengths measured on', `${b}.sections.${k}.on`, 'first girder named', 'gids')}</div>
+        <div class="tbl-wrap" style="max-height:none"><table class="mini sec"><colgroup><col style="width:17%"><col><col><col><col><col><col><col style="width:30px"></colgroup>
+        <thead><tr><th>Length ft</th><th>Web D</th><th>tw</th><th>Top b</th><th>t</th><th>Bot b</th><th>t</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>
+        <div class="toolbar"><button data-act="add" data-arr="${b}.sections.${k}.rows" data-tpl="secrow">Add plate row</button><button data-act="del" data-arr="${b}.sections" data-i="${k}">Remove table</button></div></div>`;
+    }).join('');
+    const dc2 = (A.loads.dc2 || []).map((it, i) => `<tr>
+      <td><input class="t" data-k="${b}.loads.dc2.${i}.name" data-t="txt" value="${esc(it.name)}" aria-label="Name"></td>
+      <td><input class="n" data-k="${b}.loads.dc2.${i}.w" data-t="num" value="${esc(it.w)}" aria-label="Load k/ft"></td>
+      <td><input class="t" data-k="${b}.loads.dc2.${i}.to" data-t="txt" value="${esc(it.to)}" list="dc2to" aria-label="Applied to"></td>
+      <td><input class="n" data-k="${b}.loads.dc2.${i}.at" data-t="num" value="${esc(it.at == null ? '' : it.at)}" aria-label="In from edge ft"></td>
+      <td><button data-act="del" data-arr="${b}.loads.dc2" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('');
+    const truss = A.crossframe.model !== 'beam';
+    const types = [['X', 'X with chords'], ['K', 'K (V to bottom chord)'], ['Kinv', 'Inverted K (to top chord)']];
+    return `<h2 class="railh">Dead-load analysis</h2>`
+      + grp('Girder sections', `<p class="hint">Plates by length along the girder from its start, in inches; the last row runs to the end. A table can serve several girders (blank = every girder not named elsewhere); its lengths are then scaled to each girder's length, as on a concentric curve.</p>${secs}
+        <div class="toolbar"><button data-act="add" data-arr="${b}.sections" data-tpl="sectable">Add section table</button></div>`, true)
+      + grp('Deck', `<div class="fields">${fNum('Structural thickness', 'in', b + '.deck.ts')}${fNum('Integral wearing surface', 'in', b + '.deck.wear', 'Weight only')}
+        ${fNum('Haunch', 'in', b + '.deck.haunch', 'Top of web to bottom of deck')}${fNum('Haunch width', 'in', b + '.deck.hw', 'For its weight')}
+        ${fNum("f'c", 'ksi', b + '.deck.fc')}${fNum('Modular ratio n', '', b + '.deck.n', 'Blank: AASHTO Eq. 5.4.2.4-1')}
+        ${fNum('Concrete weight', 'kcf', b + '.deck.wc')}${fNum('SIP forms', 'psf', b + '.deck.sip', 'Between flange edges')}
+        ${fNum('Overhang left', 'ft', b + '.deck.ohL', 'From the exterior girder')}${fNum('Overhang right', 'ft', b + '.deck.ohR')}</div>
+        ${fChk('Transverse deck strips in the composite stages (deck plate bending and twisting between girders)', b + '.deck.strips')}`, false)
+      + grp('Loads', `<div class="fields">${fNum('Detail steel', '%', b + '.loads.steelExtra', 'Added to the plate weight')}${fNum('Each cross-frame', 'kip', b + '.loads.xfWeight', 'Half to each girder')}</div>
+        <h3>DC2</h3><p class="hint">To: <b>equal</b> (shared by all girders), <b>left</b> or <b>right</b> deck edge with its distance in from the edge (a line load and torque on the exterior girder that the grid shares out), or a list of girders.</p>
+        <datalist id="dc2to"><option value="equal"><option value="left"><option value="right"></datalist>
+        <table class="mini"><colgroup><col style="width:34%"><col><col style="width:22%"><col><col style="width:30px"></colgroup><thead><tr><th>Item</th><th>k/ft</th><th>To</th><th>In ft</th><th></th></tr></thead><tbody>${dc2}</tbody></table>
+        <div class="toolbar"><button data-act="add" data-arr="${b}.loads.dc2" data-tpl="dc2">Add DC2 item</button></div>
+        <h3>DW</h3><div class="fields">${fNum('Future wearing surface', 'psf', b + '.loads.dw')}${fNum('Not on the outer', 'ft', b + '.loads.dwEdge', 'At each deck edge (barriers)')}</div>`, false)
+      + grp('Cross-frame members', `${fSel('Model', b + '.crossframe.model', [['truss', 'Truss, condensed exactly'], ['beam', 'Equivalent beam (I, J)']])}
+        ${truss ? `<div class="fields">${fSel('Intermediate', b + '.crossframe.type', types)}${fSel('On support lines', b + '.crossframe.endType', types)}
+        ${fNum('Depth, work points', 'in', b + '.crossframe.h', 'Blank: 75% of the web')}${fNum('Bottom work point', 'in', b + '.crossframe.zb', 'Above the bottom of the girder')}
+        ${fNum('Top chord area', 'in²', b + '.crossframe.top.A')}${fNum('Bottom chord area', 'in²', b + '.crossframe.bot.A')}
+        ${fNum('Diagonal area', 'in²', b + '.crossframe.diag.A')}${fNum('Connection offset', 'in', b + '.crossframe.e', 'From the web')}
+        ${fNum('Stiffness factor, noncomposite', '', b + '.crossframe.Rnc', 'AASHTO 4.6.3.3.4c: 0.65')}${fNum('Stiffness factor, composite', '', b + '.crossframe.Rc', 'AASHTO 4.6.3.3.4c: 0.75')}</div>
+        ${fChk('Top chord (X and V types)', b + '.crossframe.topChord')}
+        ${fChk('Deck ties the frames at deck level in the composite stages', b + '.crossframe.deckTie')}
+        <p class="hint">Each frame is a planar truss between the two girder webs, condensed onto the girders' deflection and twist, so its stiffness in bending and in shear are both exact. The factors reduce member axial stiffness for single angles and flange-connected tees; use 1 for other members.</p>`
+        : `<div class="fields">${fNum('I', 'in⁴', b + '.crossframe.beam.I')}${fNum('J', 'in⁴', b + '.crossframe.beam.J')}${fNum('Connection offset', 'in', b + '.crossframe.e')}</div><p class="hint">For comparison with programs that use one equivalent beam per cross-frame.</p>`}
+        <h3>Diaphragms</h3><div class="fields">${fNum('I', 'in⁴', b + '.diaphragm.I')}${fNum('J', 'in⁴', b + '.diaphragm.J')}</div>`, false)
+      + grp('Analysis options', `${fChk('Warping torsion in the girders (flange lateral bending)', b + '.options.warping')}
+        ${fChk('Bearings restrain girder twist', b + '.options.twistAtBearings')}
+        <div class="fields">${fNum('Element length', 'ft', b + '.options.h', 'Largest; nodes also at every cross-frame')}</div>`, false);
+  }
+
   function renderRail() {
     let h = lineRefs();
     if (doc.mode === 'concentric') h += railConcentric();
@@ -960,6 +1596,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     else if (doc.mode === 'xy') h += railXY();
     else h += railDXF();
     if (doc.mode !== 'dxf') h += railCF();
+    if (doc.mode !== 'dxf') h += railAnalysis();
     h += grp('Export', `<div class="toolbar"><button data-act="dxfout">Framing as DXF</button><button data-act="jsonout">Framing as JSON</button></div><p class="hint">The DXF has girders, support lines, diaphragms and cross-frames on their own layers, in inches, so the framing can go back to CAD or be read in again here.</p>`, false);
     $('#rail').innerHTML = h;
     document.querySelectorAll('#modeSel button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === doc.mode)));
@@ -975,6 +1612,9 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     sxy: arr => ({ id: 'Support ' + (arr.length + 1), a: [100, 30], b: [100, -30], kind: 'pier' }),
     dxy: arr => ({ id: 'D' + (arr.length + 1), a: [50, 30], b: [50, -30] }),
     xadd: () => { const o = F ? F.order : ['G1', 'G2']; return { gA: o[0], uA: 10, gB: o[1], uB: 10 }; },
+    secrow: arr => Object.assign({}, arr[arr.length - 1] || { D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }, { L: '' }),
+    sectable: () => ({ girders: '', on: '', rows: [{ L: '', D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }),
+    dc2: () => ({ name: 'Item', w: 0.1, to: 'equal', at: '' }),
   };
   let tmr = 0;
   const later = () => { clearTimeout(tmr); tmr = setTimeout(() => { save(); run(); }, 160); };
@@ -992,6 +1632,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     t.setAttribute('aria-invalid', String(bad));
     if (bad) return;
     setP(doc, k, v);
+    if (t.tagName === 'SELECT' && /crossframe\.model$/.test(k)) renderRail();
     if (t.tagName === 'SELECT' && /elements\.\d+\.type$/.test(k)) { const el = getP(doc, k.replace(/\.type$/, '')); if (v === 'arc' && !(el.R > 0)) { el.R = 1000; el.turn = el.turn || 'L'; } renderRail(); }
     later();
   });
@@ -1065,15 +1706,15 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 
   // ---------- run ----------
   function run() {
-    if (doc.mode === 'dxf') { F = null; drawPlan(); tables(); msg([], []); $('#planStatus').textContent = dxf ? 'Map the layers, then build the framing.' : 'Open a DXF file to start.'; return; }
+    if (doc.mode === 'dxf') { F = null; AR = null; showResults(); drawPlan(); tables(); msg([], []); $('#planStatus').textContent = dxf ? 'Map the layers, then build the framing.' : 'Open a DXF file to start.'; return; }
     try { F = G.build(engineModel()); }
-    catch (err) { F = { fatal: true }; msg([err.message], []); drawPlan(); tables(); return; }
+    catch (err) { F = { fatal: true }; msg([err.message], []); drawPlan(); tables(); AR = null; showResults(); return; }
     msg(F.errors, F.warnings);
     const nx = F.crossframes.length;
     $('#planStatus').textContent = `${F.girders.length} girders · ${F.supports.length} supports · ${nx} cross-frames${F.members.length ? ' · ' + F.members.length + ' diaphragm members' : ''}`;
     // datalist of girder ids may have changed
     const gl = document.getElementById('gids'); if (gl) gl.innerHTML = F.order.map(i => `<option value="${esc(i)}">`).join('');
-    drawPlan(); tables();
+    drawPlan(); tables(); scheduleAnalysis();
   }
 
   // ---------- plan view ----------
@@ -1219,17 +1860,174 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(() => done(true), () => { download('crossframes.csv', t, 'text/csv'); done(true); }); else { download('crossframes.csv', t, 'text/csv'); done(true); }
   };
 
+  // ---------- dead-load analysis: run and show ----------
+  let AR = null, anKey = '', anQ = 'M', anTmr = 0, anSlow = false;
+  const QN = { M: ['Moment', 'kip-ft'], V: ['Shear', 'kip'], T: ['Torque', 'kip-ft'], w: ['Deflection', 'in'], flb: ['Bottom flange lateral bending', 'ksi'] };
+  const SN = { steel: 'DC1 steel', deck: 'DC1 deck', dc1: 'DC1 total', dc2: 'DC2', dw: 'DW', all: 'DC1 + DC2 + DW' };
+  const parts = s => (s === 'dc1' ? ['steel', 'deck'] : s === 'all' ? ['steel', 'deck', 'dc2', 'dw'] : [s]);
+  const anInputKey = () => JSON.stringify([engineModel(), doc.analysis]);
+  function scheduleAnalysis() {
+    clearTimeout(anTmr);
+    if (!F || F.fatal || F.errors.length) { AR = null; showResults(); return; }
+    if (anInputKey() === anKey && AR) return;
+    $('#anStatus').textContent = anSlow ? 'Inputs changed: run the analysis again.' : 'Running…';
+    if (!anSlow) anTmr = setTimeout(runAnalysis, 450);
+  }
+  function runAnalysis() {
+    if (!F || F.fatal) return;
+    const t0 = performance.now();
+    try {
+      const A = clone(doc.analysis), fixNum = o => { Object.keys(o).forEach(k => { if (o[k] && typeof o[k] === 'object') fixNum(o[k]); }); };
+      fixNum(A);
+      const R = G.analyze(F, A);
+      AR = R.errs && R.errs.length && !R.res ? { errs: R.errs, warns: R.warns || [] } : R;
+    } catch (err) { AR = { errs: [err.message], warns: [] }; }
+    const ms = performance.now() - t0; anSlow = ms > 1500; anKey = anInputKey();
+    $('#anStatus').textContent = AR && AR.res ? `${(AR.md.N).toLocaleString()} unknowns · ${Math.round(ms)} ms` : '';
+    showResults();
+  }
+  $('#btnRun').onclick = () => runAnalysis();
+
+  // finer series for the diagram: every node, from the element ends
+  // position along the bridge: each point projected onto the middle girder (so partial girders line up)
+  function alongRef() {
+    const ref = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]), pts = ref.P.pts, s = ref.P.s;
+    return (gid, u) => {
+      const g = F.girders.find(x => x.id === gid), p = g.P.at(u); let bi = 0, bd = Infinity;
+      for (let i = 0; i < pts.length; i += 6) { const d = (pts[i][0] - p[0]) ** 2 + (pts[i][1] - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } }
+      for (let i = Math.max(0, bi - 6); i < Math.min(pts.length, bi + 7); i++) { const d = (pts[i][0] - p[0]) ** 2 + (pts[i][1] - p[1]) ** 2; if (d < bd) { bd = d; bi = i; } }
+      // refine on the neighboring segments
+      let best = s[bi], bd2 = Infinity;
+      [bi - 1, bi].forEach(i => { if (i < 0 || i >= pts.length - 1) return; const a = pts[i], e = [pts[i + 1][0] - a[0], pts[i + 1][1] - a[1]], L2 = e[0] ** 2 + e[1] ** 2 || 1; let t = ((p[0] - a[0]) * e[0] + (p[1] - a[1]) * e[1]) / L2; t = Math.max(0, Math.min(1, t)); const q = [a[0] + e[0] * t, a[1] + e[1] * t], d = (q[0] - p[0]) ** 2 + (q[1] - p[1]) ** 2; if (d < bd2) { bd2 = d; best = s[i] + t * (s[i + 1] - s[i]); } });
+      return best;
+    };
+  }
+  function girderCurve(gid, stage, q) {
+    const ps = parts(stage), els = ps.map(s => AR.res[s].gRes.filter(e => e.g === gid));
+    const out = [];
+    els[0].forEach((e, k) => {
+      [0, 1].forEach(end => {
+        const u = end ? e.ub : e.ua; let v = 0;
+        els.forEach(L => { const x = L[k];
+          if (q === 'M') v += end ? x.M2 : x.M1; else if (q === 'V') v += end ? x.V1 - x.w * x.L : x.V1; else if (q === 'T') v += end ? x.T2 : x.T1;
+          else if (q === 'w') v += (end ? x.w2 : x.w1) * 12;
+          else if (q === 'flb') { const row = AR.S.rowAt(gid, u), st = AR.S.at(gid, u), B = end ? x.B2 : x.B1; v += B / (st.h / 12) * 12 * 6 / (row.tb * row.bb ** 2); } });
+        out.push({ u, v });
+      });
+    });
+    return out;
+  }
+  function showResults() {
+    const card = $('#anCard'); if (!card) return;
+    const ok = AR && AR.res;
+    $('#anMsgs').innerHTML = AR && (AR.errs || []).length ? `<div class="msg err" role="alert"><b>The analysis could not run</b>${AR.errs.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : (AR && (AR.warns || []).length ? `<div class="msg wrn">${AR.warns.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : '');
+    if (!ok) { $('#anSvg').innerHTML = ''; ['#anTbl', '#anReac', '#anXf'].forEach(s => { $(s).innerHTML = ''; }); $('#anLegend').innerHTML = ''; return; }
+    const sel = $('#anGirder'), gids = F.order;
+    if (sel.options.length !== gids.length || [...sel.options].some((o, i) => o.value !== gids[i])) { const cur = sel.value; sel.innerHTML = gids.map(g => `<option>${esc(g)}</option>`).join(''); if (gids.includes(cur)) sel.value = cur; }
+    drawChart(); anTable(); reacTable(); xfTable();
+  }
+  const colorOf = i => `var(--s${(i % 8) + 1})`;
+  function drawChart() {
+    const svgA = $('#anSvg'), box = $('#anChart'), W = box.clientWidth, H = box.clientHeight, stage = $('#anStage').value, q = anQ;
+    const along = alongRef(), ser = F.order.map((gid, i) => ({ gid, i, pts: girderCurve(gid, stage, q).map(p => ({ u: along(gid, p.u), v: p.v, ug: p.u })) }));
+    let x0 = Infinity, x1 = -Infinity, y0 = 0, y1 = 0; ser.forEach(s => s.pts.forEach(p => { x0 = Math.min(x0, p.u); x1 = Math.max(x1, p.u); y0 = Math.min(y0, p.v); y1 = Math.max(y1, p.v); }));
+    if (y1 - y0 < 1e-9) y1 = y0 + 1;
+    const pad = { l: 62, r: 12, t: 12, b: 30 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    // moments and deflections plot positive down? Keep engineering convention for moment: sagging positive plotted up
+    const X = u => pad.l + (u - x0) / (x1 - x0) * pw, Y = v => pad.t + (y1 - v) / (y1 - y0) * ph;
+    const ticks = niceTicks(y0, y1, 5);
+    let h = ticks.map(t => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)" stroke-width="1"/><text x="${pad.l - 6}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">${fmtN(t)}</text>`).join('');
+    h += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)" stroke-width="1"/>`;
+    // supports of the first girder as reference ticks
+    const gr = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]);
+    gr.brg.forEach(b => { h += `<line x1="${X(b.u)}" x2="${X(b.u)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--support)" stroke-dasharray="4 4" stroke-width="1" opacity=".6"/><text x="${X(b.u)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="var(--support)">${esc(b.support)}</text>`; });
+    ser.forEach(s => { const d = s.pts.map((p, k) => (k ? 'L' : 'M') + X(p.u).toFixed(1) + ' ' + Y(p.v).toFixed(1)).join(''); h += `<path d="${d}" fill="none" stroke="${colorOf(s.i)}" stroke-width="2" stroke-linejoin="round"/>`; });
+    h += `<text x="${pad.l}" y="${pad.t - 2}" font-size="11" fill="var(--muted)" dy="10" dx="4">${QN[q][0]}, ${QN[q][1]}${q === 'M' ? ' (sagging +)' : q === 'w' ? ' (up +)' : ''}</text>`;
+    h += `<line id="anX" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--ink)" stroke-width="1" opacity="0"/>`;
+    svgA.setAttribute('viewBox', `0 0 ${W} ${H}`); svgA.innerHTML = h;
+    $('#anLegend').innerHTML = ser.map(s => `<span><i class="sw" style="background:${colorOf(s.i)}"></i>${esc(s.gid)}</span>`).join('');
+    const notes = { M: 'Position along the bridge (measured on ' + esc(F.order[Math.floor((F.order.length - 1) / 2)]) + ', with each girder projected onto it, so a partial girder sits where it is); the dashed lines are its bearings. The tooltip also gives the distance along each girder.', V: 'Shear, kip.', T: 'Total torque (St. Venant and warping) about each girder\'s axis.', w: 'Vertical deflection; camber is the negative of the DC1 + DC2 + DW curve.', flb: 'Lateral bending stress in the bottom flange from warping torsion (AASHTO f_ℓ), each flange tip; ' + (doc.analysis.options.warping ? '' : 'turn on warping torsion to compute it.') };
+    $('#anNote').innerHTML = notes[q];
+    drawChart.state = { ser, X, Y, x0, x1, pad, W, H };
+  }
+  function niceTicks(a, b, n) { const span = b - a, st = Math.pow(10, Math.floor(Math.log10(span / n))), m = span / n / st, step = (m < 1.5 ? 1 : m < 3.5 ? 2 : m < 7.5 ? 5 : 10) * st; const o = []; for (let v = Math.ceil(a / step) * step; v <= b + 1e-9; v += step) o.push(+v.toFixed(10)); return o; }
+  const fmtN = v => { const a = Math.abs(v); return a >= 1000 ? Math.round(v).toLocaleString() : a >= 10 ? v.toFixed(0) : a >= 1 ? v.toFixed(1) : v.toFixed(2); };
+  $('#anChart').addEventListener('pointermove', e => {
+    const st = drawChart.state; if (!st) return; const r = $('#anChart').getBoundingClientRect(), x = e.clientX - r.left;
+    const u = st.x0 + (x - st.pad.l) / (st.W - st.pad.l - st.pad.r) * (st.x1 - st.x0); if (u < st.x0 || u > st.x1) { $('#anTip').hidden = true; return; }
+    const ln = $('#anX'); if (ln) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); ln.setAttribute('opacity', '.35'); }
+    const rows = st.ser.filter(s => u >= s.pts[0].u - 1 && u <= s.pts[s.pts.length - 1].u + 1).map(s => { let best = s.pts[0]; s.pts.forEach(p => { if (Math.abs(p.u - u) < Math.abs(best.u - u)) best = p; }); return `<span style="color:${colorOf(s.i)}">■</span> ${esc(s.gid)} ${fmtN(best.v)} <span style="color:var(--muted)">at ${best.ug.toFixed(1)}</span>`; });
+    const tp = $('#anTip'); tp.innerHTML = `${u.toFixed(1)} ft along the bridge<br>` + rows.join('<br>'); tp.hidden = false;
+    tp.style.left = Math.min(x + 12, r.width - tp.offsetWidth - 6) + 'px'; tp.style.top = '10px';
+  });
+  $('#anChart').addEventListener('pointerleave', () => { $('#anTip').hidden = true; const ln = $('#anX'); if (ln) ln.setAttribute('opacity', '0'); });
+  function anTable() {
+    const gid = $('#anGirder').value || F.order[0], q = anQ, cols = ['steel', 'deck', 'dc2', 'dw'];
+    const T = cols.map(s => G.girderTable(AR, gid, s));
+    const val = (r, q) => (q === 'flb' ? r.flb : r[q]);
+    $('#anTbl').innerHTML = `<thead><tr><th class="l">Span.pt</th><th>At ft</th>${cols.map(c => `<th>${SN[c]}</th>`).join('')}<th>Total</th></tr></thead><tbody>`
+      + T[0].map((r, i) => { const vs = T.map(t => val(t[i], q)), tot = vs.reduce((a, b) => a + b, 0);
+        return `<tr><td class="l">${r.span}.${r.pt}</td><td>${fx(r.u, 1)}</td>${vs.map(v => `<td${v < 0 ? ' class="neg"' : ''}>${fmtN(v)}</td>`).join('')}<td${tot < 0 ? ' class="neg"' : ''}><b>${fmtN(tot)}</b></td></tr>`; }).join('') + '</tbody>';
+  }
+  function reacTable() {
+    const stage = $('#anStage').value, ps = parts(stage), sup = F.supports.map(s => s.id);
+    const rx = (gid, sid) => ps.reduce((s, p) => s + AR.res[p].reac.filter(r => r.g === gid && r.support === sid).reduce((a, r) => a + r.R, 0), 0);
+    const has = (gid, sid) => AR.res.steel.reac.some(r => r.g === gid && r.support === sid);
+    $('#anReac').innerHTML = `<thead><tr><th class="l">${esc(SN[stage])}</th>${sup.map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody>`
+      + F.order.map(g => `<tr><td class="l">${esc(g)}</td>${sup.map(s => has(g, s) ? `<td${rx(g, s) < 0 ? ' class="neg"' : ''}>${fx(rx(g, s), 1)}</td>` : '<td>–</td>').join('')}</tr>`).join('')
+      + `<tr><td class="l"><b>Total</b></td>${sup.map(s => `<td><b>${fx(F.order.reduce((a, g) => a + (has(g, s) ? rx(g, s) : 0), 0), 1)}</b></td>`).join('')}</tr></tbody>`;
+  }
+  // member forces summed over the stages by member name (the deck tie exists only in the composite stages)
+  function xfRows() {
+    const stage = $('#anStage').value, ps = parts(stage), lists = ps.map(p => AR.res[p].bRes.filter(x => x.kind !== 'deck'));
+    return lists[0].map((b, k) => {
+      const mem = [];
+      lists.forEach(L => (L[k].members || []).forEach(m => { let e = mem.find(x => x.name === m.name); if (!e) mem.push(e = { name: m.name, N: 0 }); e.N += m.N; }));
+      const V = lists.reduce((s, L) => s + L[k].V, 0), src = F.crossframes.find(x => x.id === b.id);
+      return { id: b.id, kind: b.kind, gA: b.gA, gB: b.gB, bay: src ? src.bay : '', tag: src ? src.tag : 'diaphragm', mem, V };
+    });
+  }
+  // columns by role; a chord split at a K-frame's middle shows its larger force
+  const ROLE = [['Top chord', /^top chord/], ['Bottom chord', /^bottom chord/], ['Diagonal 1', /^diagonal 1/], ['Diagonal 2', /^diagonal 2/], ['Deck tie', /^deck tie/]];
+  function xfTable() {
+    const rows = xfRows(), pick = (r, re) => { const ms = r.mem.filter(m => re.test(m.name)); if (!ms.length) return null; return ms.reduce((a, b) => (Math.abs(b.N) > Math.abs(a.N) ? b : a)).N; };
+    const cols = ROLE.filter(([, re]) => rows.some(r => pick(r, re) != null));
+    $('#anXf').innerHTML = `<thead><tr><th class="l">Name</th><th class="l">Type</th><th class="l">Girders</th>${cols.map(([n]) => `<th>${n}</th>`).join('')}<th>Shear V</th></tr></thead><tbody>`
+      + rows.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)}</td><td class="l">${esc(r.tag)}</td><td class="l">${esc(r.gA)}–${esc(r.gB)}</td>${cols.map(([, re]) => { const v = pick(r, re); return v == null ? '<td>–</td>' : `<td${v < 0 ? ' class="neg"' : ''}>${fx(v, 1)}</td>`; }).join('')}<td>${fx(r.V, 1)}</td></tr>`).join('') + '</tbody>';
+  }
+  $('#anXf').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  $('#anStage').onchange = () => { if (AR && AR.res) showResults(); };
+  $('#anGirder').onchange = () => { if (AR && AR.res) anTable(); };
+  document.querySelectorAll('#anQty button').forEach(b => b.addEventListener('click', () => { anQ = b.dataset.q; document.querySelectorAll('#anQty button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (AR && AR.res) { drawChart(); anTable(); } }));
+  new ResizeObserver(() => { if (AR && AR.res) drawChart(); }).observe($('#anChart'));
+  $('#btnXfCsv').onclick = () => {
+    if (!(AR && AR.res)) return; const stage = $('#anStage').value, rows = xfRows();
+    const t = ['stage,name,type,girder_a,girder_b,member,force_kip'].concat(rows.flatMap(r => r.mem.map(m => [SN[stage], r.id, r.tag, r.gA, r.gB, m.name, m.N.toFixed(3)].join(',')))).join('\n');
+    const b = $('#btnXfCsv'); const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy CSV'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('crossframe-forces.csv', t, 'text/csv'); done(); }); else { download('crossframe-forces.csv', t, 'text/csv'); done(); }
+  };
+  // stable results file for the next modules (splices, cross-frame connections): unfactored effects by stage
+  $('#btnAnJson').onclick = () => {
+    if (!(AR && AR.res)) return; const r4 = v => +(+v).toFixed(3), st = ['steel', 'deck', 'dc2', 'dw'];
+    const out = { schema: 'opendot.g2d.deadload/1', units: 'kip, ft, in (deflection), ksi (lateral flange)', stages: st.map(s => SN[s]), modularRatio: r4(AR.n),
+      girders: F.order.map(gid => ({ id: gid, tenthPoints: G.girderTable(AR, gid, 'steel').map((r, i) => Object.assign({ span: r.span, point: r.pt, at: r4(r.u) }, Object.fromEntries(st.map(s => { const x = G.girderTable(AR, gid, s)[i]; return [s, { M: r4(x.M), V: r4(x.V), T: r4(x.T), defl: r4(x.w), fl_bottom: r4(x.flb), fl_top: r4(x.flt) }]; })))),
+        reactions: Object.fromEntries(st.map(s => [s, AR.res[s].reac.filter(x => x.g === gid).map(x => ({ support: x.support, R: r4(x.R) }))])) })),
+      crossframes: Object.fromEntries(st.map(s => [s, AR.res[s].bRes.filter(b => b.kind !== 'deck').map(b => ({ id: b.id, girderA: b.gA, girderB: b.gB, V: r4(b.V), members: (b.members || []).map(m => ({ name: m.name, N: r4(m.N) })) }))])) };
+    download('dead-load-results.json', JSON.stringify(out, null, 1), 'application/json');
+  };
+
   // ---------- header controls ----------
   document.querySelectorAll('#modeSel button').forEach(b => b.addEventListener('click', () => { doc.mode = b.dataset.mode; save(); renderRail(); run(); }));
   $('#example').addEventListener('change', e => {
     const k = e.target.value; if (!EX[k]) return; const x = clone(EX[k]);
     doc.mode = x.mode; if (x.mode === 'concentric') doc.concentric = x.concentric; else doc.alignment = x.alignment;
+    doc.analysis = clone(x.analysis || AN0());
     e.target.value = ''; view = null; save(); renderRail(); run();
   });
   $('#btnSave').onclick = () => download('steel-2d-grillage-input.json', JSON.stringify(doc, null, 1), 'application/json');
   $('#fileIn').addEventListener('change', e => {
     const f = e.target.files && e.target.files[0]; if (!f) return; const rd = new FileReader();
-    rd.onload = () => { try { const d = JSON.parse(String(rd.result)); if (!(d && d.v === 1 && d.concentric && d.alignment && d.xy)) throw new Error('not a Steel 2D Grillage input file'); doc = d; view = null; save(); renderRail(); run(); } catch (err) { msg(['That file could not be opened: ' + err.message], []); } };
+    rd.onload = () => { try { const d = JSON.parse(String(rd.result)); if (!(d && d.v === 1 && d.concentric && d.alignment && d.xy)) throw new Error('not a Steel 2D Grillage input file'); doc = d; if (!doc.analysis) doc.analysis = AN0(); view = null; save(); renderRail(); run(); } catch (err) { msg(['That file could not be opened: ' + err.message], []); } };
     rd.readAsText(f); e.target.value = '';
   });
   $('#btnReset').onclick = () => { doc = fresh(); dxf = null; view = null; save(); renderRail(); run(); };
