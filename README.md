@@ -29,8 +29,10 @@ site/                      Exactly what is served at bridge-se.open-dot.org
   <module>/index.html      One folder per module
   assets/                  Logo and icons
   robots.txt, sitemap.xml
+tests/run.cjs              Engine regression tests: node tests/run.cjs (no packages)
+tests/fixtures/            Saved inputs for the tests
 scripts/check-secrets.sh   Local check for keys, passwords and licensed files
-.github/workflows/         Automatic secret scan on every push
+.github/workflows/         Automatic secret scan and engine tests on every push
 ```
 
 ## Run it locally
@@ -45,6 +47,16 @@ python3 -m http.server 8000
 
 The page header and footer load the logo from `/assets/` and a font from Google Fonts, so a
 local copy looks plainest when opened directly as a file. The calculations work either way.
+
+## Tests
+
+```
+node tests/run.cjs
+```
+
+Runs the calculation engines headlessly against published benchmarks (NSBA Design Example 5, MBE A1,
+TxDOT 0-4751-1 Example A.1) and the independent audit cases, and exits non-zero on any failure. Run it before
+pushing; GitHub runs it on every push as well.
 
 ## Engineering use and limits
 

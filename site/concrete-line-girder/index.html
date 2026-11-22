@@ -1012,6 +1012,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const hc = comp ? h + dk.gap + dk.t : h;
     // live load envelope per lane (HL-93, permit) or per girder (pedestrian load, maintenance vehicle)
     const perGirder = llc.kind === 'ped' || llc.kind === 'H', fatOn = llc.kind === 'hl93';
+    const simpV = !lfd && (m.opts && m.opts.shearMethod) === 'simplified'; // concurrent shear for Vi (5.7.3.4.3)
     const ZF = { max: 0, min: 0 };
     function llEnv(ILa, dual, si, isMoment, s) {
       if (llc.kind === 'hl93') return hl93(ILa, hgrid, IMp, dual);
@@ -1036,6 +1037,53 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const lMax = ln && long ? ln.max : 0, lMin = ln && (long || (isMoment && cont)) ? ln.min : 0;
       llc.vehicles.forEach(v => { const t = axleEnv(ILa, hgrid, v.w, v.s); take(t.max * (1 + llc.IM) + lMax, t.min * (1 + llc.IM) + lMin); });
       return out;
+    }
+    // LRFD simplified procedure: live-load shear from the same loading arrangement that gives the largest positive and
+    // negative moment at s, for Vi in 5.7.3.4.3 (Vi and Mmax from the load combination causing maximum moment). Same
+    // vehicles and rules as the moment envelope: HL-93 truck or tandem (axles that relieve the moment left off) with
+    // the lane load on the same-sign parts of the moment influence line, 90% of two trucks plus lane where that governs
+    // negative moment; permit vehicles with their lane load; pedestrian load or the maintenance vehicle. A load on a grid
+    // point beside s takes the larger one-sided shear. Returns signed values per lane before γ, with distribution gV.
+    function concurrentLRFD(s, side, dual, si, gV) {
+      const st = v => Math.round(v / hgrid), h = hgrid;
+      const ILM = IL(s, side).IM, VA = IL(s, 'r').IV, VB = IL(s, 'l').IV, ng = ILM.length;
+      let jR = 0; while (jR < xg.length - 1 && xg[jR] < s - 1e-7) jR++;
+      let jL = xg.length - 1; while (jL > 0 && xg[jL] > s + 1e-7) jL--;
+      const vR = j => (j === jL || j === jR ? VA[jR] : VA[j]), vL = j => (j === jL || j === jR ? VB[jL] : VA[j]);
+      const pick = (a, b) => (Math.abs(a) >= Math.abs(b) ? a : b);
+      const one = sign => {
+        // axle group at position i: moment, and shear just right (a) and left (b) of s; neglect drops axles that relieve
+        const grp = (ws, offs, i, neglect) => { let M = 0, a = 0, b = 0; ws.forEach((w, k) => { const j = i - offs[k]; if (j < 0 || j >= ng) return; const mv = w * ILM[j]; if (neglect && sign * mv <= 0) return; M += mv; a += w * vR(j); b += w * vL(j); }); return { M, a, b }; };
+        const bestOf = (cfgs, neglect) => { let best = null; cfgs.forEach(([w, o]) => { const n = ng + o[o.length - 1]; for (let i = 0; i < n; i++) { const g = grp(w, o, i, neglect); if (!best || sign * g.M > sign * best.M) best = g; } }); return best || { M: 0, a: 0, b: 0 }; };
+        const lane = w => { let M = 0, V = 0; for (let j = 0; j < ng; j++) if (sign * ILM[j] > 0) { M += w * h * ILM[j]; V += w * h * VA[j]; } return { M, a: V, b: V }; };
+        const add = (x, y, fx = 1, fy = 1) => ({ M: fx * x.M + fy * y.M, a: fx * x.a + fy * y.a, b: fx * x.b + fy * y.b });
+        const veh = (w, sp) => { const offs = [0]; sp.forEach(v => offs.push(offs[offs.length - 1] + st(v))); const ro = [0]; sp.slice().reverse().forEach(v => ro.push(ro[ro.length - 1] + st(v))); return [[w, offs], [w.slice().reverse(), ro]]; };
+        let G;
+        if (llc.kind === 'hl93') {
+          const cf = []; for (let s2 = 14; s2 <= 30; s2++) cf.push([[8, 32, 32], [0, st(14), st(14 + s2)]], [[32, 32, 8], [0, st(s2), st(s2 + 14)]]);
+          cf.push([[25, 25], [0, st(4)]]);
+          const ln = lane(0.64);
+          G = add(bestOf(cf, true), ln, 1 + IMp, 1);
+          if (sign < 0 && dual) { // two trucks, 14 ft rear spacing, at least 50 ft between them (front axle to rear axle)
+            const sep = st(78); let D = null;
+            for (const [w, o] of [[[8, 32, 32], [0, st(14), st(28)]], [[32, 32, 8], [0, st(14), st(28)]]]) {
+              const n = ng + o[2], gs = []; for (let i = 0; i < n; i++) gs.push(grp(w, o, i, true));
+              let pm = null; for (let k = sep; k < n; k++) { const c = gs[k - sep]; if (!pm || c.M < pm.M) pm = c; const t = add(gs[k], pm); if (!D || t.M < D.M) D = t; }
+            }
+            if (D) { const d = add(D, ln, 0.9 * (1 + IMp), 0.9); if (d.M < G.M) G = d; }
+          }
+        } else if (perGirder) {
+          const pd = llc.ped, c = [];
+          if (llc.kind === 'ped') c.push(lane(pd.w));
+          if (pd.veh) { const t = bestOf(veh([0.2 * pd.W, 0.8 * pd.W], [14]), false); c.push(add(t, t, pd.dfVeh, 0)); }
+          G = c.reduce((x, y) => (!x || sign * y.M > sign * x.M ? y : x), null);
+        } else {
+          const long = spans[si] > 200, ln = llc.lane && (sign > 0 ? long : (long || cont)) ? lane(0.2) : null;
+          llc.vehicles.forEach(v => { const t = add(bestOf(veh(v.w, v.s), false), ln || { M: 0, a: 0, b: 0 }, 1 + llc.IM, 1); if (!G || sign * t.M > sign * G.M) G = t; });
+        }
+        return G ? pick(G.a, G.b) * gV : 0;
+      };
+      return { VcP: one(1), VcN: cont ? one(-1) : 0 };
     }
     // LFD: live-load shear from the same HS loading arrangement that gives the largest positive and negative moment at s,
     // for Vi in Eq. 9-27 (9.20.2.2: shear occurring simultaneously with Mmax). Axles, the lane load and its concentrated
@@ -1123,6 +1171,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V;
       p.MFLp = fat.max * gP.MF; p.MFLn = fat.min * gN.MF;
       if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax }, p.isPier ? {} : concurrentLFD(p.x, side, si0, env, envV, gPs.V));
+      else if (simpV && !p.isPier) Object.assign(p, concurrentLRFD(p.x, side, dualAt(p.x), si0, gPs.V));
       factorP(p);
     });
 
@@ -1471,7 +1520,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           // 5.7.3.4.3: Vc = min(Vci, Vcw); Vp enters through Vcw only
           const rf = Math.sqrt(fc), ps = prestress(z, Lb, fpe);
           const Vd = Math.abs(p.VDC1 + p.VDC2 + p.VDW), Md = p.MDC1 + p.MDC2 + p.MDW;
-          const Vi = Math.max(Vu - Vd, 0), Mmax = Math.max(Mu - Math.abs(Md), 1e-6);
+          // Vi from the loading that gives Mmax (5.7.3.4.3), dead loads factored toward the same direction, never above Vu
+          const VLc = useNeg ? p.VcN : p.VcP; let VuM = Vu;
+          if (VLc != null) { const d = Math.sign(VLc) || Math.sign(p.VDC1 + p.VDC2 + p.VDW) || 1, fac = (v, gx, gn) => (Math.sign(v) === d || v === 0 ? gx : gn) * v;
+            VuM = Math.min(Vu, Math.abs(fac(p.VDC1, 1.25, 0.9) + fac(p.VDC2, 1.25, 0.9) + fac(p.VDW, 1.5, 0.65) + llc.gS * VLc)); }
+          const Vi = Math.max(VuM - Vd, 0), Mmax = Math.max(Mu - Math.abs(Md), 1e-6);
           const Sc = comp ? cs.Sb : Sb, fcpe = ps.F / A + ps.F * ps.e / Sb;
           const Mcre = Sc * (0.20 * rf + fcpe - p.MDC1 * 12 / Sb) / 12;
           const Vci = Math.max(0.02 * rf * bv * dv + Vd + Vi * Mcre / Mmax, 0.06 * rf * bv * dv);
@@ -1479,7 +1532,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           const Vcw = (0.06 * rf + 0.30 * fpc) * bv * dv + Vp;
           Vc = Math.min(Vci, Vcw); VpN = 0;
           cot = Vci < Vcw ? 1 : Math.min(1 + 3 * fpc / rf, 1.8); theta = Math.atan(1 / cot) * 180 / Math.PI; beta = null; es = null;
-          simp = { Vd, Vi, Md, Mmax, Mcre, fcpe, fpc, Vci, Vcw };
+          simp = { Vd, Vi, VuM, VLc, Md, Mmax, Mcre, fcpe, fpc, Vci, Vcw };
         }
         const Vs = st.Av * fyv * dv * cot / st.s;
         const Vn = Math.min(Vc + Vs + VpN, 0.25 * fc * bv * dv + VpN);
@@ -1552,6 +1605,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const env = llEnv(il.IM, dualAt(x), i, true, x), envV = llEnv(il.IV, false, i, false, x), gPs = gSel(gP), gNs = gSel(gN);
       p.MLLp = env.max * gPs.M; p.MLLn = env.min * gNs.M; p.VLLp = envV.max * gPs.V; p.VLLn = envV.min * gPs.V; p.dualGov = env.dualGov;
       if (lfd) Object.assign(p, { IMp: env.Ip, IMn: env.In, IVp: envV.Ip, IVn: envV.In, govP: env.govMax, govN: env.govMin, twoN: env.two, govVp: envV.govMax }, concurrentLFD(x, 'r', i, env, envV, gPs.V));
+      else if (simpV) Object.assign(p, concurrentLRFD(x, 'r', dualAt(x), i, gPs.V));
       factorP(p);
       p.g = gP; p.gNeg = gN;
       const dvp = developed(p.z, b.Lb, flexFilt); p.flex = flexAt(dvp.Ae, dvp.y);
@@ -2495,6 +2549,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       const S = q.simp, rf = Math.sqrt(fc);
       L.push({ lhs: 'M_{cre}', expr: 'S_{c}(f_{r} + f_{cpe} − \\f{M_{dnc}}{S_{nc}})', sub: 'f_{r} = 0.20√f′_{c}, f_{cpe} = ' + fn(S.fcpe, 3) + ' ksi', res: fx(S.Mcre, 0), unit: 'k-ft', ref: '5.7.3.4.3-2' });
       const Vci = Math.max(0.02 * rf * bv * q.dv + S.Vd + S.Vi * S.Mcre / S.Mmax, 0.06 * rf * bv * q.dv);
+      if (S.VLc != null) {
+        L.push({ note: 'V_{LL,M} = ' + fn(S.VLc, 2) + ' k: live-load shear, with impact and distribution, from the loading placed for M_{max} (5.7.3.4.3)' });
+        L.push({ lhs: 'V_{u,M}', expr: '|Σγ_{p}V_{D} + γ_{LL}V_{LL,M}| ≤ V_{u}', res: fx(S.VuM, 1), unit: 'k' });
+        L.push({ lhs: 'V_{i}', expr: 'V_{u,M} − V_{d}', sub: fx(S.VuM, 1) + ' − ' + fn(S.Vd, 2), res: fn(S.Vi, 2), unit: 'k' });
+      }
       L.push({ lhs: 'V_{ci}', expr: '0.02√(f′_{c})b_{v}d_{v} + V_{d} + \\f{V_{i}M_{cre}}{M_{max}} ≥ 0.06√(f′_{c})b_{v}d_{v}', sub: '0.02√' + fn(fc, 2) + '×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(S.Vd, 1) + ' + \\f{' + fn(S.Vi, 1) + '×' + fx(S.Mcre, 0) + '}{' + fx(S.Mmax, 0) + '}', res: fx(Vci, 1), unit: 'k', ref: '5.7.3.4.3-1' });
       const Vcw = (0.06 * rf + 0.30 * S.fpc) * bv * q.dv + q.Vp;
       L.push({ lhs: 'V_{cw}', expr: '(0.06√(f′_{c}) + 0.30f_{pc})b_{v}d_{v} + V_{p}', sub: '(0.06√' + fn(fc, 2) + ' + 0.30×' + fn(S.fpc, 3) + ')×' + fn(bv, 2) + '×' + fn(q.dv, 2) + ' + ' + fn(q.Vp, 2), res: fx(Vcw, 1), unit: 'k', ref: '5.7.3.4.3-3' });
@@ -3684,7 +3743,7 @@ function renderTables() {
   } else if (v === 'shear') {
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">x, ft</th><th class="l">Location</th><th>|Vu|, k</th><th>|Mu|, k-ft</th><th>dv, in.</th><th>Vp, k</th>' + (r.shearMethod === 'simplified' ? '<th>Vci, k</th><th>Vcw, k</th><th>cot θ</th>' : '<th>εs ×1000</th><th>β</th><th>θ°</th>') + '<th>Vc, k</th><th>Av / s</th><th>Vs, k</th><th>φVn, k</th><th>Ratio</th><th>s req., in.</th><th>s max, in.</th><th>Interface</th><th>T req., k</th><th>T used, k</th><th>T prov., k</th><th>Long. reinf.</th></tr></thead><tbody>' +
       r.shear.map(q => '<tr><td>' + f2(q.x) + '</td><td class="l">' + esc((q.tags || []).join(', ')) + (q.useNeg ? ' (−M)' : '') + '</td><td>' + f1(q.Vu) + '</td><td>' + f0(q.Mu) + '</td><td>' + f2(q.dv) + '</td><td>' + f1(q.Vp) + '</td>' + (q.simp ? '<td>' + f1(q.simp.Vci) + '</td><td>' + f1(q.simp.Vcw) + '</td><td>' + f3(1 / Math.tan(q.theta * Math.PI / 180)) + '</td>' : '<td>' + f3(q.es * 1000) + '</td><td>' + f2(q.beta) + '</td><td>' + f1(q.theta) + '</td>') + '<td>' + f1(q.Vc) + '</td><td>' + f2(q.Av) + ' / ' + q.s + '</td><td>' + f1(q.Vs) + '</td><td>' + f1(0.9 * q.Vn) + '</td><td' + (q.ratio > 1 ? ' class="over"' : '') + '>' + f3(q.ratio) + '</td><td>' + (isFinite(q.sReq) ? f1(q.sReq) : '–') + '</td><td>' + f1(q.smax) + '</td><td' + (q.iRatio > 1 ? ' class="over"' : '') + '>' + f3(q.iRatio) + '</td><td>' + f0(q.Treq) + '</td><td>' + f0(q.TreqUsed) + '</td><td>' + f0(q.Tprov) + '</td><td' + (q.lRatio > 1 ? ' class="over"' : '') + '>' + f3(q.lRatio) + '</td></tr>').join('') +
-      '</tbody></table></div><p class="hint" style="margin-top:8px">' + (r.shearMethod === 'simplified' ? 'Simplified procedure (5.7.3.4.3): Vc = min(Vci, Vcw), Vp through Vcw.' : 'General procedure (5.7.3.4.2) with prestress contribution in all regions (SSM 4.2.4.3.3).') + ' Interface and longitudinal-reinforcement columns are demand/capacity ratios.</p>';
+      '</tbody></table></div><p class="hint" style="margin-top:8px">' + (r.shearMethod === 'simplified' ? 'Simplified procedure (5.7.3.4.3): Vc = min(Vci, Vcw), Vp through Vcw; Vi is the shear from the live-load position that gives Mmax.' : 'General procedure (5.7.3.4.2) with prestress contribution in all regions (SSM 4.2.4.3.3).') + ' Interface and longitudinal-reinforcement columns are demand/capacity ratios.</p>';
   } else if (v === 'rel') {
     h += '<p class="hint" style="margin-bottom:8px">' + esc(r.releaseHow) + '. Limits ' + (r.lfd ? '0.60f′ci = ' + f2(L.fciC) + ' ksi compression, ' + (r.lfd.relTension === 'none' ? 'the lesser of 200 psi and 3√f′ci' : '7.5√f′ci') + ' = ' + f3(L.fciT) + ' ksi tension (9.15.2.1).' : '0.65f′ci = ' + f2(L.fciC) + ' ksi compression, 0.24√f′ci = ' + f3(L.fciT) + ' ksi tension (with bonded reinforcement).') + '</p>';
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th>z from beam end, ft</th><th>F<sub>t</sub>, k</th><th>e, in.</th><th>M self-weight, k-ft</th><th>Top, ksi</th><th>Bottom, ksi</th></tr></thead><tbody>' +

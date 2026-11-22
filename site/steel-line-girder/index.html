@@ -252,7 +252,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <p class="hint" style="margin-top:10px">The PDF carries a blank “Checked by” field for independent review. The title-block entries are saved with the input JSON. If this preview does not allow downloads, open the tool from the Bridge SE site.</p>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Performance ratio along girder</h2>
         <div class="legend"><span><i style="background:var(--c-flex)"></i>Flexure</span><span><i style="background:var(--c-shear)"></i>Shear</span><span><i style="background:var(--c-fat)"></i>Fatigue</span><span><i style="background:var(--c-svc)"></i><span class="lblSvc">Service II</span></span><span><i style="background:var(--c-con)"></i>Constructibility</span></div></div>
       <div class="chart" id="chR"></div>
@@ -264,17 +264,17 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <ul class="notes" style="margin-top:10px" id="cmpNotes"></ul>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Girder elevation</h2><div class="legend" id="secLegend"></div></div>
       <div class="chart" id="elev"></div>
     </section>
 
-    <section class="card" id="detailCard">
+    <section class="card" id="detailCard" data-res>
       <div class="card-h"><h2 id="detTitle">Point detail</h2><label class="chk"><input type="checkbox" id="detAll"> Show every check</label></div>
       <div id="detail"></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Governing checks</h2><span class="status">Worst location of each check</span></div>
       <div class="tbl-wrap"><table class="res" id="govTbl"></table></div>
     </section>
@@ -288,31 +288,31 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       <p class="hint" style="margin-top:6px" id="pourHint">Moments are unfactored DC1 per girder. Checks are factored per 3.4.2.1 and appear in the constructibility tile and the governing-checks table with a stage label.</p>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Moment envelope, per girder</h2>
         <div class="legend"><span><i style="background:var(--dc)"></i>DC1</span><span><i style="background:var(--dw)"></i>DC2 + DW</span><span><i style="background:var(--ll-pos)"></i><span class="lblLL">HL-93</span> max</span><span><i style="background:var(--ll-neg)"></i><span class="lblLL">HL-93</span> min</span><span><i style="background:var(--c-fat);height:2px"></i>Fatigue truck range</span></div></div>
       <div class="chart" id="chM"></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Shear envelope, per girder</h2>
         <div class="legend"><span><i style="background:var(--dc)"></i>DC + DW</span><span><i style="background:var(--ll-pos)"></i><span class="lblLL">HL-93</span> max</span><span><i style="background:var(--ll-neg)"></i><span class="lblLL">HL-93</span> min</span></div></div>
       <div class="chart" id="chV"></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Inventory rating factor along girder</h2>
         <div class="legend"><span><i style="background:var(--c-flex)"></i>Flexure, <span class="lblStr">Strength I</span></span><span><i style="background:var(--c-shear)"></i>Shear, <span class="lblStr">Strength I</span></span><span><i style="background:var(--c-svc)"></i><span class="lblSvc">Service II</span></span></div></div>
       <div class="chart" id="chRF"></div>
       <p class="hint">Values above 4.0 are drawn at the top edge.</p>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Results by point of interest</h2><button id="btnCsv">Copy as CSV</button></div>
       <div class="tbl-wrap"><table class="res" id="resTbl"></table></div>
     </section>
 
-    <section class="card">
+    <section class="card" data-res>
       <div class="card-h"><h2>Sections, distribution factors, bracing and deflection</h2></div>
       <h3 style="margin-bottom:6px">Section properties</h3>
       <div class="tbl-wrap" style="max-height:none"><table class="res" id="propTbl"></table></div>
@@ -2518,6 +2518,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // scope of the line-girder tub method: 6.11.2.3 met (unless the user enters both distribution factors) and full-length top lateral bracing
     const ovr = +m.df.overrideM > 0 && +m.df.overrideV > 0;
     const scopeWhy = RS.items.filter(q => !q.ok).map(q => '6.11.2.3 not met, ' + q.txt);
+    // the Table 4.6.2.2.2b-1 range limit: out of scope unless both distribution factors are entered from a refined analysis
+    if (!ovr) DF.warn.forEach(w => scopeWhy.push('distribution factor ' + w));
     if (T.lateral !== 'full') scopeWhy.push((T.lateral === 'partial' ? 'partial-length' : 'no') + ' top lateral bracing, so constructibility is incomplete');
     const scope = { ok: !scopeWhy.length, why: scopeWhy, ovr };
     const bad = allChecks.filter(c => Number.isNaN(c.ratio) || Number.isNaN(c.demand) || Number.isNaN(c.cap));
@@ -5174,7 +5176,7 @@ function run(){
     if(model.spans.some(s=>!(+s>0))) throw new Error('Every span needs a length greater than zero.');
     const snap=structuredClone(model); res=LGCheck.run(snap); resModel=snap; resKey=modelKey(snap);
     if($('deckHint')) $('deckHint').textContent=deckHint();
-    $('errBox').hidden=true;
+    $('errBox').hidden=true; document.querySelectorAll('section[data-res]').forEach(c=>c.hidden=false);
     const W=res.warnings||[]; $('warnBox').hidden=!W.length; $('warnBox').innerHTML=W.map(w=>`<div><b>${esc(w.kind)}.</b> ${esc(w.text)}</div>`).join('');
     if(selI==null||selI>=res.pois.length){ selI=govPoint(); }
     renderAll();
@@ -5185,7 +5187,9 @@ function run(){
     if(res.kind!=='tub') otherTimer=setTimeout(()=>{ try{ const m2=structuredClone(model); m2.code.edition=res.ed==='LFD'?'10':(res.ed===10?'9':'10'); resOther=LGCheck.run(m2); renderCompare(); }catch(e){ $('cmpStatus').textContent='Could not run the comparison: '+e.message; } },60);
   }catch(e){
     $('errBox').hidden=false; $('errBox').textContent=e.message; $('status').textContent='Not run'; $('warnBox').hidden=true;
-    res=null; resModel=null; resKey=null; ['ratios','verdict'].forEach(id=>$(id).innerHTML=''); $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
+    res=null; resModel=null; resKey=null; ['ratios','verdict'].forEach(id=>$(id).innerHTML='');
+    // hide every result panel so nothing from the last good input stays on screen
+    document.querySelectorAll('section[data-res],#cmpCard,#pourCard').forEach(c=>c.hidden=true); $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
   }
 }
 function govPoint(){

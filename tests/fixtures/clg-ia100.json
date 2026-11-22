@@ -1,0 +1,121 @@
+{
+ "kind": "I",
+ "shape": "BTC",
+ "spans": [
+  100
+ ],
+ "continuous": false,
+ "pierBrg": 1.125,
+ "ext": 0.6667,
+ "pierFace": 1.75,
+ "padW": 15,
+ "S": 9.25,
+ "overhang": 3.5,
+ "nBeams": 5,
+ "girder": "interior",
+ "skew": 30,
+ "roadway": 40.834,
+ "parapetWidth": 1.583,
+ "lanes": 0,
+ "deck": {
+  "t": 8.5,
+  "tStruct": 7.75,
+  "fc": 4,
+  "fillet": 1.5,
+  "haunchInProps": 0.5
+ },
+ "beam": {
+  "fc": 8,
+  "fci": 7
+ },
+ "strand": {
+  "d": 0.6
+ },
+ "pattern": {
+  "name": "BTC100",
+  "table": "Iowa"
+ },
+ "loads": {
+  "parapet": 0.59,
+  "nParapet": 2,
+  "fws": 20,
+  "dc1": 0,
+  "dc2": 0,
+  "dw": 0,
+  "fwsDist": "equal"
+ },
+ "neg": {
+  "AsTop": 5.53,
+  "AsTopCut": 5.53,
+  "AsBot": 5.53,
+  "AsBotCut": 4.74,
+  "bar": 1,
+  "s": 6,
+  "cutoff": 30
+ },
+ "stirrups": [
+  {
+   "from": 0,
+   "to": 0.1,
+   "Av": 0.62,
+   "s": 6
+  },
+  {
+   "from": 0.1,
+   "to": 0.9,
+   "Av": 0.62,
+   "s": 12
+  },
+  {
+   "from": 0.9,
+   "to": 1,
+   "Av": 0.62,
+   "s": 6
+  }
+ ],
+ "stirMode": "std",
+ "H": 70,
+ "lift": {
+  "Lc": 0
+ },
+ "rating": {
+  "phiC": 1,
+  "phiS": 1,
+  "gDW": 1.5
+ },
+ "opts": {
+  "dc1Span": "bearing",
+  "critAt": "dv",
+  "dualTruck": "contraflexure"
+ },
+ "checkDeflection": false,
+ "name": "Iowa DOT standard beam BTC100 (BSB sheets 4700-4719), five beams at 9′-3″, BDM 5.4",
+ "harp": 0.4,
+ "iowa": {
+  "jack": null,
+  "harpEnv": true,
+  "diaP": null,
+  "peds": false,
+  "leverM": 1.2
+ },
+ "live": {
+  "design": "hl93",
+  "permit": "none",
+  "ped": {
+   "width": null,
+   "clear": null,
+   "dfVeh": null,
+   "noVehicle": false,
+   "mpf": true
+  },
+  "permits": {
+   "type": "routine",
+   "adtt": null,
+   "crawl": false,
+   "lane": true,
+   "gDesign": 1.35,
+   "im": null,
+   "vehicles": []
+  }
+ }
+}

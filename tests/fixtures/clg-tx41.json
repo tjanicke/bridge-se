@@ -1,0 +1,182 @@
+{
+ "kind": "I",
+ "shape": "IL54-2438",
+ "spans": [
+  108.583
+ ],
+ "continuous": false,
+ "pierBrg": 1.125,
+ "ext": 0.5435,
+ "pierFace": 1.75,
+ "padW": 0,
+ "S": 8,
+ "overhang": 3,
+ "nBeams": 6,
+ "girder": "interior",
+ "skew": 0,
+ "roadway": 44,
+ "parapetWidth": 1,
+ "lanes": 0,
+ "deck": {
+  "t": 8,
+  "fc": 4,
+  "fillet": 0,
+  "beff": 96
+ },
+ "beam": {
+  "fc": 5.5825,
+  "fci": 5.455
+ },
+ "strand": {
+  "d": 0.5
+ },
+ "pattern": {
+  "custom": true,
+  "rows": [
+   {
+    "row": "1",
+    "ctr": 12,
+    "end": 10,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "2",
+    "ctr": 12,
+    "end": 10,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "3",
+    "ctr": 12,
+    "end": 10,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "4",
+    "ctr": 10,
+    "end": 8,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "5",
+    "ctr": 4,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "@44",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "@46",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "@48",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "@50",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "@52",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   }
+  ]
+ },
+ "loads": {
+  "parapet": 0.326,
+  "nParapet": 2,
+  "fws": 17.5,
+  "fwsDist": "equal",
+  "dc1": 0,
+  "dc2": 0,
+  "dw": 0
+ },
+ "neg": {
+  "AsTop": 5.53,
+  "AsTopCut": 5.53,
+  "AsBot": 5.53,
+  "AsBotCut": 4.74,
+  "bar": 1,
+  "s": 6,
+  "cutoff": 30
+ },
+ "stirrups": [
+  {
+   "from": 0,
+   "to": 1,
+   "Av": 0.4,
+   "s": 22
+  }
+ ],
+ "stirMode": "entered",
+ "H": 60,
+ "lift": {
+  "Lc": 0
+ },
+ "rating": {
+  "phiC": 1,
+  "phiS": 1,
+  "gDW": 1.5
+ },
+ "opts": {
+  "dc1Span": "bearing",
+  "critAt": "dv",
+  "dualTruck": "contraflexure"
+ },
+ "checkDeflection": false,
+ "name": "TxDOT 0-4751-1 Vol. 2, Example A.1: AASHTO Type IV interior beam, Standard Specifications",
+ "code": "lfd",
+ "shapeData": {
+  "name": "AASHTO Type IV",
+  "fam": "custom",
+  "h": 54,
+  "A": 788.4,
+  "I": 260403,
+  "yb": 24.75,
+  "wt": 0.821,
+  "btf": 20,
+  "ttf": 8,
+  "bw": 8,
+  "bbf": 26,
+  "tbf": 8,
+  "strand": 0.5,
+  "narrow": false
+ },
+ "harp": 0.4505,
+ "lfd": {
+  "vehicle": "HS20",
+  "military": false,
+  "losses": "refined",
+  "release": "ends",
+  "relTension": "bonded",
+  "corrosive": false,
+  "z": null,
+  "hsSurface": "rough",
+  "rebarFatigue": true,
+  "A2inv": null,
+  "A2op": null
+ }
+}
