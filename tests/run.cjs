@@ -181,16 +181,20 @@ guard('Steel 2D Grillage', () => {
   near('60° skew: bearing skew, deg', S.girders[0].brg[1].skew, 60, 1e-6);
   near('60° skew: cross-frames normal to girders, deg', Math.max(...S.crossframes.filter(x => x.tag === 'intermediate').map(x => Math.abs(x.angA))), 0, 0.01, 'AASHTO 6.7.4.2');
   is('60° skew: unbraced lengths within 20 ft', Math.max(...S.girders.map(g => g.LbMax)) <= 20 + 1e-6, true);
-  // flared widening: G5 starts on diaphragm D1 between G4 and G5
-  const W = G.build({ mode: 'alignment', ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 260 }] },
-    girders: [{ id: 'G1', offsets: [[1000, -15], [1260, -25]] }, { id: 'G2', offsets: [[1000, -5], [1260, -8]] }, { id: 'G3', offsets: [[1000, 5], [1260, 8]] }, { id: 'G4', offsets: [[1000, 15], [1260, 25]] }, { id: 'G5', offsets: [[1000, 25], [1260, 35]], startOn: 'D1' }],
-    supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1130, skew: 0 }, { id: 'Abut 2', sta: 1260, skew: 0, kind: 'abutment' }],
-    diaphragms: [{ id: 'D1', sta: 1060, skew: 0, from: 'G4', to: 'G5' }], crossframes: { spacing: 20 } });
-  const g5 = W.girders.find(g => g.id === 'G5');
+  // widening with an interior partial-length girder: G1-G3 parallel, G5 and G6 fan out, and G4 starts on diaphragm D1
+  // (spanning G3 to G5) where that bay reaches 12 ft, then runs continuous over the pier
+  const W = G.build({ mode: 'alignment', ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 300 }] },
+    girders: [{ id: 'G1', offsets: [[1000, -18]] }, { id: 'G2', offsets: [[1000, -9]] }, { id: 'G3', offsets: [[1000, 0]] }, { id: 'G4', offsets: [[1100, 6], [1300, 9]], startOn: 'D1' }, { id: 'G5', offsets: [[1000, 9], [1300, 18]] }, { id: 'G6', offsets: [[1000, 18], [1300, 27]] }],
+    supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1150, skew: 0 }, { id: 'Abut 2', sta: 1300, skew: 0, kind: 'abutment' }],
+    diaphragms: [{ id: 'D1', sta: 1100, skew: 0, from: 'G3', to: 'G5' }], crossframes: { spacing: 20 } });
+  const g4w = W.girders.find(g => g.id === 'G4'), xs = (a, b, tag) => W.crossframes.filter(x => x.gA === a && x.gB === b && x.tag === tag).map(x => +(x.pA[0] + 1000).toFixed(2));
   is('partial girder: no errors', W.errors.length, 0);
-  is('partial girder: G5 starts on D1', g5.startKind + ' ' + g5.startOn, 'member D1');
-  near('partial girder: G5 first span, D1 to Pier 1, ft', g5.spans[0].L, Math.hypot(70, 70 * 10 / 260), 0.01, 'flare 10 ft over 260 ft');
-  is('partial girder: one diaphragm member, G4 to G5', W.members.map(m => m.gA + '-' + m.gB).join(), 'G4-G5');
+  is('partial girder: G4 starts on D1', g4w.startKind + ' ' + g4w.startOn, 'member D1');
+  near('partial girder: G4 first span, D1 to Pier 1, ft', g4w.spans[0].L, Math.hypot(50, 0.75), 0.01, 'offset 6 to 6.75 ft over 50 ft');
+  is('partial girder: D1 frames G3-G4 and G4-G5', W.members.map(m => m.gA + '-' + m.gB).join(), 'G3-G4,G4-G5');
+  is('partial girder: G3-G5 bay braced ahead of D1', xs('G3', 'G5', 'intermediate').join(), '1018.75,1037.5,1056.25,1075,1093.75');
+  is('partial girder: G4 bays on the same panel lines as G1-G2', xs('G4', 'G5', 'intermediate').join(), xs('G1', 'G2', 'intermediate').filter(v => v > 1100).join());
+  is('partial girder: G3-G5 support cross-frame at Abut 1', W.crossframes.filter(x => x.gA === 'G3' && x.gB === 'G5' && x.tag === 'support').length, 1);
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

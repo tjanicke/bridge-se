@@ -145,7 +145,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
         <option value="">Load example…</option>
         <option value="curved">3-span curved, R = 700 ft (NSBA Example 4)</option>
         <option value="skew">2-span straight, 60° skew, 4 girders</option>
-        <option value="flare">Flared widening, girder ending on a diaphragm</option>
+        <option value="flare">Widening, interior girder starting on a diaphragm</option>
         <option value="mixed">Curved with skewed pier, stations and offsets</option>
       </select>
     </div>
@@ -430,7 +430,7 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     });
 
     // cross-frames
-    const XF = crossFrames(M.crossframes || {}, G, order, src, warnings);
+    const XF = crossFrames(M.crossframes || {}, G, order, src, warnings, memb);
     // unbraced lengths along each girder (between cross-frames, diaphragms and bearings)
     G.forEach(g => {
       const br = [0, g.L, ...g.brg.map(b => b.u)];
@@ -455,17 +455,25 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
   // bay only where both of its ends land inside a span of each girder and clear of the bearings. AASHTO 6.7.4.2: with
   // a skew of 20° or less the intermediate cross-frames may be parallel to the skew; above 20° they are normal to the
   // girders, which near a skewed support leaves them discontinuous.
-  function crossFrames(cfg, G, order, src, warnings) {
+  function crossFrames(cfg, G, order, src, warnings, memb) {
     const out = [], sp = num(cfg.spacing) > 0 ? num(cfg.spacing) : 20, clear = num(cfg.clear) >= 0 ? num(cfg.clear) : 2;
     const ref = order[Math.floor((order.length - 1) / 2)];
     const inSpan = (g, u) => g.spans.some(s => u > s.u0 + clear - 1e-9 && u < s.u1 - clear + 1e-9);
-    const bayPairs = order.slice(1).map((g, k) => [order[k], g]);
+    const near = h => h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x));
+    // the first girder to the right of order[k] that a line actually crosses: past a partial-length girder that has
+    // ended, a cross-frame goes on to the next girder, so the wider bay ahead of the partial girder is braced too
+    const rightHit = (k, p, d) => {
+      for (let j = k + 1; j < order.length; j++) {
+        const b = order[j], h = lineHits(p, d, b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
+        if (h.length) return { b, j, ub: near(h).u };
+      }
+      return null;
+    };
     const place = (p, d, tag) => {
-      const hits = order.map(g => { const h = lineHits(p, d, g.P).filter(x => x.u > 1e-6 && x.u < g.L - 1e-6); return h.length ? { g, u: h.reduce((a, b) => (Math.abs(b.t) < Math.abs(a.t) ? b : a)).u } : null; });
-      bayPairs.forEach(([a, b], k) => {
-        const ha = hits[k], hb = hits[k + 1]; if (!ha || !hb) return;
-        if (!inSpan(a, ha.u) || !inSpan(b, hb.u)) return;
-        out.push({ gA: a.id, uA: ha.u, gB: b.id, uB: hb.u, bay: k + 1, tag });
+      const hits = order.map(g => { const h = lineHits(p, d, g.P).filter(x => x.u > 1e-6 && x.u < g.L - 1e-6); return h.length ? { g, u: near(h).u } : null; }).filter(Boolean);
+      hits.slice(1).forEach((hb, m) => {
+        const ha = hits[m]; if (!inSpan(ha.g, ha.u) || !inSpan(hb.g, hb.u)) return;
+        out.push({ gA: ha.g.id, uA: ha.u, gB: hb.g.id, uB: hb.u, bay: ha.g.pos + 1, tag });
       });
     };
     // intermediate cross-frames. Parallel to the skew (lines across all girders from points on the middle girder) when
@@ -473,6 +481,8 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     // bay over the length where a line normal to the left girder lands inside a span of the right girder, which leaves
     // them staggered near skewed supports and radial on a curve
     const skOf = (g, id) => Math.abs((g.brg.find(b => b.support === id) || {}).skew || 0);
+    const SQUARE = 5;
+    const isSup = id => src.supports.some(q => q.id === id);
     // panels per span: the same for every bay, so lines stay continuous across the bays of a curved bridge. Based on
     // the average length of the girders' spans between the same two supports (the centerline length on a concentric
     // bridge) and rounded up, so the spacing there never exceeds the target; cfg.panels (by span, in order of the middle
@@ -485,6 +495,22 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       const Lm = Ls.length ? Ls.reduce((a, b) => a + b, 0) / Ls.length : Lown;
       return Math.max(1, Math.ceil(Lm / sp - 1e-6));
     };
+    // stations for a span with square bearings: equal panels between its supports. A span that starts or ends on a
+    // diaphragm (a partial-length girder) takes the panel points of the nearest girder spanning the same support,
+    // projected across, so its cross-frames line up with the neighboring bays
+    const squareStations = (a, s) => {
+      if (isSup(s.from) && isSup(s.to)) { const n = panels(s.from, s.to, s.L); return Array.from({ length: n - 1 }, (_, i) => s.u0 + s.L * (i + 1) / n); }
+      const key = isSup(s.to) ? 'to' : isSup(s.from) ? 'from' : null;
+      const hosts = key ? order.filter(g => g !== a).map(g => ({ g, h: g.spans.find(r => r[key] === s[key] && isSup(r.from) && isSup(r.to)) })).filter(x => x.h)
+        .sort((x, y) => Math.abs(x.g.pos - a.pos) - Math.abs(y.g.pos - a.pos)) : [];
+      if (!hosts.length) { const n = Math.max(1, Math.ceil(s.L / sp - 1e-6)); return Array.from({ length: n - 1 }, (_, i) => s.u0 + s.L * (i + 1) / n); }
+      const { g, h } = hosts[0], n = panels(h.from, h.to, h.L), us = [];
+      for (let i = 1; i < n; i++) {
+        const v = h.u0 + h.L * i / n, hh = lineHits(g.P.at(v), rotL(g.P.tan(v)), a.P).filter(x => x.u > s.u0 + clear - 1e-9 && x.u < s.u1 - clear + 1e-9);
+        if (hh.length) us.push(near(hh).u);
+      }
+      return us;
+    };
     const orient = cfg.orient || 'auto', auto = cfg.auto !== false; // auto false: only the cross-frames listed in add
     if (auto) ref.spans.forEach(s => {
       const sk = Math.max(skOf(ref, s.from), skOf(ref, s.to));
@@ -496,34 +522,32 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       }
       s.parallel = true;
     });
-    if (auto) bayPairs.forEach(([a, b], k) => {
+    if (auto) order.slice(0, -1).forEach((a, k) => {
       a.spans.forEach(s => {
         const rs = ref.spans.find(r => r.from === s.from && r.to === s.to);
         if (rs && rs.parallel) return;
-        // square bearings at both ends of the bay: equal divisions of the span, so the lines stay radial and line up
-        // across the bays of a curved bridge
-        const sq = [s.from, s.to].every(id => skOf(a, id) <= 0.5 && skOf(b, id) <= 0.5);
+        // square bearings at both ends: equal divisions, so the lines stay radial and line up across the bays of a curve.
+        // Within 5° counts as square: a flared or tapered girder crosses a square support a few degrees off, and the
+        // bearings of neighboring girders are then only inches apart along the girders
+        const sq = [s.from, s.to].every(id => order.every(g => skOf(g, id) <= SQUARE));
         if (sq) {
-          const n = panels(s.from, s.to, s.L);
-          for (let i = 1; i < n; i++) {
-            const u = s.u0 + s.L * i / n, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
-            if (!h.length) continue; const ub = h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)).u;
-            if (inSpan(b, ub)) out.push({ gA: a.id, uA: u, gB: b.id, uB: ub, bay: k + 1, tag: 'intermediate' });
-          }
+          squareStations(a, s).forEach(u => {
+            const r = rightHit(k, a.P.at(u), rotL(a.P.tan(u)));
+            if (r && inSpan(r.b, r.ub)) out.push({ gA: a.id, uA: u, gB: r.b.id, uB: r.ub, bay: k + 1, tag: 'intermediate' });
+          });
           return;
         }
-        // valid stretch on a: the normal line lands in a span of b, both ends clear of the bearings
+        // valid stretch on a: the normal line lands in a span of the next girder, both ends clear of the bearings
         const N = Math.max(40, Math.ceil(s.L / 0.25)), ok = [];
         for (let j = 0; j <= N; j++) {
-          const u = s.u0 + s.L * j / N, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
-          const hb = h.length ? h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)) : null;
-          ok.push(hb && u > s.u0 + clear - 1e-9 && u < s.u1 - clear + 1e-9 && inSpan(b, hb.u) ? { u, ub: hb.u } : null);
+          const u = s.u0 + s.L * j / N, r = rightHit(k, a.P.at(u), rotL(a.P.tan(u)));
+          ok.push(r && u > s.u0 + clear - 1e-9 && u < s.u1 - clear + 1e-9 && inSpan(r.b, r.ub) ? { u, b: r.b } : null);
         }
         let j = 0;
         while (j <= N) {
           if (!ok[j]) { j++; continue; }
-          let e = j; while (e + 1 <= N && ok[e + 1]) e++;
-          const v0 = ok[j].u, v1 = ok[e].u, nn = Math.max(1, Math.ceil((v1 - v0) / sp - 1e-9));
+          let e = j; while (e + 1 <= N && ok[e + 1] && ok[e + 1].b === ok[j].b) e++;
+          const b = ok[j].b, v0 = ok[j].u, v1 = ok[e].u, nn = Math.max(1, Math.ceil((v1 - v0) / sp - 1e-9));
           // the stretch ends sit at the clear distance from the bearings: cross-frames there only where the bearing is
           // skewed (with a square bearing the support cross-frame already braces that point)
           const atA = skOf(a, s.from) > 0.5 || skOf(b, s.from) > 0.5, atB = skOf(a, s.to) > 0.5 || skOf(b, s.to) > 0.5;
@@ -531,17 +555,23 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
             if ((i === 0 && !atA) || (i === nn && !atB)) continue;
             const u = v0 + (v1 - v0) * i / nn, h = lineHits(a.P.at(u), rotL(a.P.tan(u)), b.P).filter(x => x.u > 1e-6 && x.u < b.L - 1e-6);
             if (!h.length) continue;
-            out.push({ gA: a.id, uA: u, gB: b.id, uB: h.reduce((x, y) => (Math.abs(y.t) < Math.abs(x.t) ? y : x)).u, bay: k + 1, tag: 'intermediate' });
+            out.push({ gA: a.id, uA: u, gB: b.id, uB: near(h).u, bay: k + 1, tag: 'intermediate' });
           }
           j = e + 1;
         }
       });
     });
-    // along the support lines, between girders that both bear there
+    // along the support lines, between neighboring girders that both bear there
     if (auto && cfg.atSupports !== false) src.supports.forEach(q => {
-      const hits = order.map(g => { const b = g.brg.find(x => x.support === q.id); return b ? { g, u: b.u } : null; });
-      bayPairs.forEach(([a, b], k) => { const ha = hits[k], hb = hits[k + 1]; if (ha && hb) out.push({ gA: a.id, uA: ha.u, gB: b.id, uB: hb.u, bay: k + 1, tag: 'support', support: q.id }); });
+      const hits = order.map(g => { const b = g.brg.find(x => x.support === q.id); return b ? { g, u: b.u } : null; }).filter(Boolean);
+      hits.slice(1).forEach((hb, m) => { const ha = hits[m]; out.push({ gA: ha.g.id, uA: ha.u, gB: hb.g.id, uB: hb.u, bay: ha.g.pos + 1, tag: 'support', support: q.id }); });
     });
+    // an automatic cross-frame at a diaphragm is the diaphragm: drop it
+    if (memb && memb.length) {
+      const at = new Map(); memb.forEach(m => { [[m.gA, m.uA], [m.gB, m.uB]].forEach(([g, u]) => { (at.get(g) || at.set(g, []).get(g)).push(u); }); });
+      const onD = (g, u) => (at.get(g) || []).some(v => Math.abs(v - u) < Math.max(clear, 0.5));
+      for (let i = out.length - 1; i >= 0; i--) if (out[i].tag === 'intermediate' && (onD(out[i].gA, out[i].uA) || onD(out[i].gB, out[i].uB))) out.splice(i, 1);
+    }
     // user changes
     (cfg.add || []).forEach((x, k) => {
       const a = G.find(g => g.id === x.gA), b = G.find(g => g.id === x.gB);
@@ -735,10 +765,12 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     // girders at 11 ft, radial supports, cross-frames at 20 ft in the end spans and 19.09 ft in the center span
     curved: { mode: 'concentric', concentric: { R: 700, turn: 'L', nG: 4, spacing: 11, spans: [160, 210, 160], skews: [0, 0, 0, 0], ext: 1, crossframes: CF({ spacing: 20, maxLb: 25 }) } },
     skew: { mode: 'concentric', concentric: { R: 0, turn: 'L', nG: 4, spacing: 10, spans: [120, 120], skews: [60, 60, 60], ext: 1, crossframes: CF({ spacing: 20 }) } },
-    flare: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 260 }] },
-      girders: [{ id: 'G1', offsets: [[1000, -15], [1260, -25]] }, { id: 'G2', offsets: [[1000, -5], [1260, -8]] }, { id: 'G3', offsets: [[1000, 5], [1260, 8]] }, { id: 'G4', offsets: [[1000, 15], [1260, 25]] }, { id: 'G5', offsets: [[1000, 25], [1260, 35]], startOn: 'D1' }],
-      supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1130, skew: 0, kind: 'pier' }, { id: 'Abut 2', sta: 1260, skew: 0, kind: 'abutment' }],
-      diaphragms: [{ id: 'D1', sta: 1060, skew: 0, from: 'G4', to: 'G5' }], crossframes: CF({ spacing: 20 }) } },
+    // widening on one side: G1-G3 stay parallel, G5 and G6 fan out to the right, and where the G3-G5 bay reaches 12 ft
+    // an interior girder G4 starts on diaphragm D1 (spanning G3 to G5) and runs continuous over the pier
+    flare: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 1000, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 300 }] },
+      girders: [{ id: 'G1', offsets: [[1000, -18]] }, { id: 'G2', offsets: [[1000, -9]] }, { id: 'G3', offsets: [[1000, 0]] }, { id: 'G4', offsets: [[1100, 6], [1300, 9]], startOn: 'D1' }, { id: 'G5', offsets: [[1000, 9], [1300, 18]] }, { id: 'G6', offsets: [[1000, 18], [1300, 27]] }],
+      supports: [{ id: 'Abut 1', sta: 1000, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 1150, skew: 0, kind: 'pier' }, { id: 'Abut 2', sta: 1300, skew: 0, kind: 'abutment' }],
+      diaphragms: [{ id: 'D1', sta: 1100, skew: 0, from: 'G3', to: 'G5' }], crossframes: CF({ spacing: 20 }) } },
     mixed: { mode: 'alignment', alignment: { ext: 1, alignment: { sta0: 100, x0: 0, y0: 0, dir0: 0, elements: [{ type: 'line', L: 90 }, { type: 'arc', L: 320, R: 900, turn: 'R' }] },
       girders: [-18, -9, 0, 9, 18].map((o, i) => ({ id: 'G' + (i + 1), offsets: [[100, o]] })),
       supports: [{ id: 'Abut 1', sta: 120, skew: 0, kind: 'abutment' }, { id: 'Pier 1', sta: 275, skew: 25, kind: 'pier' }, { id: 'Abut 2', sta: 450, skew: 10, kind: 'abutment' }],
@@ -1065,7 +1097,9 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
       h += `<g class="xf" data-x="${esc(x.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--xf)" stroke-width="${on ? 4 : x.tag === 'support' ? 2.2 : 1.5}"/><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="transparent" stroke-width="12"/></g>`;
       if (showX) h += `<text x="${(a[0] + b[0]) / 2}" y="${(a[1] + b[1]) / 2}" dy="-3" font-size="9" text-anchor="middle" fill="var(--muted)" font-family="var(--f-mono)">${esc(x.id)}</text>`;
     });
-    F.members.forEach(m => { const a = pr(m.pA), b = pr(m.pB); h += `<g class="mb" data-m="${esc(m.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--diaph)" stroke-width="4" stroke-linecap="round"/></g>`; if (showL) h += `<text x="${(a[0] + b[0]) / 2}" y="${(a[1] + b[1]) / 2}" dy="-6" font-size="11" text-anchor="middle" fill="var(--diaph)">${esc(m.id)}</text>`; });
+    const dl = new Set();
+    F.members.forEach(m => { const a = pr(m.pA), b = pr(m.pB); h += `<g class="mb" data-m="${esc(m.id)}"><line x1="${a[0]}" y1="${a[1]}" x2="${b[0]}" y2="${b[1]}" stroke="var(--diaph)" stroke-width="4" stroke-linecap="round"/></g>`;
+      if (showL && !dl.has(m.line)) { dl.add(m.line); const t = a[1] < b[1] ? a : b; h += `<text x="${t[0]}" y="${t[1]}" dx="6" dy="-6" font-size="11" fill="var(--diaph)" font-weight="600">${esc(m.line)}</text>`; } });
     // girders on top, with bearings
     F.girders.forEach(g => {
       h += `<g class="gd" data-g="${esc(g.id)}"><path d="${path(g.P.pts)}" fill="none" stroke="var(--girder)" stroke-width="2.2"/><path d="${path(g.P.pts)}" fill="none" stroke="transparent" stroke-width="10"/></g>`;
@@ -1142,10 +1176,13 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
     $('#gTbl').innerHTML = `<thead><tr><th class="l">Girder</th><th>Length ft</th><th class="l">Start</th><th class="l">End</th><th class="l">Spans ft</th><th class="l">Radius ft</th><th>Largest Lb ft</th></tr></thead><tbody>`
       + gs.map(g => `<tr><td class="l"><b>${esc(g.id)}</b></td><td>${fx(g.L)}</td><td class="l">${esc(g.startKind === 'member' ? 'on ' + g.startOn : g.brg.length ? 'past ' + g.brg[0].support : 'free')}</td><td class="l">${esc(g.endKind === 'member' ? 'on ' + g.endOn : g.brg.length ? 'past ' + g.brg[g.brg.length - 1].support : 'free')}</td>
         <td class="l" style="font-family:var(--f-mono)">${g.spans.map(s => fx(s.L)).join(' · ')}</td><td class="l" style="font-family:var(--f-mono)">${g.spans.map(s => (isFinite(s.R) ? fx(s.R, 1) : 'straight')).join(' · ')}</td><td>${fx(g.LbMax)}</td></tr>`).join('') + '</tbody>';
-    const bays = {}; F.crossframes.forEach(x => { (bays[x.bay] = bays[x.bay] || []).push(x); });
+    // bays by the pair of girders a cross-frame actually joins (ahead of a partial-length girder that is the wider bay)
+    const pos = new Map(F.order.map((id, k) => [id, k])), bays = new Map();
+    F.crossframes.forEach(x => { const k = x.gA + '–' + x.gB; if (!bays.has(k)) bays.set(k, []); bays.get(k).push(x); });
+    const bk = [...bays.keys()].sort((p, q) => { const [a1, b1] = p.split('–'), [a2, b2] = q.split('–'); return pos.get(a1) - pos.get(a2) || pos.get(b1) - pos.get(b2); });
     $('#bTbl').innerHTML = `<thead><tr><th class="l">Bay</th><th class="l">Girders</th><th>Cross-frames</th><th>On supports</th><th>Length ft</th><th>Angle °</th></tr></thead><tbody>`
-      + gs.slice(1).map((g, k) => { const b = bays[k + 1] || [], L = b.map(x => x.L), A = b.map(x => Math.max(Math.abs(x.angA), Math.abs(x.angB)));
-        return `<tr><td class="l">${k + 1}</td><td class="l">${esc(gs[k].id)}–${esc(g.id)}</td><td>${b.length}</td><td>${b.filter(x => x.tag === 'support').length}</td><td>${b.length ? fx(Math.min(...L)) + ' – ' + fx(Math.max(...L)) : '–'}</td><td>${b.length ? fx(Math.min(...A), 1) + ' – ' + fx(Math.max(...A), 1) : '–'}</td></tr>`; }).join('') + '</tbody>';
+      + bk.map(key => { const b = bays.get(key), L = b.map(x => x.L), A = b.map(x => Math.max(Math.abs(x.angA), Math.abs(x.angB)));
+        return `<tr><td class="l">${b[0].bay}</td><td class="l">${esc(key)}</td><td>${b.length}</td><td>${b.filter(x => x.tag === 'support').length}</td><td>${fx(Math.min(...L))} – ${fx(Math.max(...L))}</td><td>${fx(Math.min(...A), 1)} – ${fx(Math.max(...A), 1)}</td></tr>`; }).join('') + '</tbody>';
     $('#sTbl').innerHTML = `<thead><tr><th class="l">Girder</th><th class="l">Support</th><th>At ft</th><th>Skew °</th></tr></thead><tbody>`
       + gs.flatMap(g => g.brg.map(b => `<tr><td class="l">${esc(g.id)}</td><td class="l">${esc(b.support)}</td><td>${fx(b.u)}</td><td>${fx(b.skew, 2)}</td></tr>`)).join('') + '</tbody>';
     const rows = F.crossframes.map(x => ({ id: x.id, bay: x.bay, kind: x.tag === 'support' ? 'support' : x.tag === 'added' ? 'added' : 'intermediate', gA: x.gA, uA: x.uA, gB: x.gB, uB: x.uB, L: x.L, aA: x.angA, aB: x.angB }))
