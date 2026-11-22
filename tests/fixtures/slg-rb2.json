@@ -1,0 +1,178 @@
+{
+ "deck": {
+  "ts": 7.5,
+  "haunch": 1,
+  "beff": 84,
+  "btrib": null,
+  "n": 8,
+  "fc": 3.5,
+  "Ar": 6.3,
+  "yr": 3.75,
+  "fyr": 60
+ },
+ "Fy": 50,
+ "loads": {
+  "dc1": 0.13125,
+  "misc": 3,
+  "steelAdd": 0,
+  "selfWeight": true,
+  "deckAuto": true,
+  "haunchAuto": true,
+  "wc": 150,
+  "dc2": 0.3,
+  "dw": 0.35
+ },
+ "bracing": {
+  "locs": "",
+  "Lb": 17.5
+ },
+ "df": {
+  "S": 7,
+  "tsDF": 0,
+  "overrideM": 0,
+  "overrideV": 0,
+  "useTable": false,
+  "table": null,
+  "girder": "interior",
+  "Ng": 5,
+  "roadway": 0,
+  "de": 2,
+  "skew": 0,
+  "skewShear": false,
+  "rigid": true
+ },
+ "flb": {
+  "on": false,
+  "str": 0,
+  "svc": 0,
+  "conTop": 0,
+  "conBot": 0,
+  "bracket": false,
+  "bo": 3.5,
+  "tso": 0,
+  "share": 0.5,
+  "forms": 0.04,
+  "screed": 0.085,
+  "rail": 0.025,
+  "walk": 0.125,
+  "fm": 3,
+  "bh": 36,
+  "bv": 0
+ },
+ "pour": {
+  "on": false,
+  "pours": [],
+  "wet": 0,
+  "nCast": "n",
+  "checkSingle": true,
+  "useFinal": true
+ },
+ "code": {
+  "edition": "10",
+  "eta": 1
+ },
+ "fatigue": {
+  "adtt": 1500,
+  "lanes": 2,
+  "life": 75,
+  "baseCat": "",
+  "stiffCat": "C'",
+  "studCat": "C",
+  "spliceCat": "B",
+  "studs": true,
+  "dfM": 0,
+  "dfV": 0,
+  "road": "major",
+  "nonredundant": false,
+  "coverCat": ""
+ },
+ "lfd": {
+  "vehicle": "HS20",
+  "composite": true,
+  "topBraced": true,
+  "dfM": 0,
+  "dfV": 0,
+  "df1": 0,
+  "cbMode": "literal",
+  "cbUser": 1
+ },
+ "lfr": {
+  "A1": 1.3,
+  "A2inv": 2.17,
+  "A2op": 1.3,
+  "A1s": 1,
+  "A2sinv": 1.67,
+  "A2sop": 1
+ },
+ "construction": {
+  "cl": 0
+ },
+ "deflection": {
+  "on": true,
+  "NL": 2,
+  "Ng": 4,
+  "ratio": 800
+ },
+ "factors": {
+  "gDC": 1.25,
+  "gDW": 1.5,
+  "gLinv": 1.75,
+  "gLop": 1.35,
+  "gSinv": 1.3,
+  "gSop": 1,
+  "phiC": 1,
+  "phiS": 1
+ },
+ "options": {
+  "limit13My": true,
+  "serviceUncracked": false,
+  "appendixA6": true
+ },
+ "mesh": 0,
+ "live": {
+  "design": "hl93",
+  "permit": "none",
+  "ped": {
+   "width": null,
+   "clear": null,
+   "dfVeh": null,
+   "noVehicle": false,
+   "mpf": true
+  },
+  "permits": {
+   "type": "routine",
+   "adtt": null,
+   "crawl": false,
+   "lane": true,
+   "gDesign": 1.35,
+   "im": null,
+   "vehicles": []
+  }
+ },
+ "name": "2-span rolled beam",
+ "spans": [
+  70,
+  70
+ ],
+ "sections": [
+  {
+   "id": "R1",
+   "name": "W36x150",
+   "type": "rolled",
+   "shape": "W36x150",
+   "d": 35.9,
+   "bf": 12,
+   "tf": 0.94,
+   "tw": 0.625,
+   "do": 0
+  }
+ ],
+ "ranges": [
+  {
+   "from": 0,
+   "to": 140,
+   "sec": "R1"
+  }
+ ],
+ "stiffeners": []
+}

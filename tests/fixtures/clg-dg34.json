@@ -1,0 +1,157 @@
+{
+ "kind": "I",
+ "shape": "IL72-2438",
+ "spans": [
+  159.125,
+  159.125
+ ],
+ "continuous": true,
+ "pierBrg": 1.125,
+ "ext": 0.625,
+ "pierFace": 1.75,
+ "padW": 15,
+ "S": 7,
+ "overhang": 3,
+ "nBeams": 6,
+ "girder": "interior",
+ "skew": 0,
+ "roadway": 38.167,
+ "parapetWidth": 1.417,
+ "lanes": 0,
+ "deck": {
+  "t": 8,
+  "fc": 4,
+  "fillet": 2
+ },
+ "beam": {
+  "fc": 8.5,
+  "fci": 6.5
+ },
+ "strand": {
+  "d": 0.6
+ },
+ "pattern": {
+  "custom": true,
+  "rows": [
+   {
+    "row": "1B",
+    "ctr": 18,
+    "end": 18,
+    "dbn": 4,
+    "dbL": 20
+   },
+   {
+    "row": "2B",
+    "ctr": 18,
+    "end": 18,
+    "dbn": 4,
+    "dbL": 23
+   },
+   {
+    "row": "3B",
+    "ctr": 10,
+    "end": 10,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "4B",
+    "ctr": 2,
+    "end": 0,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "5B",
+    "ctr": 2,
+    "end": 0,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "1T",
+    "ctr": 2,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "2T",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   },
+   {
+    "row": "3T",
+    "ctr": 0,
+    "end": 2,
+    "dbn": 0,
+    "dbL": 0
+   }
+  ]
+ },
+ "loads": {
+  "parapet": 0.57,
+  "nParapet": 2,
+  "fws": 50,
+  "dc1": 0,
+  "dc2": 0,
+  "dw": 0,
+  "fwsDist": "tributary"
+ },
+ "neg": {
+  "AsTop": 5.53,
+  "AsTopCut": 5.53,
+  "AsBot": 5.53,
+  "AsBotCut": 4.74,
+  "bar": 1,
+  "s": 6,
+  "cutoff": 40
+ },
+ "stirrups": [
+  {
+   "from": 0,
+   "to": 1,
+   "Av": 0.62,
+   "s": 12
+  }
+ ],
+ "stirMode": "entered",
+ "H": 70,
+ "lift": {
+  "Lc": 12
+ },
+ "rating": {
+  "phiC": 1,
+  "phiS": 1,
+  "gDW": 1.5
+ },
+ "opts": {
+  "dc1Span": "composite",
+  "critAt": "dv",
+  "dualTruck": "contraflexure",
+  "flexStrands": "all"
+ },
+ "checkDeflection": false,
+ "live": {
+  "design": "hl93",
+  "permit": "none",
+  "ped": {
+   "width": null,
+   "clear": null,
+   "dfVeh": null,
+   "noVehicle": false,
+   "mpf": true
+  },
+  "permits": {
+   "type": "routine",
+   "adtt": null,
+   "crawl": false,
+   "lane": true,
+   "gDesign": 1.35,
+   "im": null,
+   "vehicles": []
+  }
+ }
+}

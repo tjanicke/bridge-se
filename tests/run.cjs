@@ -70,6 +70,19 @@ guard('Steel Line Girder', () => {
     near('tub DE5 DF fatigue', r.tub.DF.MF, 0.900, 0.001, 'NSBA DE5');
     is('tub DE5 within the method scope', r.tub.scope.ok, true);
     near('tub DE5 center span LL deflection, in.', (r.deflection || []).find(q => q.span === 2).delta, 2.267, 0.01, 'independent virtual work'); }
+  // pedestrian mode: 90 psf load, eigenvalue frequency, vehicle placement, verdict scope
+  { const ped = (sp, ped, df) => { const m = fixture('slg-rb2.json'); m.spans = sp; const Lt = sp.reduce((a, b) => a + b);
+      m.ranges = [{ from: 0, to: Lt, sec: m.sections[0].id }]; m.bracing = { locs: '', Lb: 20 }; m.stiffeners = []; m.live.design = 'ped'; m.live.ped = ped; if (df) Object.assign(m.df, df); return m; };
+    const r = S.run(ped([72], { width: 5, clear: 12, mpf: true })), p = r.pois.reduce((a, b) => (Math.abs(b.x - 36) < Math.abs(a.x - 36) ? b : a));
+    near('pedestrian 72 ft simple span, 5 ft width: midspan moment, k-ft', p.LLpos, 291.6, 0.05, '0.45 × 72²/8');
+    const P = r.secTable[0].P, EI = 29000 * P.sn.I / 144, w = r.vibration.Wg / 72;
+    near('pedestrian 72 ft simple span: frequency, Hz', r.vibration.f, Math.PI / (2 * 72 * 72) * Math.sqrt(EI * 32.174 / w), 1e-4, 'π/2L² √(EIg/w)');
+    const r4 = S.run(ped([70, 70, 70, 70], { width: 5, clear: 12, mpf: true })), w4 = r4.vibration.Wg / 280;
+    near('pedestrian 4 × 70 ft: frequency equals the simple 70 ft span, Hz', r4.vibration.f, Math.PI / (2 * 70 * 70) * Math.sqrt(EI * 32.174 / w4), 1e-4, 'equal spans, exact');
+    is('pedestrian: the verdict lists the checks not made', Array.isArray(r.pedOpen) && r.pedOpen.length === 4, true);
+    let msg = ''; try { S.run(ped([72], { width: 5, clear: 7, mpf: true }, { girder: 'exterior' })); } catch (e) { msg = e.message; }
+    is('pedestrian: H5 on a 7 ft clear deck, exterior girder, no factor entered: stops', /does not fit/.test(msg), true);
+    is('pedestrian: same with the factor entered: runs', S.run(ped([72], { width: 5, clear: 7, mpf: true, dfVeh: 0.6 }, { girder: 'exterior' })).llc.ped.veh, 'H5'); }
   for (const [lbl, f] of [['skew +10', m => { m.df.skew = 10; }], ['skew −10', m => { m.df.skew = -10; }], ['roadway 50 ft (NL/Nb = 2)', m => { m.df.roadway = 50; }], ['partial top lateral bracing', m => { m.tub.lateral = 'partial'; }]]) {
     const m = fixture('slg-tub5.json'); f(m); is('tub ' + lbl + ': outside the method scope', S.run(m).tub.scope.ok, false);
   }
@@ -92,6 +105,25 @@ guard('Concrete Line Girder', () => {
     near('LRFD simplified, 120 ft span at 36 ft, concurrent / envelope LL shear', at(36).simp.VLc / at(36).VLLp, 0.9559, 0.002, 'independent, axle positions at 0.01 ft');
     near('LRFD simplified, 120 ft span at 48 ft, concurrent / envelope LL shear', at(48).simp.VLc / at(48).VLLp, 0.7954, 0.002, 'independent, axle positions at 0.01 ft');
     is('LRFD simplified, 120 ft span at 48 ft: Vci governs', at(48).simp.Vci < at(48).simp.Vcw, true); }
+  // simplified procedure, negative moment: the deck top is the tension face, Mcre = 0.20√f′c,deck · I/(n(hc − yb))
+  { const m = clgEngineModel(fixture('clg-dg34.json')); m.opts = Object.assign({}, m.opts, { shearMethod: 'simplified' });
+    const r = P.run(m), c = r.section.comp, q = r.shear.reduce((a, b) => (Math.abs(b.x - 151.28) < Math.abs(a.x - 151.28) ? b : a));
+    is('LRFD simplified, 2-span dg34 at 151.28 ft: negative moment governs', q.useNeg, true);
+    near('LRFD simplified, dg34 at 151.28 ft: Mcre at the deck top, k-ft', q.simp.Mcre, 0.2 * Math.sqrt(m.deck.fc) * c.I / (c.hc - c.yb) / c.n / 12, 0.5, 'hand calculation');
+    near('LRFD simplified, dg34 at 151.28 ft: Mcre, k-ft', q.simp.Mcre, 1730, 2, 'app value'); }
+  // pedestrian deflection: the largest deflection in the span, not only at midspan (40 + 120 ft)
+  { const m = clgEngineModel(fixture('clg-dg34.json')); m.spans = [40, 120]; m.live = Object.assign({}, m.live, { design: 'ped', ped: { width: 8, clear: 12, mpf: true } });
+    const r = P.run(m), d = r.deflection.find(q => q.span === 2);
+    near('pedestrian 40 + 120 ft: location of the largest deflection, ft', d.x, 106, 1.3, 'independent: 5.9 ft past midspan');
+    is('pedestrian: the verdict lists the checks not made', Array.isArray(r.pedOpen) && r.pedOpen.length === 3, true); }
+  // less than the minimum stirrups: the simplified procedure does not apply; general procedure with 5.7.3.4.2-2
+  { const m = clgEngineModel(fixture('clg-il63.json')); m.opts = Object.assign({}, m.opts, { shearMethod: 'simplified' });
+    m.stirrups = [{ from: 0, to: 0.1, Av: 0.62, s: 6 }, { from: 0.1, to: 0.35, Av: 0.62, s: 12 }, { from: 0.35, to: 0.45, Av: 0.18, s: 18 }, { from: 0.45, to: 0.9, Av: 0.62, s: 12 }, { from: 0.9, to: 1, Av: 0.62, s: 6 }];
+    const r = P.run(m), q = r.shear.find(q => Math.abs(q.x - 48) < 1e-6);
+    is('below minimum stirrups at 48 ft (0.180 < 0.193 in.²): simplified procedure not used', q.method, 'general');
+    near('below minimum stirrups: β = 4.8/(1 + 750εs) · 51/(39 + sxe)', q.beta, 4.8 / (1 + 750 * q.es) * 51 / (39 + q.sxe), 1e-9, '5.7.3.4.2-2');
+    near('below minimum stirrups: sxe = dv (ag 0.75 in.), 12 to 80 in.', q.sxe, Math.min(Math.max(q.dv, 12), 80), 1e-9, '5.7.3.4.2-5');
+    is('below minimum stirrups: shear rating below 1.0', r.rating.summary.find(s => /hear/.test(s.lim)).inv.inv < 1, true); }
 });
 
 // ---------- Concrete Slab Bridge ----------

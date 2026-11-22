@@ -984,7 +984,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const lever = ext ? [2 - de, 8 - de].reduce((a, xi) => a + (xi < S ? 0.5 * (S - xi) / S : 0), 0) : (S > 0 ? Math.max(0.5, (S - 3) / S) : 1);
       const mpf = p.mpf === false ? 1 : 1.2;
       const dfVeh = +p.dfVeh > 0 ? +p.dfVeh : lever * mpf;
-      out.ped = { width, w: 0.09 * width, clear, veh, W: veh ? H_TRUCK[veh] : 0, lever, mpf, dfVeh, dfUser: +p.dfVeh > 0, ext, noVehicle: !!p.noVehicle };
+      // the assumed placement (wheels 2 ft and 8 ft from the rail face) must fit the clear deck; otherwise the factor is entered
+      const noFit = ext && !!veh && !(+p.dfVeh > 0) && clear > 0 && clear < 8 - 1e-9;
+      out.ped = { width, w: 0.09 * width, clear, veh, W: veh ? H_TRUCK[veh] : 0, lever, mpf, dfVeh, dfUser: +p.dfVeh > 0, noFit, ext, noVehicle: !!p.noVehicle };
     }
     if (out.permit !== 'none') {
       const P = L.permits || {};
@@ -1076,6 +1078,50 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
 
   // assemble stiffness for deflections (EI in k-ft²) and solve unit loads at given nodes
   // nodal displacements [v0, θ0, v1, θ1, …] under nodal loads P (kips, downward +); ft and radians, downward negative
+  // Fundamental vertical frequency, Hz, of a continuous beam on knife-edge supports: Hermite beam elements with
+  // consistent mass, lowest eigenvalue of Kφ = ω²Mφ by inverse iteration with banded Cholesky (half-bandwidth 3).
+  // x: node stations, ft; EI: per element, k-ft²; w: weight per element, k/ft; sup: supported node indices.
+  // Each element is split in `sub` parts so a coarse node set still converges.
+  function firstFrequency(x0, EI0, w0, sup0, sub) {
+    sub = sub || 4; const g = 32.174;
+    const x = [x0[0]], EI = [], w = [], sup = new Set();
+    for (let e = 0; e < x0.length - 1; e++) for (let k = 1; k <= sub; k++) { x.push(x0[e] + (x0[e + 1] - x0[e]) * k / sub); EI.push(EI0[e]); w.push(w0[e]); }
+    sup0.forEach(i => sup.add(i * sub));
+    const nn = x.length, n = 2 * nn, hb = 3, W = hb + 1;
+    const K = new Float64Array(n * W), M = new Float64Array(n * W); // lower band: A[i][j] at i*W + (i − j)
+    const addB = (A, i, j, v) => { if (j > i) { const t = i; i = j; j = t; } A[i * W + (i - j)] += v; };
+    for (let e = 0; e < nn - 1; e++) {
+      const L = x[e + 1] - x[e]; if (!(L > 0)) continue;
+      const k = EI[e] / L ** 3, mL = w[e] / g * L / 420, d = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+      const ke = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]];
+      const me = [[156, 22 * L, 54, -13 * L], [22 * L, 4 * L * L, 13 * L, -3 * L * L], [54, 13 * L, 156, -22 * L], [-13 * L, -3 * L * L, -22 * L, 4 * L * L]];
+      for (let a = 0; a < 4; a++) for (let b = 0; b <= a; b++) { addB(K, d[a], d[b], k * ke[a][b]); addB(M, d[a], d[b], mL * me[a][b]); }
+    }
+    // supports: vertical displacement removed (row and column replaced by the identity, no mass)
+    sup.forEach(i => { const r = 2 * i; for (let j = Math.max(0, r - hb); j <= Math.min(n - 1, r + hb); j++) { const [a, b] = j > r ? [j, r] : [r, j]; K[a * W + (a - b)] = 0; M[a * W + (a - b)] = 0; } K[r * W] = 1; });
+    // banded Cholesky K = LLᵀ
+    const Lc = new Float64Array(n * W);
+    for (let i = 0; i < n; i++) for (let j = Math.max(0, i - hb); j <= i; j++) {
+      let s = K[i * W + (i - j)];
+      for (let k = Math.max(0, i - hb, j - hb); k < j; k++) s -= Lc[i * W + (i - k)] * Lc[j * W + (j - k)];
+      if (i === j) { if (!(s > 0)) return NaN; Lc[i * W] = Math.sqrt(s); } else Lc[i * W + (i - j)] = s / Lc[j * W];
+    }
+    const solve = b => { const y = Float64Array.from(b);
+      for (let i = 0; i < n; i++) { let s = y[i]; for (let k = Math.max(0, i - hb); k < i; k++) s -= Lc[i * W + (i - k)] * y[k]; y[i] = s / Lc[i * W]; }
+      for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k <= Math.min(n - 1, i + hb); k++) s -= Lc[k * W + (k - i)] * y[k]; y[i] = s / Lc[i * W]; }
+      return y; };
+    const mul = (A, v) => { const r = new Float64Array(n); for (let i = 0; i < n; i++) for (let j = Math.max(0, i - hb); j <= i; j++) { const a = A[i * W + (i - j)]; r[i] += a * v[j]; if (j !== i) r[j] += a * v[i]; } return r; };
+    // start from a mix of the all-spans-down and alternating shapes so no mode is missing from the start vector
+    let v = new Float64Array(n); for (let i = 0; i < nn; i++) { const s = Math.sin(Math.PI * (x[i] - x[0]) / ((x[nn - 1] - x[0]) || 1)); v[2 * i] = 1 + 0.5 * s + 0.25 * Math.sin(7.3 * i); }
+    let lam = Infinity;
+    for (let it = 0; it < 2000; it++) {
+      const y = solve(mul(M, v)), Ky = mul(K, y), My = mul(M, y);
+      let a = 0, b = 0; for (let i = 0; i < n; i++) { a += y[i] * Ky[i]; b += y[i] * My[i]; }
+      const l = a / b, nrm = Math.sqrt(b); for (let i = 0; i < n; i++) v[i] = y[i] / nrm;
+      if (Math.abs(l - lam) <= 1e-12 * l) { lam = l; break; } lam = l;
+    }
+    return Math.sqrt(lam) / (2 * Math.PI);
+  }
   function staticDeflection(x, EI, supNodes, P) {
     const nn = x.length, nd = 2 * nn;
     const K = Array.from({ length: nd }, () => new Float64Array(nd));
@@ -1488,7 +1534,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     let vibration = null;
     if (llc.kind === 'ped') {
       const loadNodes = [];
-      spans.forEach((L, i) => { for (let q = 0.3; q <= 0.701; q += 0.05) loadNodes.push(nodeAt(supX[i] + q * L)); });
+      spans.forEach((L, i) => { for (let q = 0.25; q <= 0.7501; q += 0.02) loadNodes.push(nodeAt(supX[i] + q * L)); }); // search 0.25L–0.75L
       const uniq = [...new Set(loadNodes)];
       const EIk = eSec.map(id => ES * props[id].sn.I / 144);
       const U = deflectionShapes(x, EIk, supNodes, uniq);
@@ -1500,16 +1546,10 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
       deflection.forEach(d => { d.ratio = d.delta / d.limit; d.dfD = 1; });
-      // Rayleigh estimate from dead-load deflected shapes (all spans down, and alternate spans up/down); the lower governs
+      // fundamental frequency: eigenvalue solution with the short-term composite stiffness and the dead load as mass
       const wAdd = (+m.loads.dc2 || 0) + (+m.loads.dw || 0);
       const Pn = new Float64Array(nn); for (let e = 0; e < ne; e++) { const half = (wDC1[e] + wAdd) * (x[e + 1] - x[e]) / 2; Pn[e] += half; Pn[e + 1] += half; }
-      const freq = alt => {
-        const sg = new Float64Array(nn); for (let i = 0; i < nn; i++) sg[i] = alt && spanOf(x[i]) % 2 ? -1 : 1;
-        const u = staticDeflection(x, EIk, supNodes, Array.from(Pn, (v, i) => v * sg[i]));
-        let a = 0, b = 0; for (let i = 0; i < nn; i++) { const d = u[2 * i]; a += Pn[i] * d * sg[i]; b += Pn[i] * d * d; }
-        return b > 0 ? Math.sqrt(32.174 * Math.abs(a) / b) / (2 * Math.PI) : Infinity;
-      };
-      const f1 = freq(false), f2 = spans.length > 1 ? freq(true) : Infinity, f = Math.min(f1, f2);
+      const f = firstFrequency(x, EIk, Array.from({ length: ne }, (_, e) => wDC1[e] + wAdd), supNodes), f1 = f, f2 = f;
       const Ng = Math.max(1, Math.round(+m.df.Ng || 0)) || 4;
       const Wg = Pn.reduce((a, v) => a + v, 0), W = Wg * Ng, Wreq = 180 * Math.exp(-0.35 * f);
       vibration = { f, fAll: f1, fAlt: f2, Wg, Ng, W, Wreq, fmin: 3.0, ratio: Math.min(3.0 / f, Wreq / W), ok: f > 3.0 || W >= Wreq };
@@ -2082,7 +2122,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     };
     const secTable = m.sections.map(s => ({ id: s.id, name: s.name, P: props[s.id] }));
     return { ed, eta, x, supX, pois, checks: allChecks, summary, rating, deflection, proportions, secTable, braces, segs: segRes.map(r => ({ a: r.sg.a, b: r.sg.b, Lb: r.sg.Lb / 12, strength: r.strength, consTop: r.consTop, consBot: r.consBot })),
-      wSW, eSec, adttSL, dfSpan, pour, flOn, vibration, llc, warnings: collectWarnings(), ms: Date.now() - t0 };
+      wSW, eSec, adttSL, dfSpan, pour, flOn, vibration, llc, pedOpen: llc.kind === 'ped' ? ['lateral frequency above 1.3 Hz (Guide Spec 6)', 'wind on the superstructure and vertical wind uplift (Guide Spec 3.4)', 'wind-induced fatigue (Guide Spec 3.5)', 'stability of twin-girder systems (Guide Spec 7.2, revised in the 2015 interims)'] : null, warnings: collectWarnings(), ms: Date.now() - t0 };
   }
 
 
@@ -2551,6 +2591,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const ctx = prepare(m, ed);
     const runCase_ = tub ? runCaseTub : runCase;
     const L = liveOpts(m);
+    if (L.ped && L.ped.noFit) throw new Error('The ' + L.ped.veh + ' maintenance vehicle does not fit the assumed lever-rule placement (wheels 2 ft and 8 ft from the rail face) on a ' + L.ped.clear + ' ft clear deck. Enter the vehicle distribution factor for the exterior girder from the wheel positions that fit.');
     // checks of two runs of the same model line up by point, section, limit state, check, stage and response sign;
     // repeats of the same key are paired in order
     const keyOf = c => [c.i, c.sec, c.lim, c.what, c.stage || '', c.dir || ''].join('|');
@@ -4055,7 +4096,8 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const hiTxt = worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2);
     const scOut = res.kind === 'tub' && res.tub.scope && !res.tub.scope.ok;
     if (scOut) F.para('Outside the scope of the tub girder method (' + res.tub.scope.why.join('; ') + '). The ratios and rating factors in this report are for diagnosis only; a refined analysis is needed.', { font: 'B', size: 10, color: RED });
-    F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : (scOut ? 'No criterion exceeds 1.0; highest ratio ' : 'All design criteria satisfied; highest ratio ') + hiTxt + '.', { font: 'B', size: 10, color: nOver || scOut ? RED : GRN });
+    F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : (scOut ? 'No criterion exceeds 1.0; highest ratio ' : res.pedOpen ? 'Gravity checks shown are satisfied; highest ratio ' : 'All design criteria satisfied; highest ratio ') + hiTxt + '.', { font: 'B', size: 10, color: nOver || scOut ? RED : GRN });
+    if (res.pedOpen) F.para('Not checked here; a separate analysis is needed: ' + res.pedOpen.join('; ') + '.', { size: 9, color: RED });
     F.table([{ h: 'Criterion', w: 2.1 }, { h: 'Governing check', w: 3.4 }, { h: 'Location, ft', w: 1.2 }, { h: 'Sec', w: 0.6 }, { h: 'Demand', w: 1.3, a: 'r' }, { h: 'Capacity', w: 1.3, a: 'r' }, { h: 'Ratio', w: 0.8, a: 'r' }, { h: 'Article', w: 1.2 }], rows);
     // rating
     const R = res.rating || {};
@@ -4071,7 +4113,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
       const hasT = LFD || (RL && RL.tons);
       if (!LFD && !hasT) rr.forEach(r => r.length = 5);
       F.h3(LFD ? 'Load factor rating (MBE 6B), ' + R.vehicle + ', ' + fx(R.tons, 0) + ' tons'
-        : (res.live && res.live.permit === 'only' ? 'Permit load rating (MBE 6A.4.5)' : (RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'Design load rating (MBE LRFR), HL-93') + (PM ? '; permit rating (MBE 6A.4.5)' : '')));
+        : (res.live && res.live.permit === 'only' ? 'Permit load rating (MBE 6A.4.5)' : (res.pedOpen ? 'Informational capacity estimates (MBE LRFR factors applied to a pedestrian bridge, an adaptation), ' : '') + (RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'Design load rating (MBE LRFR), HL-93') + (PM ? '; permit rating (MBE 6A.4.5)' : '')));
       F.table([{ h: 'Rating level', w: 2 }, { h: 'Governing check', w: 3.6 }, { h: 'Location, ft', w: 1.3 }, { h: 'Sec', w: 0.6 }, { h: 'RF', w: 0.8, a: 'r' }].concat(hasT ? [{ h: 'Tons', w: 1, a: 'r' }] : []), rr);
       if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ', ' + res.controlling.c.what + ' at x = ' + fx(res.controlling.c.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '.', { size: 8.6 });
     }
@@ -5189,7 +5231,8 @@ function run(){
     $('errBox').hidden=false; $('errBox').textContent=e.message; $('status').textContent='Not run'; $('warnBox').hidden=true;
     res=null; resModel=null; resKey=null; ['ratios','verdict'].forEach(id=>$(id).innerHTML='');
     // hide every result panel so nothing from the last good input stays on screen
-    document.querySelectorAll('section[data-res],#cmpCard,#pourCard').forEach(c=>c.hidden=true); $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
+    document.querySelectorAll('section[data-res],#cmpCard,#pourCard').forEach(c=>c.hidden=true);
+    if($('jsonTitle').textContent==='Results CSV'){ $('jsonCard').hidden=true; $('jsonTxt').value=''; } // no stale results to copy $('overall').innerHTML='<b class="bad">No results: correct the input error above.</b>';
   }
 }
 function govPoint(){
@@ -5202,7 +5245,7 @@ function applyLabels(){
   document.querySelectorAll('.lblStr').forEach(e=>e.textContent=limStr());
   document.querySelectorAll('.lblLL').forEach(e=>e.textContent=llName());
   { const LV=resLive(), RL=res.ratingLoad;
-    $('ratingStatus').textContent=L?`MBE LFR (6B), ${res.labels.vehicle}, ${fmt(res.rating.tons,0)} tons`:LV.permit==='only'?'MBE 6A.4.5 permit rating':(RL?'MBE LRFR factors, '+RL.name:'MBE LRFR, HL-93 design load')+(LV.permit==='include'?' · permit rating, MBE 6A.4.5':''); }
+    $('ratingStatus').textContent=L?`MBE LFR (6B), ${res.labels.vehicle}, ${fmt(res.rating.tons,0)} tons`:LV.permit==='only'?'MBE 6A.4.5 permit rating':(res.pedOpen?'Informational capacity estimates · ':'')+(RL?'MBE LRFR factors, '+RL.name:'MBE LRFR, HL-93 design load')+(LV.permit==='include'?' · permit rating, MBE 6A.4.5':''); }
   $('dfHead').textContent=L?'Wheel-load distribution, 3.23':'Live-load distribution factors, 4.6.2.2';
   const TB=res.kind==='tub';
   $('plHead').textContent=L?'Proportion limits, 10.48 and 10.49':TB?'Cross-section proportion limits, 6.11.2':'Cross-section proportion limits, 6.10.2';
@@ -5212,7 +5255,8 @@ function applyLabels(){
   $('deflHead').textContent=L?'Live-load deflection, 10.6':'Live-load deflection, 2.5.2.6.2';
   $('pourHint').textContent=L?'Moments are unfactored DC1 per girder. Checks use γ = 1.3 (10.61) and appear in the constructibility tile and the governing-checks table with a stage label.':'Moments are unfactored DC1 per girder. Checks are factored per 3.4.2.1 and appear in the constructibility tile and the governing-checks table with a stage label.';
 }
-function renderAll(){ applyLabels(); renderRatios(); renderVerdict(); renderElev(); renderCharts(); renderPour(); renderDetail(); renderGov(); renderTable(); renderDF(); renderProps(); renderMethod(); }
+function renderAll(){ applyLabels(); renderRatios(); renderVerdict(); renderElev(); renderCharts(); renderPour(); renderDetail(); renderGov(); renderTable(); renderDF(); renderProps(); renderMethod();
+  if(!$('jsonCard').hidden&&$('jsonTitle').textContent==='Results CSV') $('jsonTxt').value=csv(); } // an open CSV follows the results
 
 // ---------- headline ratios ----------
 function catValue(r,k){
@@ -5244,6 +5288,7 @@ function renderRatios(){
   if(scopeOut){ $('overall').innerHTML=`<b class="bad">Outside the scope of the tub girder method</b><span class="status">${esc(res.tub.scope.why.join('; '))}. Ratios and ratings below are for diagnosis only (refined analysis needed). Worst ratio ${fmt(worst?worst.ratio:0,2)}.</span>`; return; }
   $('overall').innerHTML = nOver
     ? `<b class="bad">${nOver} of ${cats().length} criteria exceed 1.0</b><span class="status">Worst: ${worst.C.lbl.toLowerCase()} ${fmt(worst.ratio,2)}${worst.c&&worst.c.permit?' (permit)':''}. Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`
+    : res.pedOpen ? `<b class="ok">Gravity checks shown are satisfied</b><span class="status">Highest ratio ${fmt(worst?worst.ratio:0,2)} (${worst?worst.C.lbl.toLowerCase():''}). Not checked here, a separate analysis is needed: ${esc(res.pedOpen.join('; '))}.</span>`
     : `<b class="ok">All design checks satisfied</b><span class="status">Highest ratio ${fmt(worst?worst.ratio:0,2)} (${worst?worst.C.lbl.toLowerCase():''}${worst&&worst.c&&worst.c.permit?', permit':''}). Checked to ${edName(res.ed)}${resLFD()?'':', '+esc(liveText(resLive()))}.</span>`;
 }
 
@@ -5646,7 +5691,7 @@ function renderMethodLFD(){
 function liveNotes(){
   const L=resLive(), out=[];
   if(L.ped){ const p=L.ped;
-    out.push(`<li><b>Pedestrian bridge.</b> AASHTO LRFD Guide Specifications for the Design of Pedestrian Bridges (2009, with the 2015 interim revisions). Pedestrian load 90 psf over ${fmt(p.width,2)} ft = ${fmt(p.w,3)} k/ft on this girder, placed on the adverse parts of each influence line, without dynamic load allowance (3.1). ${p.veh?`Maintenance vehicle ${p.veh} (Table 3.2-1, clear deck ${p.clear>0?fmt(p.clear,1)+' ft':'not given, so over 10 ft'}): ${fmt(0.2*p.W,0)} k and ${fmt(0.8*p.W,0)} k axles 14 ft apart, both directions, alone and never with the pedestrian load, without dynamic load allowance (3.2); distribution ${p.dfUser?'entered as '+fmt(p.dfVeh,3):'by the lever rule, '+fmt(p.lever,3)+' of the vehicle'+(p.mpf>1?' × 1.2 multiple presence = '+fmt(p.dfVeh,3):'')}.`:'No maintenance vehicle ('+(p.noVehicle?'vehicles kept off by permanent barriers':'clear deck under 7 ft')+').'} Strength I and Service II use the pedestrian load or the vehicle, whichever governs at each point; Strength II, IV and V are not required (3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency from a Rayleigh estimate with dead load only (all spans down, and alternate spans up and down; the lower governs) must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the weight of all girders' dead load (6). Fatigue for pedestrian bridges is wind-induced (3.5, AASHTO Signs) and is not checked; lateral frequency (1.3 Hz) and wind are outside a line-girder analysis.</li>`);
+    out.push(`<li><b>Pedestrian bridge.</b> AASHTO LRFD Guide Specifications for the Design of Pedestrian Bridges (2009, with the 2015 interim revisions). Pedestrian load 90 psf over ${fmt(p.width,2)} ft = ${fmt(p.w,3)} k/ft on this girder, placed on the adverse parts of each influence line, without dynamic load allowance (3.1). ${p.veh?`Maintenance vehicle ${p.veh} (Table 3.2-1, clear deck ${p.clear>0?fmt(p.clear,1)+' ft':'not given, so over 10 ft'}): ${fmt(0.2*p.W,0)} k and ${fmt(0.8*p.W,0)} k axles 14 ft apart, both directions, alone and never with the pedestrian load, without dynamic load allowance (3.2); distribution ${p.dfUser?'entered as '+fmt(p.dfVeh,3):'by the lever rule, '+fmt(p.lever,3)+' of the vehicle'+(p.mpf>1?' × 1.2 multiple presence = '+fmt(p.dfVeh,3):'')}.`:'No maintenance vehicle ('+(p.noVehicle?'vehicles kept off by permanent barriers':'clear deck under 7 ft')+').'} Strength I and Service II use the pedestrian load or the vehicle, whichever governs at each point; Strength II, IV and V are not required (3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency, the fundamental mode from an eigenvalue solution of the girder (beam elements with consistent mass, short-term composite stiffness, dead load only), must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the weight of all girders' dead load (6). Fatigue for pedestrian bridges is wind-induced (3.5, AASHTO Signs) and is not checked; lateral frequency (1.3 Hz) and wind are outside a line-girder analysis.</li>`);
     out.push(`<li><b>Pedestrian load rating.</b> The Guide Specifications and the MBE give no pedestrian rating method. Ratings use the MBE LRFR factors (γLL ${fmt(+model.factors.gLinv,2)} inventory, ${fmt(+model.factors.gLop,2)} operating) with ${p.veh?'the '+p.veh+' maintenance vehicle as the rating load, and tons = RF × '+fmt(p.W/2,0)+' tons':'the 90 psf pedestrian load as the rating load'}.</li>`); }
   if(L.perm){ const P=L.perm;
     out.push(`<li><b>Permit trucks, design.</b> Strength II with γLL ${fmt(P.gDesign,2)} (Table 3.4.1-1), each permit vehicle run in both directions with IM 33% and ${P.single?'one lane loaded with the 1.2 multiple presence factor removed, as a special permit crosses (MBE 6A.4.5.4.2b; LRFD 4.6.2.2.5 with no other traffic)':'the multi-lane distribution factors, as routine permits mix with traffic'}${P.lane?', plus a 0.2 k/ft lane load for negative moment and for spans over 200 ft (MBE 6A.4.5.4.1)':''}. Service II with γLL 1.0 (MBE Table 6A.4.2.2-1). ${L.permit==='only'?'Permit only: the HL-93 checks, fatigue and live-load deflection are not run.':'Every criterion reports the larger of the design live load and the permit.'}</li>`);

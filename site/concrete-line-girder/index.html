@@ -293,6 +293,50 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     });
   }
   // deflection shapes (EI = 1) for unit downward loads at nodes
+  // Fundamental vertical frequency, Hz, of a continuous beam on knife-edge supports: Hermite beam elements with
+  // consistent mass, lowest eigenvalue of Kφ = ω²Mφ by inverse iteration with banded Cholesky (half-bandwidth 3).
+  // x: node stations, ft; EI: per element, k-ft²; w: weight per element, k/ft; sup: supported node indices.
+  // Each element is split in `sub` parts so a coarse node set still converges.
+  function firstFrequency(x0, EI0, w0, sup0, sub) {
+    sub = sub || 4; const g = 32.174;
+    const x = [x0[0]], EI = [], w = [], sup = new Set();
+    for (let e = 0; e < x0.length - 1; e++) for (let k = 1; k <= sub; k++) { x.push(x0[e] + (x0[e + 1] - x0[e]) * k / sub); EI.push(EI0[e]); w.push(w0[e]); }
+    sup0.forEach(i => sup.add(i * sub));
+    const nn = x.length, n = 2 * nn, hb = 3, W = hb + 1;
+    const K = new Float64Array(n * W), M = new Float64Array(n * W); // lower band: A[i][j] at i*W + (i − j)
+    const addB = (A, i, j, v) => { if (j > i) { const t = i; i = j; j = t; } A[i * W + (i - j)] += v; };
+    for (let e = 0; e < nn - 1; e++) {
+      const L = x[e + 1] - x[e]; if (!(L > 0)) continue;
+      const k = EI[e] / L ** 3, mL = w[e] / g * L / 420, d = [2 * e, 2 * e + 1, 2 * e + 2, 2 * e + 3];
+      const ke = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]];
+      const me = [[156, 22 * L, 54, -13 * L], [22 * L, 4 * L * L, 13 * L, -3 * L * L], [54, 13 * L, 156, -22 * L], [-13 * L, -3 * L * L, -22 * L, 4 * L * L]];
+      for (let a = 0; a < 4; a++) for (let b = 0; b <= a; b++) { addB(K, d[a], d[b], k * ke[a][b]); addB(M, d[a], d[b], mL * me[a][b]); }
+    }
+    // supports: vertical displacement removed (row and column replaced by the identity, no mass)
+    sup.forEach(i => { const r = 2 * i; for (let j = Math.max(0, r - hb); j <= Math.min(n - 1, r + hb); j++) { const [a, b] = j > r ? [j, r] : [r, j]; K[a * W + (a - b)] = 0; M[a * W + (a - b)] = 0; } K[r * W] = 1; });
+    // banded Cholesky K = LLᵀ
+    const Lc = new Float64Array(n * W);
+    for (let i = 0; i < n; i++) for (let j = Math.max(0, i - hb); j <= i; j++) {
+      let s = K[i * W + (i - j)];
+      for (let k = Math.max(0, i - hb, j - hb); k < j; k++) s -= Lc[i * W + (i - k)] * Lc[j * W + (j - k)];
+      if (i === j) { if (!(s > 0)) return NaN; Lc[i * W] = Math.sqrt(s); } else Lc[i * W + (i - j)] = s / Lc[j * W];
+    }
+    const solve = b => { const y = Float64Array.from(b);
+      for (let i = 0; i < n; i++) { let s = y[i]; for (let k = Math.max(0, i - hb); k < i; k++) s -= Lc[i * W + (i - k)] * y[k]; y[i] = s / Lc[i * W]; }
+      for (let i = n - 1; i >= 0; i--) { let s = y[i]; for (let k = i + 1; k <= Math.min(n - 1, i + hb); k++) s -= Lc[k * W + (k - i)] * y[k]; y[i] = s / Lc[i * W]; }
+      return y; };
+    const mul = (A, v) => { const r = new Float64Array(n); for (let i = 0; i < n; i++) for (let j = Math.max(0, i - hb); j <= i; j++) { const a = A[i * W + (i - j)]; r[i] += a * v[j]; if (j !== i) r[j] += a * v[i]; } return r; };
+    // start from a mix of the all-spans-down and alternating shapes so no mode is missing from the start vector
+    let v = new Float64Array(n); for (let i = 0; i < nn; i++) { const s = Math.sin(Math.PI * (x[i] - x[0]) / ((x[nn - 1] - x[0]) || 1)); v[2 * i] = 1 + 0.5 * s + 0.25 * Math.sin(7.3 * i); }
+    let lam = Infinity;
+    for (let it = 0; it < 2000; it++) {
+      const y = solve(mul(M, v)), Ky = mul(K, y), My = mul(M, y);
+      let a = 0, b = 0; for (let i = 0; i < n; i++) { a += y[i] * Ky[i]; b += y[i] * My[i]; }
+      const l = a / b, nrm = Math.sqrt(b); for (let i = 0; i < n; i++) v[i] = y[i] / nrm;
+      if (Math.abs(l - lam) <= 1e-12 * l) { lam = l; break; } lam = l;
+    }
+    return Math.sqrt(lam) / (2 * Math.PI);
+  }
   function deflShapes(x, supNodes, loadNodes) {
     const K = stiffness(x), nd = 2 * x.length;
     const fixed = new Set(supNodes.map(i => 2 * i));
@@ -440,7 +484,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const lever = ext ? [2 - de, 8 - de].reduce((a, xi) => a + (xi < S ? 0.5 * (S - xi) / S : 0), 0) : (S > 0 ? Math.max(0.5, (S - 3) / S) : 1);
       const mpf = p.mpf === false ? 1 : 1.2;
       const dfVeh = +p.dfVeh > 0 ? +p.dfVeh : lever * mpf;
-      out.ped = { width, w: 0.09 * width, clear, veh, W: veh ? H_TRUCK[veh] : 0, lever, mpf, dfVeh, dfUser: +p.dfVeh > 0, ext, de, noVehicle: !!p.noVehicle };
+      // the assumed placement (wheels 2 ft and 8 ft from the rail face) must fit the clear deck; otherwise the factor is entered
+      const noFit = ext && !!veh && !(+p.dfVeh > 0) && clear > 0 && clear < 8 - 1e-9;
+      out.ped = { width, w: 0.09 * width, clear, veh, W: veh ? H_TRUCK[veh] : 0, lever, mpf, dfVeh, dfUser: +p.dfVeh > 0, noFit, ext, de, noVehicle: !!p.noVehicle };
     }
     if (out.permit !== 'none') {
       const P = L.permits || {};
@@ -1515,8 +1561,14 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         let es = (Mu_ / dv + Math.abs(Vu - Vp) - ApsT2 * fpo) / (ES * AsT + EP * ApsT2);
         if (!(es > 0)) es = 0; es = Math.min(es, 0.006);
         let beta = 4.8 / (1 + 750 * es), theta = 29 + 3500 * es, cot = 1 / Math.tan(theta * Math.PI / 180);
+        // less than the minimum transverse reinforcement (5.7.2.5): β from 5.7.3.4.2-2 with the crack spacing sxe, and the
+        // simplified procedure does not apply (5.7.3.4.3 needs at least the minimum), so the general procedure is used
+        const AvMin0 = 0.0316 * Math.sqrt(fc) * bv * st.s / fyv, belowMin = !(st.Av > 0 && st.Av >= AvMin0 - 1e-12);
+        const sxe = Math.min(Math.max(dv * 1.38 / (0.75 + 0.63), 12), 80); // sx = dv, ag = 0.75 in. assumed
+        if (belowMin) beta *= 51 / (39 + sxe);
         let Vc = 0.0316 * beta * Math.sqrt(fc) * bv * dv, VpN = Vp, simp = null;
-        if (shearMethod === 'simplified') {
+        const method = shearMethod === 'simplified' && !belowMin ? 'simplified' : 'general';
+        if (method === 'simplified') {
           // 5.7.3.4.3: Vc = min(Vci, Vcw); Vp enters through Vcw only
           const rf = Math.sqrt(fc), ps = prestress(z, Lb, fpe);
           const Vd = Math.abs(p.VDC1 + p.VDC2 + p.VDW), Md = p.MDC1 + p.MDC2 + p.MDW;
@@ -1524,15 +1576,21 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           const VLc = useNeg ? p.VcN : p.VcP; let VuM = Vu;
           if (VLc != null) { const d = Math.sign(VLc) || Math.sign(p.VDC1 + p.VDC2 + p.VDW) || 1, fac = (v, gx, gn) => (Math.sign(v) === d || v === 0 ? gx : gn) * v;
             VuM = Math.min(Vu, Math.abs(fac(p.VDC1, 1.25, 0.9) + fac(p.VDC2, 1.25, 0.9) + fac(p.VDW, 1.5, 0.65) + llc.gS * VLc)); }
-          const Vi = Math.max(VuM - Vd, 0), Mmax = Math.max(Mu - Math.abs(Md), 1e-6);
-          const Sc = comp ? cs.Sb : Sb, fcpe = ps.F / A + ps.F * ps.e / Sb;
-          const Mcre = Sc * (0.20 * rf + fcpe - p.MDC1 * 12 / Sb) / 12;
+          const Vi = Math.max(VuM - Vd, 0), Mmax = Math.max(Math.abs((useNeg ? p.MuN : p.MuP) - Md), 1e-6);
+          // Mcre at the face the external loads put in tension (5.7.3.4.3-2): the bottom of the beam in positive moment;
+          // in negative moment the top of the deck (no prestress or noncomposite-load stress there, deck concrete fr),
+          // or the top of the beam without a deck
+          let Sc, fcpe, fdnc, frT, face;
+          if (!useNeg) { Sc = comp ? cs.Sb : Sb; fcpe = ps.F / A + ps.F * ps.e / Sb; fdnc = p.MDC1 * 12 / Sb; frT = 0.20 * rf; face = 'bottom of beam'; }
+          else if (comp) { Sc = cs.Sts / cs.n; fcpe = 0; fdnc = 0; frT = 0.20 * Math.sqrt(dk.fc); face = 'top of deck'; }
+          else { const St = I / (h - yb); Sc = St; fcpe = ps.F / A - ps.F * ps.e / St; fdnc = -p.MDC1 * 12 / St; frT = 0.20 * rf; face = 'top of beam'; }
+          const Mcre = Math.max(Sc * (frT + fcpe - fdnc) / 12, 0);
           const Vci = Math.max(0.02 * rf * bv * dv + Vd + Vi * Mcre / Mmax, 0.06 * rf * bv * dv);
           const fpc = comp ? ps.F / A - ps.F * ps.e * (cs.yb - yb) / I + p.MDC1 * 12 * (cs.yb - yb) / I : ps.F / A;
           const Vcw = (0.06 * rf + 0.30 * fpc) * bv * dv + Vp;
           Vc = Math.min(Vci, Vcw); VpN = 0;
           cot = Vci < Vcw ? 1 : Math.min(1 + 3 * fpc / rf, 1.8); theta = Math.atan(1 / cot) * 180 / Math.PI; beta = null; es = null;
-          simp = { Vd, Vi, VuM, VLc, Md, Mmax, Mcre, fcpe, fpc, Vci, Vcw };
+          simp = { Vd, Vi, VuM, VLc, Md, Mmax, Mcre, fcpe, fpc, Vci, Vcw, Sc, fdnc, frT, face };
         }
         const Vs = st.Av * fyv * dv * cot / st.s;
         const Vn = Math.min(Vc + Vs + VpN, 0.25 * fc * bv * dv + VpN);
@@ -1560,7 +1618,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         const capOK = capMode === 'all' || (capMode === 'positive' && !useNeg);
         const Tmax = capOK && mx && mx.Mr > 0 ? (mx.Mu / mx.Mr) * mx.T : Infinity;
         const TreqUsed = Math.min(Treq, Tmax);
-        return { x: p.x, z, frac, useNeg, Mu, Vu, MDC1: p.MDC1, MDC2: p.MDC2, MDW: p.MDW, MLLp: p.MLLp, MLLn: p.MLLn, VDC1: p.VDC1, VDC2: p.VDC2, VDW: p.VDW, VLLp: p.VLLp, VLLn: p.VLLn, dualGov: p.dualGov, stSrc: st.src, dv, de, Vp, es, beta, theta, Vc, Vs, Vn, simp, method: shearMethod, ratio: Vu / (phiV * Vn), Av: st.Av, s: st.s, sReq, smax, sRatio: st.s / smax, AvMin, AvRatio: AvMin / st.Av, Vui, Vni, iRatio: comp ? Vui / (phiV * Vni) : null, Treq, Tmax, TreqUsed, Tprov, lRatio: TreqUsed / Tprov, phiF: useNeg ? (p.fneg ? p.fneg.phi : 0.9) : 1.0, tags: p.tags, xFace };
+        return { x: p.x, z, frac, useNeg, Mu, Vu, MDC1: p.MDC1, MDC2: p.MDC2, MDW: p.MDW, MLLp: p.MLLp, MLLn: p.MLLn, VDC1: p.VDC1, VDC2: p.VDC2, VDW: p.VDW, VLLp: p.VLLp, VLLn: p.VLLn, dualGov: p.dualGov, stSrc: st.src, dv, de, Vp, es, beta, theta, Vc, Vs, Vn, simp, method, belowMin, sxe, ratio: Vu / (phiV * Vn), Av: st.Av, s: st.s, sReq, smax, sRatio: st.s / smax, AvMin, AvRatio: AvMin / st.Av, Vui, Vni, iRatio: comp ? Vui / (phiV * Vni) : null, Treq, Tmax, TreqUsed, Tprov, lRatio: TreqUsed / Tprov, phiF: useNeg ? (p.fneg ? p.fneg.phi : 0.9) : 1.0, tags: p.tags, xFace };
       };
       beams.forEach(b => {
         const bp = pois.filter(p => p.beam === b && p.z != null && p.Mr > 0);
@@ -1660,14 +1718,26 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     {
       const EI = (comp ? Eb * cs.I : Eb * I) / 144; // k-ft^2
       const mid = spans.map((L, i) => supX[i] + L / 2);
-      const xd = [...new Set([...xn, ...mid].map(v => +v.toFixed(6)))].sort((a, b) => a - b);
+      // pedestrian load: search 0.25L–0.75L of each span (2% steps) for the largest deflection, not only midspan
+      const pedPts = llc.kind === 'ped' ? spans.flatMap((L, i) => Array.from({ length: 26 }, (_, k) => supX[i] + (0.25 + 0.02 * k) * L)) : [];
+      const xd = [...new Set([...xn, ...mid, ...pedPts].map(v => +v.toFixed(6)))].sort((a, b) => a - b);
       const sn = supX.map(s => xd.findIndex(v => Math.abs(v - s) < 1e-6));
       const ln = mid.map(s => xd.findIndex(v => Math.abs(v - s) < 1e-6));
       const sh = deflShapes(xd, sn, ln);
-      mid.forEach((s, k) => {
+      if (llc.kind === 'ped') {
+        const pn = pedPts.map(v => xd.findIndex(q => Math.abs(q - +v.toFixed(6)) < 1e-6)), shP = deflShapes(xd, sn, pn);
+        spans.forEach((L, k) => {
+          let best = { dv: -Infinity, x: mid[k] };
+          pn.forEach((nd, j) => { if (spanOf(pedPts[j]) !== k) return;
+            const ILd = new Float64Array(ng); let e = 0;
+            for (let i = 0; i < ng; i++) { while (e < xd.length - 2 && xg[i] > xd[e + 1]) e++; ILd[i] = -hermite(shP[j], xd, e, xg[i]) / EI * 12; }
+            const dv = uniformEnv(ILd, hgrid, llc.ped.w).max; if (dv > best.dv) best = { dv, x: pedPts[j] }; });
+          const lim = L * 12 / 360; deflection.push({ span: k + 1, x: best.x, delta: best.dv, limit: lim, ratio: best.dv / lim, kind: 'PL' });
+        });
+      }
+      if (llc.kind !== 'ped') mid.forEach((s, k) => {
         const ILd = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < xd.length - 2 && xg[j] > xd[e + 1]) e++; ILd[j] = -hermite(sh[k], xd, e, xg[j]) / EI * 12; }
-        if (llc.kind === 'ped') { const dv = uniformEnv(ILd, hgrid, llc.ped.w).max, lim = spans[k] * 12 / 360; deflection.push({ span: k + 1, x: s, delta: dv, limit: lim, ratio: dv / lim, kind: 'PL' }); return; }
         let dv;
         if (lfd) { const e = hsEnvelope(ILd, hgrid, 'M', gSpanArr, false); dv = Lf.scale * Math.max(e.tMax, e.lMax) * (1 + impactStd(spans[k])) * mDefl; } // truck or lane, all lanes on all beams
         else dv = deflTruck(ILd, hgrid, IMp) * mDefl;
@@ -1681,17 +1751,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       const EI = (comp ? Eb * cs.I : Eb * I) / 144, w = loads.DC1 + loads.DC2 + loads.DW, g = 32.174;
       let f;
       if (!contModel) f = Math.min(...spans.map(L => Math.PI / (2 * L * L) * Math.sqrt(EI * g / w)));
-      else {
-        const nd = xn.length, all = xn.map((_, k) => k), sh = deflShapes(xn, supNodes, all);
-        const Pn = new Float64Array(nd); for (let e = 0; e < nd - 1; e++) { const half = w * (xn[e + 1] - xn[e]) / 2; Pn[e] += half; Pn[e + 1] += half; }
-        const freq = alt => {
-          const sg = xn.map(v => (alt && spanOf(v) % 2 ? -1 : 1)), d = new Float64Array(nd);
-          for (let k = 0; k < nd; k++) { if (!Pn[k]) continue; for (let i = 0; i < nd; i++) d[i] += -sh[k][2 * i] / EI * Pn[k] * sg[k]; }
-          let a = 0, b = 0; for (let i = 0; i < nd; i++) { a += Pn[i] * sg[i] * d[i]; b += Pn[i] * d[i] * d[i]; }
-          return b > 0 ? Math.sqrt(g * Math.abs(a) / b) / (2 * Math.PI) : Infinity;
-        };
-        f = Math.min(freq(false), spans.length > 1 ? freq(true) : Infinity);
-      }
+      else f = firstFrequency(xn, Array(xn.length - 1).fill(EI), Array(xn.length - 1).fill(w), supNodes, 8); // eigenvalue solution
       const W = w * Ltot * Nb, Wreq = 180 * Math.exp(-0.35 * f);
       vibration = { f, w, Ng: Nb, W, Wreq, ratio: Math.min(3.0 / f, Wreq / W), ok: f > 3.0 || W >= Wreq };
     }
@@ -1888,7 +1948,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       strands: strandSummary, losses, loads, df: { NL, Nb, mDefl, info: dfInfo, at: dfAt(spans[0]), override: !!ov },
       pois, release, releaseHow: release.how, releaseLc: release.Lc, pierChecks, shear, camber, deflection,
       flexStrands: allFlex ? 'all' : 'tension', rating, checks, notes, shearChecked: doShear, shearMethod, idotStir, limits: lfd ? { lfd: true, fciC, fciT, fc06: 0.6 * fc, fc04: 0.4 * fc, fc045: 0.4 * fc, fcT3: (Lf.corrosive ? 3 : 6) * sqp(fc), ftK: Lf.corrosive ? 3 : 6, dk06: comp ? 0.6 * dk.fc : null, dk04: comp ? 0.4 * dk.fc : null } : { fciC, fciT, fc06: 0.6 * fc, fc045: 0.45 * fc, fcT3, fFat: 0.4 * fc, fFatT },
-      warn, notes, ms: Date.now() - t0, code: lfd ? 'AASHTO Standard Specifications 17th Ed. (2002), LFD' : iowa ? 'AASHTO LRFD 10th Edition (2024), Iowa DOT LRFD Bridge Design Manual 5.4 (July 2026)' : 'AASHTO LRFD 10th Edition (2024), IDOT Bridge Manual (Jan. 2025)', iowa: iowa ? Object.assign({}, IA, { std: DATA.iowa[patIn.name] ? patIn.name : null, cont: !!m._iaCont }) : null, vibration, llc, lfd: lfd ? Object.assign({}, Lf, { Ec: 'Standard Specs 8.7.1', Ep: EPx }) : null,
+      warn, notes, ms: Date.now() - t0, code: lfd ? 'AASHTO Standard Specifications 17th Ed. (2002), LFD' : iowa ? 'AASHTO LRFD 10th Edition (2024), Iowa DOT LRFD Bridge Design Manual 5.4 (July 2026)' : 'AASHTO LRFD 10th Edition (2024), IDOT Bridge Manual (Jan. 2025)', iowa: iowa ? Object.assign({}, IA, { std: DATA.iowa[patIn.name] ? patIn.name : null, cont: !!m._iaCont }) : null, vibration, llc, pedOpen: llc.kind === 'ped' ? ['lateral frequency above 1.3 Hz (Guide Spec 6)', 'wind on the superstructure and vertical wind uplift (Guide Spec 3.4)', 'wind-induced fatigue (Guide Spec 3.5)'] : null, lfd: lfd ? Object.assign({}, Lf, { Ec: 'Standard Specs 8.7.1', Ep: EPx }) : null,
     };
   }
 
@@ -1954,6 +2014,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const errs = liveErrors(m);
     if (errs.length) throw new Error(errs.join(' '));
     const L = liveOpts(m);
+    if (L.ped && L.ped.noFit) throw new Error('The ' + L.ped.veh + ' maintenance vehicle does not fit the assumed lever-rule placement (wheels 2 ft and 8 ft from the rail face) on a ' + L.ped.clear + ' ft clear deck. Enter the vehicle distribution factor for the exterior beam from the wheel positions that fit.');
     const designLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, ped: L.ped } : { kind: 'hl93', name: 'HL-93', gS: 1.75 };
     let base = null;
     if (L.permit !== 'only') base = rc(m, designLL);
@@ -2536,18 +2597,23 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     L.push({ note: 'Resistance, ' + (q.method === 'simplified' ? 'simplified procedure for prestressed members (5.7.3.4.3)' : 'general procedure (5.7.3.4.2)') + '; b_{v} = ' + fn(bv, 2) + ' in., f′_{c} = ' + fn(fc, 2) + ' ksi, f_{y} = 60 ksi' });
     L.push({ lhs: 'd_{v}', expr: 'max(d_{e} − a/2, 0.9d_{e}, 0.72h)', sub: 'd_{e} = ' + fn(q.de, 2) + ', 0.9d_{e} = ' + fn(0.9 * q.de, 2) + ', 0.72h = ' + fn(0.72 * hc, 2), res: fn(q.dv, 2), unit: 'in.', ref: '5.7.2.8' });
     let Vc, cot, VpN, ok = true;
+    if (q.belowMin) L.push({ note: 'A_{v} = ' + fn(q.Av, 3) + ' in.² is less than the minimum ' + fn(q.AvMin, 3) + ' in.² (5.7.2.5-1)' + (res.shearMethod === 'simplified' ? ', so the simplified procedure does not apply here (5.7.3.4.3) and the general procedure is used' : '') + '; β from 5.7.3.4.2-2.' });
     if (q.method !== 'simplified') {
       L.push({ lhs: 'V_{p}', sub: 'vertical component of the draped strands', res: fn(q.Vp, 2), unit: 'k' });
       L.push({ lhs: 'ε_{s}', expr: '\\f{|M_{u}|/d_{v} + |V_{u} − V_{p}| − A_{ps}f_{po}}{E_{s}A_{s} + E_{p}A_{ps}}, 0 ≤ ε_{s} ≤ 0.006', res: (q.es * 1000).toFixed(3) + ' × 10^{−3}', ref: '5.7.3.4.2-4' });
-      const beta = 4.8 / (1 + 750 * q.es), theta = 29 + 3500 * q.es;
-      L.push({ lhs: 'β', expr: '\\f{4.8}{1 + 750ε_{s}}', sub: '\\f{4.8}{1 + 750 × ' + q.es.toFixed(6) + '}', res: fn(beta, 3), ref: '5.7.3.4.2-1' });
+      const beta = 4.8 / (1 + 750 * q.es) * (q.belowMin ? 51 / (39 + q.sxe) : 1), theta = 29 + 3500 * q.es;
+      if (q.belowMin) {
+        L.push({ lhs: 's_{xe}', expr: 's_{x}\\f{1.38}{a_{g} + 0.63}, 12 ≤ s_{xe} ≤ 80', sub: 's_{x} = d_{v}, a_{g} = 0.75 in. assumed', res: fn(q.sxe, 2), unit: 'in.', ref: '5.7.3.4.2-5' });
+        L.push({ lhs: 'β', expr: '\\f{4.8}{1 + 750ε_{s}}\\f{51}{39 + s_{xe}}', sub: '\\f{4.8}{1 + 750 × ' + q.es.toFixed(6) + '} × \\f{51}{39 + ' + fn(q.sxe, 2) + '}', res: fn(beta, 3), ref: '5.7.3.4.2-2' });
+      } else L.push({ lhs: 'β', expr: '\\f{4.8}{1 + 750ε_{s}}', sub: '\\f{4.8}{1 + 750 × ' + q.es.toFixed(6) + '}', res: fn(beta, 3), ref: '5.7.3.4.2-1' });
       L.push({ lhs: 'θ', expr: '29 + 3500ε_{s}', sub: '29 + 3500 × ' + q.es.toFixed(6), res: fn(theta, 2) + '°', ref: '5.7.3.4.2-3' });
       Vc = 0.0316 * beta * Math.sqrt(fc) * bv * q.dv; cot = 1 / Math.tan(theta * Math.PI / 180); VpN = q.Vp;
       L.push({ lhs: 'V_{c}', expr: '0.0316β√(f′_{c})b_{v}d_{v}', sub: '0.0316 × ' + fn(beta, 3) + ' × √' + fn(fc, 2) + ' × ' + fn(bv, 2) + ' × ' + fn(q.dv, 2), res: fx(Vc, 1), unit: 'k', ref: '5.7.3.3-3' });
       ok = close(beta, q.beta, 0.002) && close(theta, q.theta, 0.002);
     } else {
       const S = q.simp, rf = Math.sqrt(fc);
-      L.push({ lhs: 'M_{cre}', expr: 'S_{c}(f_{r} + f_{cpe} − \\f{M_{dnc}}{S_{nc}})', sub: 'f_{r} = 0.20√f′_{c}, f_{cpe} = ' + fn(S.fcpe, 3) + ' ksi', res: fx(S.Mcre, 0), unit: 'k-ft', ref: '5.7.3.4.3-2' });
+      L.push({ lhs: 'M_{cre}', expr: 'S_{c}(f_{r} + f_{cpe} − \\f{M_{dnc}}{S_{nc}})', sub: 'tension face: ' + (S.face || 'bottom of beam') + (S.Sc != null ? '; S_{c} = ' + fx(S.Sc, 0) + ' in.³, f_{r} = ' + fn(S.frT, 3) + ', f_{cpe} = ' + fn(S.fcpe, 3) + ', M_{dnc}/S_{nc} = ' + fn(S.fdnc, 3) + ' ksi' : ', f_{r} = 0.20√f′_{c}, f_{cpe} = ' + fn(S.fcpe, 3) + ' ksi'), res: fx(S.Mcre, 0), unit: 'k-ft', ref: '5.7.3.4.3-2' });
+      if (S.face === 'top of deck') L.push({ note: 'Negative moment: the deck is the tension face; it carries no prestress or noncomposite dead-load stress, S_{c} is the composite section at the deck top in deck concrete (I/(n·y)), and f_{r} uses the deck f′_{c}.' });
       const Vci = Math.max(0.02 * rf * bv * q.dv + S.Vd + S.Vi * S.Mcre / S.Mmax, 0.06 * rf * bv * q.dv);
       if (S.VLc != null) {
         L.push({ note: 'V_{LL,M} = ' + fn(S.VLc, 2) + ' k: live-load shear, with impact and distribution, from the loading placed for M_{max} (5.7.3.4.3)' });
@@ -2869,7 +2935,8 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     GS = (res.llc && res.llc.gS) || 1.75;
     const C = res.checks, nOver = C.filter(c => c.ratio > 1 + 1e-9).length, worstR = C.reduce((a, c) => Math.max(a, c.ratio), 0);
     F.h2('Results');
-    F.para(nOver ? nOver + ' of ' + C.length + ' checks exceed 1.0; highest ratio ' + (worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2)) + '.' : (res.shearChecked ? 'All design checks satisfied' : 'Checks run are satisfied; shear not checked (no shear reinforcement entered)') + '; highest ratio ' + (worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2)) + '.', { font: 'B', size: 10, color: nOver ? RED : res.shearChecked ? GRN : AMB });
+    F.para(nOver ? nOver + ' of ' + C.length + ' checks exceed 1.0; highest ratio ' + (worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2)) + '.' : (res.pedOpen ? 'Gravity checks shown are satisfied' + (res.shearChecked ? '' : ', shear not checked') : res.shearChecked ? 'All design checks satisfied' : 'Checks run are satisfied; shear not checked (no shear reinforcement entered)') + '; highest ratio ' + (worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2)) + '.', { font: 'B', size: 10, color: nOver ? RED : res.shearChecked ? GRN : AMB });
+    if (res.pedOpen) F.para('Not checked here; a separate analysis is needed: ' + res.pedOpen.join('; ') + '.', { size: 9, color: [0.7, 0.15, 0.12] });
     F.table([{ h: 'Check', w: 2.6 }, { h: 'Location', w: 1.6 }, { h: 'Values', w: 5 }, { h: 'Ratio', w: 0.8, a: 'r' }], C.map(c => [c.label, c.where, c.detail || '', { t: fr(c.ratio), f: 'B', color: rCol(c.ratio) }]));
     const R = res.rating;
     const LV = res.live || {}, PM = res.permit, RL = res.ratingLoad;
@@ -2879,7 +2946,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
         R.summary.map(q => [q.lim, { t: fn(q.inv.inv, Math.abs(q.inv.inv - 1) < 0.005 && q.inv.inv !== 1 ? 3 : 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Strength') ? 'A1 1.30, A2 ' + fn(R.A2inv, 2) + ' / ' + fn(R.A2op, 2) : (q.inv.basis || '') + (q.op ? '' : '; inventory only')]));
       if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, Math.abs(R.inventory.inv - 1) < 0.005 && R.inventory.inv !== 1 ? 3 : 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft, ' + fn(R.inventory.inv * RL.tons, 1) + ' tons)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft, ' + fn(R.operating.op * RL.tons, 1) + ' tons)' : '') + '.', { size: 8.4 });
     } else {
-    F.h3((R.permitOnly ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'HL-93 design load rating (MBE LRFR)') + (R.complete ? '' : ' — partial: shear not rated'));
+    F.h3((res.pedOpen ? 'Informational capacity estimates (MBE LRFR factors applied to a pedestrian bridge, an adaptation): ' : '') + (R.permitOnly ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'HL-93 design load rating (MBE LRFR)') + (R.complete ? '' : ' — partial: shear not rated'));
     F.table([{ h: 'Limit state', w: 2.4 }, { h: 'Inventory RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Operating RF', w: 1, a: 'r' }, { h: 'at x, ft', w: 0.9, a: 'r' }, { h: 'Basis', w: 3.6 }],
       R.summary.map(q => [q.lim, { t: fn(q.inv.inv, Math.abs(q.inv.inv - 1) < 0.005 && q.inv.inv !== 1 ? 3 : 2), f: 'B', color: rfCol(q.inv.inv) }, fn(q.inv.x, 2), q.op ? { t: fn(q.op.op, 2), f: 'B', color: rfCol(q.op.op) } : '—', q.op ? fn(q.op.x, 2) : '—', q.lim.startsWith('Service') ? 'γLL ' + fn(R.gS3 || 0.8, 2) + ', fR = 0.19√f′c; inventory only' : 'γDC ' + fn(R.gDC || 1.25, 2) + ', γDW ' + R.gDW + ', γLL ' + (R.permitOnly && res.permit ? fn(res.permit.opts.gR, 2) : fn(R.gLinv || 1.75, 2) + ' / ' + fn(R.gLop || 1.35, 2)) + (/shear/.test(q.lim) ? '; φs = 1.0' : '; φcφs = ' + fn(R.phiCS, 2))]));
     if (R.inventory) F.para('Governing: inventory ' + fn(R.inventory.inv, Math.abs(R.inventory.inv - 1) < 0.005 && R.inventory.inv !== 1 ? 3 : 2) + ' (' + R.inventory.lim + ', x = ' + fn(R.inventory.x, 2) + ' ft)' + (R.operating ? '; operating ' + fn(R.operating.op, 2) + ' (' + R.operating.lim + ', x = ' + fn(R.operating.x, 2) + ' ft)' : '') + '.', { size: 8.4 });
@@ -3469,8 +3536,8 @@ function renderVerdict() {
   const worst = c.reduce((a, q) => (!a || q.ratio > a.ratio ? q : a), null);
   let h = '<div class="card-h"><h2>Design checks</h2><span class="status">' + esc(R.code) + ' · ' + esc(liveText(R.live || {})) + ' · ' + R.pois.length + ' points · ' + Math.round(R.uiMs) + ' ms</span></div>';
   const noShear = !R.shearChecked;
-  h += '<div class="overall">' + (over.length ? '<b class="bad">' + over.length + ' of ' + c.length + ' checks exceed 1.0</b>' : noShear ? '<b class="warn">Checks run are satisfied — shear not checked</b>' : '<b class="ok">All design checks satisfied</b>') +
-    (worst ? '<span>Highest ratio ' + f2(worst.ratio) + ' (' + esc(worst.label.toLowerCase()) + ')</span>' : '') + '</div>';
+  h += '<div class="overall">' + (over.length ? '<b class="bad">' + over.length + ' of ' + c.length + ' checks exceed 1.0</b>' : R.pedOpen ? '<b class="ok">Gravity checks shown are satisfied' + (noShear ? ', shear not checked' : '') + '</b>' : noShear ? '<b class="warn">Checks run are satisfied — shear not checked</b>' : '<b class="ok">All design checks satisfied</b>') +
+    (worst ? '<span>Highest ratio ' + f2(worst.ratio) + ' (' + esc(worst.label.toLowerCase()) + ')' + (R.pedOpen ? '. Not checked here, a separate analysis is needed: ' + esc(R.pedOpen.join('; ')) + '.' : '') + '</span>' : '') + '</div>';
   h += '<div class="ratios">' + c.map(q => {
     const k = cls(q.ratio), w = Math.min(q.ratio / 1.25, 1) * 100;
     return '<div class="pr"><div class="top"><span class="lbl">' + esc(q.label) + '</span></div>' +
@@ -3506,7 +3573,7 @@ function renderRating() {
   if (R.lfd) return renderRatingLFR();
   const r = R.rating, PM = R.permit, RL = R.ratingLoad, PO = r.permitOnly;
   const tile = (lbl, v, sub) => '<div class="rf"><span class="lbl">' + esc(lbl) + '</span><span class="val ' + (v == null ? '' : v < 1 ? 'bad' : 'ok') + '">' + (v == null ? '–' : fRF(v)) + '</span><span class="sub">' + esc(sub || '') + '</span></div>';
-  let h = '<div class="card-h"><h2>' + (PO ? 'Permit load rating (MBE 6A.4.5)' : RL ? 'Load rating, ' + esc(RL.name) + ' (LRFR factors)' : 'HL-93 design load rating (LRFR)') + '</h2><span class="status">φc ' + r.phiC.toFixed(2) + ' · φs ' + r.phiS.toFixed(2) + ' (φcφs ≥ 0.85) · shear φs = 1.0 (SSM 4.3.3.2) · γDW ' + r.gDW.toFixed(2) + '</span></div>';
+  let h = '<div class="card-h"><h2>' + (R.pedOpen && !PO ? 'Informational capacity estimates, ' : '') + (PO ? 'Permit load rating (MBE 6A.4.5)' : RL ? (R.pedOpen ? '' : 'Load rating, ') + esc(RL.name) + ' (LRFR factors)' : 'HL-93 design load rating (LRFR)') + '</h2><span class="status">φc ' + r.phiC.toFixed(2) + ' · φs ' + r.phiS.toFixed(2) + ' (φcφs ≥ 0.85) · shear φs = 1.0 (SSM 4.3.3.2) · γDW ' + r.gDW.toFixed(2) + '</span></div>';
   if (!r.complete) h += '<div class="warnbox" style="margin-bottom:12px"><div><b>Partial rating: flexure and Service III only.</b> Shear is not rated because no shear reinforcement is entered. Enter the deck-beam stirrups from the IDOT base sheets to obtain a complete rating.</div></div>';
   const pl = r.complete ? '' : ' — partial';
   const tons = (v) => RL && RL.tons && v != null ? ' · ' + RL.veh + ' ' + f1(v * RL.tons) + ' tons' : '';
@@ -3743,7 +3810,7 @@ function renderTables() {
   } else if (v === 'shear') {
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">x, ft</th><th class="l">Location</th><th>|Vu|, k</th><th>|Mu|, k-ft</th><th>dv, in.</th><th>Vp, k</th>' + (r.shearMethod === 'simplified' ? '<th>Vci, k</th><th>Vcw, k</th><th>cot θ</th>' : '<th>εs ×1000</th><th>β</th><th>θ°</th>') + '<th>Vc, k</th><th>Av / s</th><th>Vs, k</th><th>φVn, k</th><th>Ratio</th><th>s req., in.</th><th>s max, in.</th><th>Interface</th><th>T req., k</th><th>T used, k</th><th>T prov., k</th><th>Long. reinf.</th></tr></thead><tbody>' +
       r.shear.map(q => '<tr><td>' + f2(q.x) + '</td><td class="l">' + esc((q.tags || []).join(', ')) + (q.useNeg ? ' (−M)' : '') + '</td><td>' + f1(q.Vu) + '</td><td>' + f0(q.Mu) + '</td><td>' + f2(q.dv) + '</td><td>' + f1(q.Vp) + '</td>' + (q.simp ? '<td>' + f1(q.simp.Vci) + '</td><td>' + f1(q.simp.Vcw) + '</td><td>' + f3(1 / Math.tan(q.theta * Math.PI / 180)) + '</td>' : '<td>' + f3(q.es * 1000) + '</td><td>' + f2(q.beta) + '</td><td>' + f1(q.theta) + '</td>') + '<td>' + f1(q.Vc) + '</td><td>' + f2(q.Av) + ' / ' + q.s + '</td><td>' + f1(q.Vs) + '</td><td>' + f1(0.9 * q.Vn) + '</td><td' + (q.ratio > 1 ? ' class="over"' : '') + '>' + f3(q.ratio) + '</td><td>' + (isFinite(q.sReq) ? f1(q.sReq) : '–') + '</td><td>' + f1(q.smax) + '</td><td' + (q.iRatio > 1 ? ' class="over"' : '') + '>' + f3(q.iRatio) + '</td><td>' + f0(q.Treq) + '</td><td>' + f0(q.TreqUsed) + '</td><td>' + f0(q.Tprov) + '</td><td' + (q.lRatio > 1 ? ' class="over"' : '') + '>' + f3(q.lRatio) + '</td></tr>').join('') +
-      '</tbody></table></div><p class="hint" style="margin-top:8px">' + (r.shearMethod === 'simplified' ? 'Simplified procedure (5.7.3.4.3): Vc = min(Vci, Vcw), Vp through Vcw; Vi is the shear from the live-load position that gives Mmax.' : 'General procedure (5.7.3.4.2) with prestress contribution in all regions (SSM 4.2.4.3.3).') + ' Interface and longitudinal-reinforcement columns are demand/capacity ratios.</p>';
+      '</tbody></table></div><p class="hint" style="margin-top:8px">' + (r.shearMethod === 'simplified' ? 'Simplified procedure (5.7.3.4.3): Vc = min(Vci, Vcw), Vp through Vcw; Vi is the shear from the live-load position that gives Mmax; Mcre at the tension face (deck top in negative moment). Where the stirrups are below the minimum (5.7.2.5), the simplified procedure does not apply and the general procedure is used, with β from 5.7.3.4.2-2.' : 'General procedure (5.7.3.4.2) with prestress contribution in all regions (SSM 4.2.4.3.3).') + ' Interface and longitudinal-reinforcement columns are demand/capacity ratios.</p>';
   } else if (v === 'rel') {
     h += '<p class="hint" style="margin-bottom:8px">' + esc(r.releaseHow) + '. Limits ' + (r.lfd ? '0.60f′ci = ' + f2(L.fciC) + ' ksi compression, ' + (r.lfd.relTension === 'none' ? 'the lesser of 200 psi and 3√f′ci' : '7.5√f′ci') + ' = ' + f3(L.fciT) + ' ksi tension (9.15.2.1).' : '0.65f′ci = ' + f2(L.fciC) + ' ksi compression, 0.24√f′ci = ' + f3(L.fciT) + ' ksi tension (with bonded reinforcement).') + '</p>';
     h += '<div class="tbl-wrap"><table class="res"><thead><tr><th>z from beam end, ft</th><th>F<sub>t</sub>, k</th><th>e, in.</th><th>M self-weight, k-ft</th><th>Top, ksi</th><th>Bottom, ksi</th></tr></thead><tbody>' +
@@ -3766,7 +3833,7 @@ function liveNotes() {
   if (L.ped) { const p = L.ped;
     out.push('<b>Pedestrian bridge.</b> AASHTO LRFD Guide Specifications for the Design of Pedestrian Bridges (2009, with the 2015 interim revisions). Pedestrian load 90 psf over ' + f2(p.width) + ' ft = ' + f3(p.w) + ' k/ft on this beam, on the adverse parts of each influence line, without dynamic load allowance (3.1). ' +
       (p.veh ? 'Maintenance vehicle ' + p.veh + ' (Table 3.2-1, clear deck ' + (p.clear > 0 ? f1(p.clear) + ' ft' : 'not given, so over 10 ft') + '): ' + Math.round(0.2 * p.W) + ' k and ' + Math.round(0.8 * p.W) + ' k axles 14 ft apart, both directions, alone and never with the pedestrian load, without dynamic load allowance (3.2); distribution ' + (p.dfUser ? 'entered as ' + f3(p.dfVeh) : 'by the lever rule, ' + f3(p.lever) + (p.mpf > 1 ? ' × 1.2 multiple presence = ' + f3(p.dfVeh) : '')) + '.' : 'No maintenance vehicle (' + (p.noVehicle ? 'vehicles kept off by permanent barriers' : 'clear deck under 7 ft') + ').') +
-      ' Strength I and the service checks use the pedestrian load or the vehicle, whichever governs at each point (Strength II, IV and V are not required, 3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency from dead load only, Rayleigh estimate (simple spans: π/2L² √(EIg/w)), must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the dead load of all beams (6). Fatigue for pedestrian bridges is wind-induced (3.5) and is not checked; lateral frequency and wind are outside a line-girder analysis.');
+      ' Strength I and the service checks use the pedestrian load or the vehicle, whichever governs at each point (Strength II, IV and V are not required, 3.7). Deflection under the unfactored pedestrian load is limited to L/360 (5). Vertical frequency from dead load only (simple spans: π/2L² √(EIg/w); continuous spans: the fundamental mode from an eigenvalue solution with consistent mass), must exceed 3.0 Hz, or W ≥ 180e^(−0.35f) with W the dead load of all beams (6). Fatigue for pedestrian bridges is wind-induced (3.5) and is not checked; lateral frequency and wind are outside a line-girder analysis.');
     out.push('<b>Pedestrian load rating.</b> The Guide Specifications and the MBE give no pedestrian rating method. Ratings use the load rating factors (γLL ' + f2(R.rating ? R.rating.gLinv : 1.75) + ' inventory, ' + f2(R.rating ? R.rating.gLop : 1.35) + ' operating) with ' + (p.veh ? 'the ' + p.veh + ' maintenance vehicle, and tons = RF × ' + Math.round(p.W / 2) + ' tons.' : 'the 90 psf pedestrian load.')); }
   if (L.perm) { const P = L.perm;
     out.push('<b>Permit trucks, design.</b> Strength II with γLL ' + f2(P.gDesign) + ' (Table 3.4.1-1), each permit vehicle run in both directions with IM 33% and ' + (P.single ? 'one lane loaded with the 1.2 multiple presence factor removed, as a special permit crosses (MBE 6A.4.5.4.2b; LRFD 4.6.2.2.5 with no other traffic)' : 'the multi-lane distribution factors, as routine permits mix with traffic') + (P.lane ? ', plus a 0.2 k/ft lane load for negative moment in continuous spans and for spans over 200 ft (MBE 6A.4.5.4.1)' : '') + ': flexure, shear, interface shear and longitudinal reinforcement. Service limits are not checked for the permit (MBE Table 6A.4.2.2-1; the optional Service I strand-stress check is not included). ' + (L.permit === 'only' ? 'Permit only: the HL-93 service, fatigue and deflection checks are not run.' : 'Each Strength II check is listed beside the design live load checks.'));
