@@ -229,6 +229,10 @@ guard('Steel 2D Grillage solver', () => {
   const GJ = 11200 * 144 * sec.J / 20736, ECw = 29000 * 144 * sec.Cw / 2985984, pp = Math.sqrt(GJ / ECw);
   near('grid: warping torsion, midspan twist, rad', rw.d[nd.dof + 1], 50 / (2 * GJ) * (50 - Math.tanh(pp * 50) / pp), 1e-5, 'closed form');
   near('grid: warping torsion, midspan bimoment, kip-ft^2', Math.abs(rw.gRes.find(e => e.g === 'G1' && Math.abs(e.ub - 50) < 1e-6).B2), 50 * Math.tanh(pp * 50) / (2 * pp), 0.1, 'closed form');
+  // web shear deformation (Timoshenko): simple span, midspan point load, deflection PL^3/48EI + PL/4GAw
+  const ms = G.model(Fw, { props: () => sec, brace: { I: 1, J: 1, e: 0 }, warping: true, h: 5, twistAtBearings: true, shear: true }), nm = ms.nodeAt('G1', 50);
+  const rs = G.solve(ms, 't', { points: [{ node: nm, P: 100 }] }), EIs = 29000 * sec.I / 144, GAw = 11200 * sec.Aw;
+  near('grid: shear deformation, midspan deflection, in.', -rs.d[nm.dof] * 12, (100 * 1200 ** 3 / (48 * 29000 * sec.I) + 100 * 1200 / (4 * GAw)), 1e-3, 'PL^3/48EI + PL/4GAw');
   // cross-frame truss condensation: rigid-body modes carry no force; very stiff diagonals bend as the chord couple
   const T = G.truss(12.5, { type: 'X', h: 68, e: 6, top: { A: 8.44 }, bot: { A: 8.44 }, diag: { A: 8.44 } });
   const mv = (K, v) => Math.max(...K.map(r => Math.abs(r.reduce((s, x, j) => s + x * v[j], 0))));

@@ -3937,7 +3937,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // St. Venant: open thin-walled section, flanges with the end correction (1 - 0.63 t/b)
     const J = s.D * s.tw ** 3 / 3 + s.bt * s.tt ** 3 / 3 * (1 - 0.63 * s.tt / s.bt) + s.bb * s.tb ** 3 / 3 * (1 - 0.63 * s.tb / s.bb);
     const Cw = h * h * Iyt * Iyb / (Iyt + Iyb);
-    return { A, d, ybar: y, I, Iyt, Iyb, Iy: Iyt + Iyb + s.D * s.tw ** 3 / 12, h, J, Cw, Sb: I / y, St: I / (d - y), Atf: At, Abf: Ab };
+    return { A, d, ybar: y, I, Iyt, Iyb, Iy: Iyt + Iyb + s.D * s.tw ** 3 / 12, h, J, Cw, Sb: I / y, St: I / (d - y), Atf: At, Abf: Ab, Aw };
   }
   // composite with a deck of effective width b, structural thickness ts, its bottom th above the top of the top
   // flange, transformed by n. Deck torsion as an open plate b ts^3/3 (1 - 0.63 ts/b), also divided by n
@@ -3987,7 +3987,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // F: framing from G2D.build. M: {
   //   props(girderId, u, stage) -> {I (in4), J (in4), Cw (in6)}  section properties along each girder, per stage
   //   brace: {I, J, e}  equivalent beam for cross-frames and diaphragms (in4, ft offset of the connection from the girder)
-  //   warping: true|false, h: target element length (ft), twistAtBearings: false }
+  //   warping: true|false, h: target element length (ft), twistAtBearings: false, shear: web shear deformation }
   function model(F, M) {
     const h = M.h || 5, nodes = [], gNodes = new Map();
     const key = new Map();
@@ -4037,10 +4037,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
 
   // local stiffness of a girder element, DOFs [w1, ts1, tn1, psi1, w2, ts2, tn2, psi2] (psi only with warping)
   // bending: phi = dw/ds = -tn. torsion: St. Venant GJ plus warping ECw with cubic twist (psi = dtheta/ds)
-  function girderK(L, EI, GJ, ECw, warp) {
+  // GAv (kip): shear stiffness of the web; with it, bending is Timoshenko (phi = 12 EI / GAv L^2)
+  function girderK(L, EI, GJ, ECw, warp, GAv) {
     const n = warp ? 8 : 6, K = Array.from({ length: n }, () => new Float64Array(n));
-    const iw = [0, warp ? 4 : 3], it = [1, warp ? 5 : 4], ip = [2, warp ? 6 : 5];
-    const b = [[12, 6 * L, -12, 6 * L], [6 * L, 4 * L * L, -6 * L, 2 * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, 2 * L * L, -6 * L, 4 * L * L]].map(r => r.map(v => v * EI / L ** 3));
+    const iw = [0, warp ? 4 : 3], it = [1, warp ? 5 : 4], ip = [2, warp ? 6 : 5], f = GAv > 0 ? 12 * EI / (GAv * L * L) : 0;
+    const b = [[12, 6 * L, -12, 6 * L], [6 * L, (4 + f) * L * L, -6 * L, (2 - f) * L * L], [-12, -6 * L, 12, -6 * L], [6 * L, (2 - f) * L * L, -6 * L, (4 + f) * L * L]].map(r => r.map(v => v * EI / L ** 3 / (1 + f)));
     const bi = [iw[0], ip[0], iw[1], ip[1]], bs = [1, -1, 1, -1]; // phi = -tn
     for (let r = 0; r < 4; r++) for (let c = 0; c < 4; c++) K[bi[r]][bi[c]] += b[r][c] * bs[r] * bs[c];
     if (warp) {
@@ -4165,7 +4166,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     gEls.forEach(el => {
       const dx = el.b.x - el.a.x, dy = el.b.y - el.a.y, L = Math.hypot(dx, dy), cx = dx / L, cy = dy / L;
       const p = M.props(el.g, el.um, stage);
-      const Kl = girderK(L, E * p.I * IN4, GS * p.J * IN4, warp ? E * (p.Cw || 0) * IN6 : 0, warp);
+      const Kl = girderK(L, E * p.I * IN4, GS * p.J * IN4, warp ? E * (p.Cw || 0) * IN6 : 0, warp, M.shear && p.Aw ? GS * p.Aw * IN2 : 0);
       const R = rot(cx, cy), nl = ndof, T = Array.from({ length: 2 * nl }, () => new Float64Array(2 * nl));
       for (let e = 0; e < 2; e++) for (let i = 0; i < nl; i++) for (let j = 0; j < nl; j++) T[e * nl + i][e * nl + j] = R[i][j];
       const K = mulTKT(T, Kl), dofs = [...gd(el.a), ...gd(el.b)];
@@ -4304,8 +4305,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     diaphragm: { I: 1500, J: 5 },
     // deckHoldsTop: in composite stages the deck holds the top flange, so a girder twists about it: warping constant
     // Iyb h^2 and all lateral bending in the bottom flange. webFlex: the deck strips meet the girder's twist through
-    // the web's out-of-plane bending, except at cross-frames, diaphragms and bearings (plates there)
-    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true },
+    // the web's out-of-plane bending, except at cross-frames, diaphragms and bearings (plates there). shear: the web's
+    // shear deformation in girder bending (Timoshenko)
+    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true, shear: true },
   };
 
   // ---------- sections along each girder ----------
@@ -4409,7 +4411,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const md = G.model(F, {
       props: (gid, u, stage) => {
         const st = stage === 'll' ? compAt(gid, u, n) : (STAGES.find(x => x.id === stage) || {}).comp ? compAt(gid, u, n3) : S.at(gid, u);
-        return { I: st.I, J: st.J, Cw: st.Cw };
+        return { I: st.I, J: st.J, Cw: st.Cw, Aw: st.Aw };
       },
       brace: braceSpec,
       diaphragm: { I: num((A.diaphragm || DEF.diaphragm).I), J: num((A.diaphragm || DEF.diaphragm).J), e: 0 },
@@ -4418,7 +4420,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         const w = el.src.w * 12, t = num(deck.ts), nn = stage === 'll' ? n : n3;
         return { I: w * t ** 3 / 12 / nn, J: w * t ** 3 / 6 / nn, e: 0, kr: opt.webFlex !== false ? [webK(el.src.gA, el.src.uA, el.src.w), webK(el.src.gB, el.src.uB, el.src.w)] : null };
       },
-      stripLines, breaks: S.breaks, extra: gid => tenthPoints(F, gid), warping: !!opt.warping, twistAtBearings: !!opt.twistAtBearings, h: num(opt.h) || 2.5,
+      stripLines, breaks: S.breaks, extra: gid => tenthPoints(F, gid), warping: !!opt.warping, twistAtBearings: !!opt.twistAtBearings, shear: opt.shear !== false, h: num(opt.h) || 2.5,
     });
     // loads by stage (k/ft downward; points in k)
     const wc = num(deck.wc) || 0.150;
@@ -4946,14 +4948,14 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // girder check inputs (phase 5): material, stiffeners, deck steel, fatigue
   const CK0 = () => ({ Fyf: 50, Fyw: 50, do: '', Ar: 0.62, yr: 2.5, fyr: 60, adtt: 1500, lanes: 2, life: 75, stiffCat: "C'", studCat: 'C', spliceCat: 'B', plateW: 7, ratio: 800 });
   // options added after an input was saved take the engine's default (on)
-  const newOpts = d => { const o = d.analysis.options || (d.analysis.options = {}); ['deckHoldsTop', 'webFlex'].forEach(k => { if (o[k] === undefined) o[k] = true; }); };
+  const newOpts = d => { const o = d.analysis.options || (d.analysis.options = {}); ['deckHoldsTop', 'webFlex', 'shear'].forEach(k => { if (o[k] === undefined) o[k] = true; }); };
   const AN0 = () => ({
     sections: [{ girders: '', on: '', rows: [{ L: 0, D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }],
     deck: { ts: 8, wear: 0.5, haunch: 3.5, hw: 16, fc: 4, wc: 0.150, ohL: 3.5, ohR: 3.5, sip: 15, n: '', strips: true },
     loads: { steelExtra: 5, xfWeight: 0.8, dc2: [{ name: 'Left barrier', w: 0.4, to: 'left', at: 0.75 }, { name: 'Right barrier', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
     crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
     diaphragm: { I: 1500, J: 5 },
-    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true },
+    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true, shear: true },
     ll: { fL: 1, fR: 1 },
     checks: CK0(),
   });
@@ -5198,6 +5200,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         ${fChk('Bearings restrain girder twist', b + '.options.twistAtBearings')}
         ${fChk('Deck holds the top flange (composite stages twist about the deck; lateral bending in the bottom flange)', b + '.options.deckHoldsTop')}
         ${fChk('Web flexibility between connection plates (deck strips meet the girder through the web)', b + '.options.webFlex')}
+        ${fChk('Shear deformation of the girder webs', b + '.options.shear')}
         <div class="fields">${fNum('Element length', 'ft', b + '.options.h', 'Largest; nodes also at every cross-frame')}</div>`, false);
   }
 
