@@ -117,6 +117,8 @@ table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
 .notes{margin:0;padding-left:18px;font-size:13px;color:var(--muted);display:flex;flex-direction:column;gap:6px;max-width:100ch}
 .notes b{color:var(--ink)}
 .layers td{vertical-align:middle}
+.progress{height:4px;background:var(--sunk);border-radius:2px;overflow:hidden;margin-bottom:8px}
+.progress>div{height:100%;width:0;background:var(--accent);transition:width .2s}
 .railh{font-size:1.05rem;margin:10px 2px 0;color:var(--muted)}
 .anbar{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:flex-end;margin-bottom:10px}
 .anbar label.f{min-width:190px}
@@ -207,6 +209,29 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +)</span></h3>
       <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button></div>
       <div class="tbl-wrap"><table class="res" id="anXf"></table></div>
+      <p class="hint" id="anCheck" style="margin-top:8px"></p>
+      <h3 style="margin-top:16px">What each refinement does to the cross-frame forces</h3>
+      <p class="hint">Runs the same bridge again with each refinement taken away, for the load chosen above, and compares the governing diagonal and chord force in every cross-frame (absolute values, kip).</p>
+      <div class="toolbar" style="margin:6px 0"><button id="btnRef">Compare refinements</button><span class="status" id="refStatus"></span></div>
+      <div class="tbl-wrap" style="max-height:none"><table class="res" id="refTbl"></table></div>
+      <div class="tbl-wrap" style="margin-top:10px"><table class="res" id="refDet"></table></div>
+    </section>
+    <section class="card" id="llCard">
+      <div class="card-h"><h2>Live load, HL-93</h2><div class="toolbar"><span class="status" id="llStatus"></span><button id="btnLL" class="primary">Run live load</button></div></div>
+      <div class="progress" id="llProg" hidden><div></div></div>
+      <div id="llMsgs"></div>
+      <div class="anbar"><div><span class="lbl" id="llqLbl">Result</span><div class="seg small" role="group" aria-labelledby="llqLbl" id="llQty">
+        <button data-q="M" aria-pressed="true">Moment</button><button data-q="V">Shear</button><button data-q="F">Fatigue moment</button><button data-q="D">Deflection</button></div></div></div>
+      <div class="chart" id="llChart"><svg id="llSvg" role="img" aria-label="Live-load envelopes along the girders"></svg><div class="tip" id="llTip" hidden></div></div>
+      <div class="legend" id="llLegend"></div>
+      <p class="hint" id="llNote"></p>
+      <div class="cols2">
+        <div><h3>At tenth points, <select id="llGirder" aria-label="Girder"></select></h3><div class="tbl-wrap"><table class="res" id="llTbl"></table></div></div>
+        <div><h3>Bearing reactions, kip (max / min)</h3><div class="tbl-wrap"><table class="res" id="llReac"></table></div></div>
+      </div>
+      <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +; fatigue range from the fatigue truck)</span></h3>
+      <div class="toolbar" style="margin-bottom:6px"><button id="btnLLCsv">Copy CSV</button><button id="btnLLJson">Live-load results as JSON</button></div>
+      <div class="tbl-wrap"><table class="res" id="llXf"></table></div>
     </section>
     <section class="card">
       <div class="card-h"><h2>Girders</h2><span class="status" id="gStatus"></span></div>
@@ -240,7 +265,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     </section>
   </main>
 </div>
-<script>
+<script id="g2d-engine">
 // ===================== Steel 2D Grillage: framing engine (phase 1) =====================
 // Plan geometry only: girder lines, support lines, diaphragms and cross-frames, from one of three inputs
 // (concentric curve form, alignment stations and offsets, plain x-y), all turned into one framing model.
@@ -1088,6 +1113,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (M.twistAtBearings) bearings.forEach(b => { const g = md.F.girders.find(x => x.id === b.g), t = g.P.tan(b.node.u); S.add(b.node.dof + 1, b.node.dof + 1, big * t[0] * t[0]); S.add(b.node.dof + 2, b.node.dof + 2, big * t[1] * t[1]); S.add(b.node.dof + 1, b.node.dof + 2, big * t[0] * t[1]); });
     S.factor();
     const d = S.solve(f);
+    if (loads.keepOnly) return { d, again: b => S.solve(b), big, bearings }; // influence work: element data stay on md
     // results
     const reac = bearings.map(b => ({ g: b.g, support: b.support, R: -big * d[b.node.dof] }));
     const gRes = gEls.map(el => {
@@ -1109,7 +1135,21 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const fb = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.K0[i][j] * db[j]; fb[i] = s; }
       // bending moment at each end of the equivalent beam (sagging +) and shear; truss member forces when modeled so
       const o = { id: el.id, kind: el.kind, gA: el.a.g, gB: el.b.g, V: fb[0], MA: fb[2], MB: -fb[5], T: -fb[1] };
-      if (el.B.Tr) o.members = trussForces(el.B.Tr, dl);
+      o.L = el.L;
+      if (el.B.Tr) {
+        o.members = trussForces(el.B.Tr, dl);
+        // consistency: the member forces, put back on the truss nodes and onto the girders, must give the forces the
+        // condensed frame passes to the girders (K4 d), with nothing left over at the free DOFs
+        const T = el.B.Tr, q = new Float64Array(T.nq), m = [dl[0], dl[2], dl[3], dl[5]];
+        m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0); });
+        const Rn = new Float64Array(2 * T.nodes.length);
+        T.mem.forEach((p, k) => { const N = o.members[k].N; Rn[2 * p.i] -= N * p.c; Rn[2 * p.i + 1] -= N * p.sn; Rn[2 * p.j] += N * p.c; Rn[2 * p.j + 1] += N * p.sn; });
+        const Q = Array.from({ length: T.nq }, (_, j) => T.Am.reduce((s, r, a) => s + r[j] * Rn[a], 0));
+        const K4m = T.K4.map(r => r.reduce((s, v, j) => s + v * m[j], 0));
+        let res = 0, ref = 1e-9; for (let i = 0; i < 4; i++) { res = Math.max(res, Math.abs(Q[i] - K4m[i])); ref = Math.max(ref, Math.abs(K4m[i])); }
+        T.sl.forEach(i => { res = Math.max(res, Math.abs(Q[i])); });
+        o.check = { res, ref };
+      }
       return o;
     });
     return { d, reac, gRes, bRes };
@@ -1241,7 +1281,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // cross-frame spec per stage: truss (with the deck tie in composite stages) or an equivalent beam
     const braceSpec = (stage, el) => {
       if (cf.model !== 'truss') return { I: num(cf.beam.I), J: num(cf.beam.J), e: num(cf.e) || 0 };
-      const comp = (STAGES.find(x => x.id === stage) || {}).comp, R = comp ? (num(cf.Rc) > 0 ? num(cf.Rc) : 1) : (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1);
+      const comp = stage === 'll' || (STAGES.find(x => x.id === stage) || {}).comp, R = comp ? (num(cf.Rc) > 0 ? num(cf.Rc) : 1) : (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1);
       const sA = S.at(el.a.g, el.a.u), sB = S.at(el.b.g, el.b.u), d = Math.max(sA.d, sB.d);
       const mem = q => ({ A: num(q && q.A) || 0, R });
       const type = el.src && el.src.tag === 'support' ? cf.endType || cf.type : cf.type;
@@ -1251,15 +1291,15 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     };
     const md = G.model(F, {
       props: (gid, u, stage) => {
-        const st = (STAGES.find(x => x.id === stage) || {}).comp ? compAt(gid, u, n3) : S.at(gid, u);
+        const st = stage === 'll' ? compAt(gid, u, n) : (STAGES.find(x => x.id === stage) || {}).comp ? compAt(gid, u, n3) : S.at(gid, u);
         return { I: st.I, J: st.J, Cw: st.Cw };
       },
       brace: braceSpec,
       diaphragm: { I: num((A.diaphragm || DEF.diaphragm).I), J: num((A.diaphragm || DEF.diaphragm).J), e: 0 },
       deck: (stage, el) => {
-        const st = STAGES.find(x => x.id === stage); if (!st || !st.comp) return null;
-        const w = el.src.w * 12, t = num(deck.ts);
-        return { I: w * t ** 3 / 12 / n3, J: w * t ** 3 / 6 / n3, e: 0 };
+        const st = STAGES.find(x => x.id === stage); if (stage !== 'll' && (!st || !st.comp)) return null;
+        const w = el.src.w * 12, t = num(deck.ts), nn = stage === 'll' ? n : n3;
+        return { I: w * t ** 3 / 12 / nn, J: w * t ** 3 / 6 / nn, e: 0 };
       },
       stripLines, breaks: S.breaks, extra: gid => tenthPoints(F, gid), warping: !!opt.warping, twistAtBearings: !!opt.twistAtBearings, h: num(opt.h) || 2.5,
     });
@@ -1320,7 +1360,258 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return out;
   }
 
-  Object.assign(G, { analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular });
+  // ---------- cross-frame refinements: the same bridge with each refinement taken away ----------
+  // The one-number equivalent beam: a single I matching the truss's cantilever tip deflection, with member forces
+  // recovered the common way (each diagonal V/2 along its slope, chords the average end moment over the depth)
+  function eqBeamI(L, cf, R) {
+    const a = q => ({ A: num(q && q.A) || 0, R });
+    const T = G.truss(L, { type: cf.type || 'X', h: num(cf.h), e: num(cf.e) || 0, top: a(cf.top), bot: a(cf.bot), diag: a(cf.diag), topChord: cf.topChord !== false });
+    const k = T.K4, d = k[2][2] * k[3][3] - k[2][3] ** 2;
+    return d > 0 ? L ** 3 / (3 * 29000 * 144 * (k[3][3] / d)) * 20736 : 0;
+  }
+  // governing diagonal and chord force (kip, absolute) of every cross-frame for the stages listed
+  function frameForces(R, stages, cf) {
+    const lists = stages.map(s => R.res[s].bRes.filter(b => b.kind === 'xf'));
+    const h = num(cf.h) / 12;
+    return lists[0].map((b0, k) => {
+      if (b0.members) {
+        const sum = {}; lists.forEach(L => (L[k].members || []).forEach(m => { sum[m.name] = (sum[m.name] || 0) + m.N; }));
+        const d = Object.keys(sum).filter(n => /^diagonal/.test(n)).map(n => Math.abs(sum[n])), c = Object.keys(sum).filter(n => /chord/.test(n)).map(n => Math.abs(sum[n]));
+        return { id: b0.id, d: Math.max(0, ...d), c: Math.max(0, ...c), tie: Math.abs(sum['deck tie'] || 0) };
+      }
+      const V = lists.reduce((s, L) => s + L[k].V, 0), M = lists.reduce((s, L) => s + (L[k].MA + L[k].MB) / 2, 0), Lc = Math.max(0.5, b0.L - 2 * (num(cf.e) || 0) / 12);
+      return { id: b0.id, d: Math.abs(V) / 2 * Math.hypot(Lc, h) / h, c: Math.abs(M) / h, tie: 0 };
+    });
+  }
+  function refinements(F, A, base) {
+    const cl = o => JSON.parse(JSON.stringify(o)), cf = Object.assign({}, DEF.crossframe, A.crossframe);
+    const xs = F.crossframes.filter(x => x.tag === 'intermediate'), Lm = xs.length ? xs.reduce((s, x) => s + x.L, 0) / xs.length : 10;
+    const Rnc = num(cf.Rnc) > 0 ? num(cf.Rnc) : 1;
+    const V = [
+      { key: 'base', name: 'As entered', note: 'Exact truss, stiffness factors, deck tie and deck strips as set' },
+      { key: 'noR', name: 'No stiffness factors', note: 'Member axial stiffness not reduced (AASHTO 4.6.3.3.4c factors set to 1)', A: () => { const a = cl(A); a.crossframe.Rnc = 1; a.crossframe.Rc = 1; return a; } },
+      { key: 'noTie', name: 'No deck tie', note: 'Composite stages without the deck tying the frames at deck level', A: () => { const a = cl(A); a.crossframe.deckTie = false; return a; } },
+      { key: 'noStrips', name: 'No deck strips', note: 'Composite stages without transverse deck bending and twisting', A: () => { const a = cl(A); a.deck = Object.assign({}, a.deck, { strips: false }); return a; } },
+      { key: 'beam', name: 'One-number equivalent beam', note: '', A: () => { const a = cl(A); const I = eqBeamI(Lm, cf, Rnc); a.crossframe.model = 'beam'; a.crossframe.beam = { I, J: 2 }; a.crossframe.deckTie = false; return a; } },
+    ];
+    if (cf.model !== 'truss') return { errs: ['Set the cross-frames to the truss model to compare refinements.'] };
+    const out = V.map(v => {
+      const R = v.key === 'base' ? base : analyze(F, v.A());
+      if (v.key === 'beam') v.note = `I = ${Math.round(eqBeamI(Lm, cf, Rnc)).toLocaleString()} in⁴ matching the frame's tip deflection; diagonals V/2 along their slope, chords the average end moment over the depth (no deck tie)`;
+      return Object.assign({}, v, { R });
+    });
+    return { variants: out, cf };
+  }
+  // the largest consistency residual over all truss cross-frames and stages (kip or kip-ft) and the force it compares to
+  function consistency(R) {
+    let res = 0, ref = 0;
+    Object.values(R.res).forEach(r => r.bRes.forEach(b => { if (b.check) { res = Math.max(res, b.check.res); ref = Math.max(ref, b.check.ref); } }));
+    return { res, ref };
+  }
+
+  Object.assign(G, { analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular, eqBeamI, frameForces, refinements, consistency });
+})(typeof window !== 'undefined' ? window : globalThis);
+
+// Steel 2D Grillage: live load by influence surfaces (phase 4). HL-93 (AASHTO LRFD 10th edition 3.6.1): design truck,
+// design tandem, design lane load, floating 12 ft design lanes, multiple presence factors, dynamic load allowance,
+// the 90% dual-truck case, and the fatigue truck. Attaches to root.G2D.
+(function (root) {
+  'use strict';
+  const G = root.G2D;
+  const MPF = [0, 1.2, 1.0, 0.85, 0.65];
+  const mpf = m => (m <= 4 ? MPF[m] : 0.65);
+
+  // element end actions from a displacement vector (girder elements: V, M, T at end 1; braces: truss member forces)
+  function gEnd(el, d) {
+    const n = el.dofs.length, dl = new Float64Array(n), fl = new Float64Array(n);
+    for (let i = 0; i < n; i++) { let s = 0; const r = el.T[i]; for (let j = 0; j < n; j++) s += r[j] * d[el.dofs[j]]; dl[i] = s; }
+    for (let i = 0; i < n; i++) { let s = 0; const r = el.Kl[i]; for (let j = 0; j < n; j++) s += r[j] * dl[j]; fl[i] = s; }
+    const nl = n / 2;
+    return { V1: fl[0], M1: fl[2], M2: -fl[nl + 2], T1: -fl[1] };
+  }
+  function bLocal(el, d) { const dl = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.T[i][j] * d[el.dofs[j]]; dl[i] = s; } return dl; }
+
+  // ---------- responses ----------
+  function responses(R) {
+    const md = R.md, F = md.F, out = [];
+    F.order.forEach(gid => {
+      const g = F.girders.find(x => x.id === gid), els = md.gEls.filter(e => e.g === gid);
+      g.spans.forEach((s, k) => {
+        for (let i = 0; i <= 10; i++) {
+          const u = s.u0 + s.L * i / 10;
+          // element starting at u (right side) except at the span's end (left side, the element ending at u)
+          const near = (key) => els.reduce((b, e) => (Math.abs(e[key].u - u) < Math.abs(b[key].u - u) ? e : b));
+          const right = i < 10 ? near('a') : null, left = near('b');
+          const el = right || left, atStart = el === right;
+          const tag = { g: gid, span: k + 1, pt: i, u };
+          if (!(k > 0 && i === 0)) out.push(Object.assign({ kind: 'M', el, atStart }, tag)); // pt 0 of a later span = pt 10 of the previous
+          out.push(Object.assign({ kind: 'V', el, atStart }, tag));
+          if (!(k > 0 && i === 0)) out.push(Object.assign({ kind: 'D', node: md.nodeAt(gid, u) }, tag));
+        }
+      });
+    });
+    md.bearings.forEach((b, k) => out.push({ kind: 'R', g: b.g, support: b.support, node: b.node, k }));
+    md.bEls.filter(e => e.kind === 'xf' && e.B && e.B.Tr).forEach(e => e.B.Tr.mem.forEach((m, j) => out.push({ kind: 'X', id: e.id, gA: e.a.g, gB: e.b.g, member: m.name, el: e, j })));
+    return out;
+  }
+  function evalAll(resps, d, big, out, col) {
+    const cache = new Map();
+    resps.forEach((r, i) => {
+      let v = 0;
+      if (r.kind === 'M' || r.kind === 'V') {
+        let e = cache.get(r.el); if (!e) { e = gEnd(r.el, d); cache.set(r.el, e); }
+        v = r.kind === 'M' ? (r.atStart ? e.M1 : e.M2) : e.V1; // shear is constant along an element with no load on it
+      } else if (r.kind === 'D') v = d[r.node.dof] * 12;
+      else if (r.kind === 'R') v = -big * d[r.node.dof];
+      else if (r.kind === 'X') { let f = cache.get(r.el); if (!f) { f = G.trussForces(r.el.B.Tr, bLocal(r.el, d)); cache.set(r.el, f); } v = f[r.j].N; }
+      out[i][col] = v;
+    });
+  }
+
+  // ---------- influence values: a unit downward load at every girder node ----------
+  function influence(R, onProgress) {
+    const md = R.md, sys = G.solve(md, 'll', { keepOnly: true });
+    const resps = responses(R), nodes = md.nodes, IF = resps.map(() => new Float64Array(nodes.length));
+    const f = new Float64Array(md.N);
+    for (let k = 0; k < nodes.length; k++) {
+      f[nodes[k].dof] = -1; const d = sys.again(f); f[nodes[k].dof] = 0;
+      evalAll(resps, d, sys.big, IF, k);
+      if (onProgress && k % 200 === 0) onProgress(k / nodes.length);
+    }
+    // the moment sign for elements read at their start: M1 from gEnd is the moment conjugate to tn at end 1, which
+    // equals the sagging moment there (see solve); nothing else to do
+    return { resps, IF, nodes };
+  }
+
+  // ---------- the deck: stations along the reference girder, girder positions across ----------
+  function deckGrid(R, ds) {
+    const md = R.md, F = md.F, ref = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]);
+    const deck = R.deck, ohL = +deck.ohL || 0, ohR = +deck.ohR || 0, bw = +R.loads.dwEdge || 0;
+    const st = [];
+    // stations evenly over the whole length at close to ds, so axle spacings are whole steps to within a fraction
+    // of a percent
+    const n = Math.max(2, Math.round(ref.L / ds)); ds = ref.L / n;
+    for (let k = 0; k <= n; k++) {
+      // just inside the ends, so the normal line finds every girder there
+      const s = Math.min(ref.L - 0.05, Math.max(0.05, k * ds)), p = ref.P.at(s), t = ref.P.tan(s), nrm = [-t[1], t[0]], hits = [];
+      F.girders.forEach(g => { G.lineHits(p, nrm, g.P).forEach(h => { if (h.u > -1e-6 && h.u < g.L + 1e-6 && Math.abs(h.t) < 200) hits.push({ g: g.id, u: Math.max(0, Math.min(g.L, h.u)), t: h.t }); }); });
+      // nearest hit per girder
+      const by = {}; hits.forEach(h => { if (!by[h.g] || Math.abs(h.t) < Math.abs(by[h.g].t)) by[h.g] = h; });
+      const gs = Object.values(by).sort((a, b) => b.t - a.t); // left (t +) to right
+      // node weights on each girder (linear between the two nodes around u)
+      gs.forEach(h => { const L = md.gNodes.get(h.g); let i = 1; while (i < L.length - 1 && L[i].u < h.u) i++; const a = L[i - 1], b = L[i], w = (h.u - a.u) / ((b.u - a.u) || 1); h.nw = [[a.id, 1 - w], [b.id, w]]; });
+      st.push({ s, gs });
+    }
+    // roadway: between the barriers at the deck edges, from the exterior girders of each station; the full length of
+    // the reference girder (stations with no girder hits are skipped)
+    // (from the stations that cross the most girders, so the girder ends, where a normal line can miss the outer
+    // girders, do not narrow it)
+    const most = Math.max(...st.map(x => x.gs.length)), full = st.filter(x => x.gs.length === most);
+    const tL = Math.min(...full.map(x => x.gs[0].t + ohL - bw)), tR = Math.max(...full.map(x => x.gs[x.gs.length - 1].t - ohR + bw));
+    return { st, ds, tL, tR, ref };
+  }
+  // influence value of response r at station k, offset t (lever rule between the girders either side; beyond the
+  // exterior girders, the line through the two outermost)
+  function surfaceRow(IFr, row, ts) {
+    const gs = row.gs, gv = gs.map(h => h.nw.reduce((s, [id, w]) => s + w * IFr[id], 0)), out = new Float64Array(ts.length);
+    if (!gs.length) return out;
+    if (gs.length === 1) { out.fill(gv[0]); return out; }
+    for (let j = 0; j < ts.length; j++) {
+      const t = ts[j]; let i = 0;
+      while (i < gs.length - 2 && t < gs[i + 1].t) i++;
+      const a = gs[i], b = gs[i + 1], w = (t - b.t) / (a.t - b.t);
+      out[j] = gv[i] * w + gv[i + 1] * (1 - w);
+    }
+    return out;
+  }
+
+  // ---------- load placement on one influence surface ----------
+  // S[k][j]: value at station k (spacing ds), transverse grid j (1 ft, from the right curb). Returns envelopes.
+  function place(S, ds, nt, opt) {
+    const nk = S.length, IM = opt.IM, fL = opt.fL || 1, fR = opt.fR || 1;
+    const st = v => Math.round(v / ds); // axle spacings in station steps (ds divides them: 2 ft)
+    const o14 = st(14), o4 = st(4), gap = st(50) + 2 * o14;
+    const rs = opt.spacings.map(st);
+    const A = new Float64Array(nk);
+    // best of sign * sum P_a A(k + o_a) over k, both directions; positions off the bridge read 0
+    const at = k => (k >= 0 && k < nk ? A[k] : 0);
+    const truck = (r, sign) => { let best = 0; const o2 = o14 + r;
+      for (let k = -o2; k < nk; k++) { const a0 = at(k), a1 = at(k + o14), a2 = at(k + o2), b1 = at(k + r);
+        const v1 = sign * (8 * a0 + 32 * a1 + 32 * a2), v2 = sign * (32 * a0 + 32 * b1 + 8 * a2); if (v1 > best) best = v1; if (v2 > best) best = v2; }
+      return best; };
+    const tandem = sign => { let best = 0; for (let k = -o4; k < nk; k++) { const v = sign * 25 * (at(k) + at(k + o4)); if (v > best) best = v; } return best; };
+    const dualBest = sign => { // two trucks with 14 ft spacings, at least 50 ft between them (90% applied by the caller)
+      const m = nk + 2 * o14, g = new Float64Array(m);
+      for (let i = 0; i < m; i++) { const k = i - 2 * o14; g[i] = Math.max(0, sign * (8 * at(k) + 32 * at(k + o14) + 32 * at(k + 2 * o14)), sign * (32 * at(k) + 32 * at(k + o14) + 8 * at(k + 2 * o14))); }
+      let best = 0, pre = 0; for (let i = gap; i < m; i++) { pre = Math.max(pre, g[i - gap]); best = Math.max(best, pre + g[i]); } return best; };
+    const colPos = new Float64Array(nt), colNeg = new Float64Array(nt);
+    for (let j = 0; j < nt; j++) { let p = 0, q = 0; for (let k = 0; k < nk; k++) { const w = (k === 0 || k === nk - 1 ? 0.5 : 1) * ds, v = S[k][j]; if (v > 0) p += v * w; else q -= v * w; } colPos[j] = p * 0.064; colNeg[j] = q * 0.064; }
+    const res = {};
+    const trP = new Float64Array(nt), trN = new Float64Array(nt), duP = new Float64Array(nt), duN = new Float64Array(nt);
+    let fP = 0, fN = 0;
+    for (let j = 3; j < nt - 3; j++) {
+      for (let k = 0; k < nk; k++) A[k] = (fR * S[k][j - 3] + fL * S[k][j + 3]) / 2;
+      let bp = tandem(1), bn = tandem(-1);
+      for (const r of rs) { bp = Math.max(bp, truck(r, 1)); bn = Math.max(bn, truck(r, -1)); }
+      trP[j] = bp * (1 + IM); trN[j] = bn * (1 + IM);
+      if (opt.dual) { duP[j] = dualBest(1) * (1 + IM); duN[j] = dualBest(-1) * (1 + IM); }
+      // fatigue: one truck, 30 ft rear spacing, 15%, no lane, wheel factors 1, anywhere with wheels 2 ft inside the curbs
+      if (j >= 5 && j < nt - 5) { for (let k = 0; k < nk; k++) A[k] = (S[k][j - 3] + S[k][j + 3]) / 2; fP = Math.max(fP, truck(st(30), 1) * 1.15); fN = Math.max(fN, truck(st(30), -1) * 1.15); }
+    }
+    const NL = Math.max(1, Math.floor(nt / 12)), nSlot = nt - 12;
+    for (const sign of [1, -1]) {
+      const col = sign > 0 ? colPos : colNeg, tr = sign > 0 ? trP : trN, dual = sign > 0 ? duP : duN;
+      if (nSlot < 0) { res[sign] = { v: 0, fat: sign > 0 ? fP : fN, byM: [] }; continue; }
+      // lanes: 12 ft slots, left edge a (grid ft); truck centered with wheels 2 ft inside the lane (a+5..a+7); lane load
+      // 10 ft wide, centered
+      const E = new Float64Array(nSlot + 1), E9 = new Float64Array(nSlot + 1), Et = new Float64Array(nSlot + 1), E25 = new Float64Array(nSlot + 1);
+      for (let a = 0; a <= nSlot; a++) {
+        let t = 0, t2 = 0; for (let c = a + 5; c <= a + 7; c++) { t = Math.max(t, tr[c] || 0); t2 = Math.max(t2, dual[c] || 0); }
+        let ln = 0; for (let j = a + 1; j < a + 11; j++) ln += col[j] || 0;
+        E[a] = t + ln; E9[a] = opt.dual === sign ? 0.9 * (t2 + ln) : 0;
+        if (opt.defl) { Et[a] = t; E25[a] = 0.25 * t + ln; }
+      }
+      const bestLanes = arr => { const out = [];
+        for (let m = 1; m <= NL; m++) { let prev = new Float64Array(nSlot + 13);
+          for (let c = 1; c <= m; c++) { const cur = new Float64Array(nSlot + 13).fill(-Infinity); for (let i = nSlot; i >= 0; i--) cur[i] = Math.max(cur[i + 1], arr[i] + (c === 1 ? 0 : prev[i + 12])); prev = cur; }
+          out.push(prev[0] * mpf(m)); }
+        return out; };
+      const byM = bestLanes(E), byM9 = opt.dual === sign ? bestLanes(E9) : [];
+      res[sign] = { v: Math.max(0, ...byM, ...byM9), byM, byM9, fat: sign > 0 ? fP : fN, NL };
+      // deflection (2.5.2.6.2, 3.6.1.3.2): all design lanes loaded, the larger of the truck alone or 25% truck + lane
+      if (opt.defl) res[sign].defl = Math.max(bestLanes(Et)[NL - 1], bestLanes(E25)[NL - 1]);
+    }
+    return res;
+  }
+
+  // opt.wheels: wheel-factor sets [{fL, fR}] (centrifugal force and superelevation, AASHTO 3.6.3); the envelope of all
+  function liveLoad(R, opt, onProgress) {
+    opt = Object.assign({ IM: 0.33, ds: 2, spacings: [14, 18, 22, 26, 30], wheels: [{ fL: 1, fR: 1 }] }, opt || {});
+    const t0 = Date.now();
+    const inf = influence(R, p => onProgress && onProgress(0.3 * p));
+    const t1 = Date.now();
+    const grid = deckGrid(R, opt.ds);
+    const W = grid.tL - grid.tR, nt = Math.max(1, Math.floor(W + 1e-6) + 1), ts = Array.from({ length: nt }, (_, j) => grid.tR + j);
+    const out = inf.resps.map((r, i) => {
+      if (onProgress && i % 40 === 0) onProgress(0.3 + 0.7 * i / inf.resps.length);
+      const S = grid.st.map(row => surfaceRow(inf.IF[i], row, ts));
+      // the 90% pair of trucks: negative moment between points of dead-load contraflexure, and pier reactions (3.6.1.3.1)
+      const pier = r.kind === 'R' && R.md.F.supports.some(q => q.id === r.support && q.kind !== 'abutment');
+      const dual = r.kind === 'M' && G.at(R.res.deck, r.g, r.u).M < 0 ? -1 : pier ? 1 : 0;
+      let mx = 0, mn = 0, fmx = 0, fmn = 0, dmn = 0, dmx = 0;
+      opt.wheels.forEach(wf => {
+        const p = place(S, grid.ds, nt, Object.assign({}, opt, wf, { dual, defl: r.kind === 'D' }));
+        mx = Math.max(mx, p[1].v); mn = Math.min(mn, -p[-1].v); fmx = Math.max(fmx, p[1].fat); fmn = Math.min(fmn, -p[-1].fat);
+        if (r.kind === 'D') { dmx = Math.max(dmx, p[1].defl || 0); dmn = Math.min(dmn, -(p[-1].defl || 0)); }
+      });
+      const o = { kind: r.kind, g: r.g, span: r.span, pt: r.pt, u: r.u, support: r.support, id: r.id, gA: r.gA, gB: r.gB, member: r.member, max: mx, min: mn, fatMax: fmx, fatMin: fmn, dual: !!dual };
+      if (r.kind === 'D') { o.deflMax = dmx; o.deflMin = dmn; }
+      return o;
+    });
+    return { out, W, nt, NL: Math.max(1, Math.floor(W / 12 + 1e-6)), ms: { influence: t1 - t0, placement: Date.now() - t1 }, grid: { tL: grid.tL, tR: grid.tR, ds: grid.ds } };
+  }
+
+  Object.assign(G, { liveLoad, llInfluence: influence, llPlace: place, llDeckGrid: deckGrid, llSurfaceRow: surfaceRow });
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>
@@ -1363,12 +1654,14 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
     diaphragm: { I: 1500, J: 5 },
     options: { warping: true, twistAtBearings: false, h: 2.5 },
+    ll: { fL: 1, fR: 1 },
   });
   // NSBA Example 4 plates (Figure 3), deck and loads (Sections 3, 5.2). Its 3D analysis used no stiffness reductions
   EX.curved.analysis = Object.assign(AN0(), {
     sections: [{"girders": "G1", "on": "", "rows": [{"L": 114, "D": 84, "tw": 0.5625, "bt": 16, "tt": 1, "bb": 16, "tb": 1}, {"L": 24.73, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 21, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 23.27, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 123.51, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 23.27, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 21, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 24.73, "D": 84, "tw": 0.625, "bt": 21, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 113, "D": 84, "tw": 0.5625, "bt": 16, "tt": 1, "bb": 16, "tb": 1}]}, {"girders": "G2", "on": "", "rows": [{"L": 116.1, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 25.14, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 18, "tt": 2.5, "bb": 19, "tb": 3}, {"L": 24.16, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 125.04, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 24.16, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 18, "tt": 2.5, "bb": 19, "tb": 3}, {"L": 25.14, "D": 84, "tw": 0.625, "bt": 18, "tt": 1.25, "bb": 19, "tb": 1.5}, {"L": 115.1, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}]}, {"girders": "G3", "on": "", "rows": [{"L": 117.9, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}, {"L": 25.86, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 20, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 24.84, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 126.96, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 20, "tb": 1}, {"L": 24.84, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 20, "tt": 2.5, "bb": 21, "tb": 3}, {"L": 25.86, "D": 84, "tw": 0.625, "bt": 20, "tt": 1.25, "bb": 21, "tb": 1.5}, {"L": 116.9, "D": 84, "tw": 0.5625, "bt": 18, "tt": 1, "bb": 18, "tb": 1}]}, {"girders": "G4", "on": "", "rows": [{"L": 34, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1}, {"L": 85.7, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.625}, {"L": 26.57, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 28, "tt": 2.5, "bb": 27, "tb": 3}, {"L": 25.43, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 129.09, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.5}, {"L": 25.43, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 36, "D": 84, "tw": 0.625, "bt": 28, "tt": 2.5, "bb": 27, "tb": 3}, {"L": 26.57, "D": 84, "tw": 0.625, "bt": 28, "tt": 1.25, "bb": 27, "tb": 1.5}, {"L": 85.7, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1.625}, {"L": 33, "D": 84, "tw": 0.5625, "bt": 20, "tt": 1, "bb": 21, "tb": 1}]}],
     deck: { ts: 9, wear: 0.5, haunch: 4, hw: 20, fc: 4, wc: 0.150, ohL: 3.75, ohR: 3.75, sip: 15, n: 7.56, strips: true },
     loads: { steelExtra: 7, xfWeight: 0, dc2: [{ name: 'Left parapet', w: 0.495, to: 'left', at: 0.6 }, { name: 'Right parapet', w: 0.495, to: 'right', at: 0.6 }], dw: 30, dwEdge: 1.5 },
+    ll: { fL: 0.788, fR: 1.212 },
     crossframe: { model: 'truss', type: 'X', endType: 'Kinv', h: 85, e: 0, zb: 0.75, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
   });
   // the MDX system run's plates (one table on G1, scaled to the other girders), deck and loads
@@ -1383,7 +1676,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   const fresh = () => ({ v: 1, mode: 'concentric', concentric: clone(EX.curved.concentric), alignment: clone(EX.flare.alignment), xy: clone(XY0), analysis: clone(EX.curved.analysis) });
 
   let doc = fresh();
-  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; if (!doc.analysis) doc.analysis = AN0(); } catch (e) { /* private window or blocked storage */ }
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; if (!doc.analysis) doc.analysis = AN0(); if (!doc.analysis.ll) doc.analysis.ll = { fL: 1, fR: 1 }; } catch (e) { /* private window or blocked storage */ }
   let dxf = null, dxfMap = {}, dxfScale = 0, dxfTol = 0.05; // DXF import state (not saved)
   let F = null, sel = null;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { /* ignore */ } };
@@ -1584,6 +1877,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <p class="hint">Each frame is a planar truss between the two girder webs, condensed onto the girders' deflection and twist, so its stiffness in bending and in shear are both exact. The factors reduce member axial stiffness for single angles and flange-connected tees; use 1 for other members.</p>`
         : `<div class="fields">${fNum('I', 'in⁴', b + '.crossframe.beam.I')}${fNum('J', 'in⁴', b + '.crossframe.beam.J')}${fNum('Connection offset', 'in', b + '.crossframe.e')}</div><p class="hint">For comparison with programs that use one equivalent beam per cross-frame.</p>`}
         <h3>Diaphragms</h3><div class="fields">${fNum('I', 'in⁴', b + '.diaphragm.I')}${fNum('J', 'in⁴', b + '.diaphragm.J')}</div>`, false)
+      + grp('Live load (HL-93)', `<p class="hint">Design truck, design tandem and lane load in 12 ft design lanes that float across the roadway between the barriers (the width under Loads), with multiple presence factors and 33% dynamic load allowance on the truck and tandem; the 90% pair of trucks for negative moment and pier reactions; the fatigue truck. Results are unfactored.</p>
+        <div class="fields">${fNum('Left wheel factor', '', b + '.ll.fL', 'Centrifugal force and superelevation (AASHTO 3.6.3)')}${fNum('Right wheel factor', '', b + '.ll.fR', 'Left + right = 2')}</div>
+        <p class="hint">With factors other than 1, both cases are run (with and without centrifugal force) and the worse is kept. Left and right are looking up-station.</p>`, false)
       + grp('Analysis options', `${fChk('Warping torsion in the girders (flange lateral bending)', b + '.options.warping')}
         ${fChk('Bearings restrain girder twist', b + '.options.twistAtBearings')}
         <div class="fields">${fNum('Element length', 'ft', b + '.options.h', 'Largest; nodes also at every cross-frame')}</div>`, false);
@@ -1924,7 +2220,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (!ok) { $('#anSvg').innerHTML = ''; ['#anTbl', '#anReac', '#anXf'].forEach(s => { $(s).innerHTML = ''; }); $('#anLegend').innerHTML = ''; return; }
     const sel = $('#anGirder'), gids = F.order;
     if (sel.options.length !== gids.length || [...sel.options].some((o, i) => o.value !== gids[i])) { const cur = sel.value; sel.innerHTML = gids.map(g => `<option>${esc(g)}</option>`).join(''); if (gids.includes(cur)) sel.value = cur; }
-    drawChart(); anTable(); reacTable(); xfTable();
+    drawChart(); anTable(); reacTable(); xfTable(); showRefinements(); showLL();
+    const c = G.consistency(AR); $('#anCheck').textContent = c.ref > 0 ? `Consistency check: the member forces, put back on the girders, reproduce the forces each cross-frame passes between them to ${c.res.toExponential(1)} kip (largest frame force ${fx(c.ref, 1)} kip).` : '';
   }
   const colorOf = i => `var(--s${(i % 8) + 1})`;
   function drawChart() {
@@ -1995,6 +2292,31 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     $('#anXf').innerHTML = `<thead><tr><th class="l">Name</th><th class="l">Type</th><th class="l">Girders</th>${cols.map(([n]) => `<th>${n}</th>`).join('')}<th>Shear V</th></tr></thead><tbody>`
       + rows.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)}</td><td class="l">${esc(r.tag)}</td><td class="l">${esc(r.gA)}–${esc(r.gB)}</td>${cols.map(([, re]) => { const v = pick(r, re); return v == null ? '<td>–</td>' : `<td${v < 0 ? ' class="neg"' : ''}>${fx(v, 1)}</td>`; }).join('')}<td>${fx(r.V, 1)}</td></tr>`).join('') + '</tbody>';
   }
+  // ---------- refinements ----------
+  let REF = null, refKey = '';
+  $('#btnRef').onclick = () => {
+    if (!(AR && AR.res)) return; const b = $('#btnRef'); b.disabled = true; $('#refStatus').textContent = 'Running five analyses…';
+    setTimeout(() => {
+      const t0 = performance.now();
+      try { const A = clone(doc.analysis); REF = G.refinements(F, A, AR); refKey = anKey; } catch (err) { REF = { errs: [err.message] }; }
+      b.disabled = false; $('#refStatus').textContent = REF && REF.variants ? `${Math.round(performance.now() - t0)} ms` : ''; showRefinements();
+    }, 30);
+  };
+  function showRefinements() {
+    const T = $('#refTbl'), D = $('#refDet');
+    if (!REF || refKey !== anKey) { T.innerHTML = ''; D.innerHTML = ''; if (REF && refKey !== anKey) $('#refStatus').textContent = 'Inputs changed: compare again.'; return; }
+    if (REF.errs) { T.innerHTML = `<tbody><tr><td class="l">${esc(REF.errs.join(' '))}</td></tr></tbody>`; D.innerHTML = ''; return; }
+    const ps = parts($('#anStage').value), ff = REF.variants.map(v => G.frameForces(v.R, ps, REF.cf)), b0 = ff[0];
+    const ratio = (f, key) => { const r = f.map((x, i) => (b0[i][key] > 0.5 ? x[key] / b0[i][key] : null)).filter(v => v != null); return r.length ? r.reduce((s, v) => s + v, 0) / r.length : NaN; };
+    const mx = (f, key) => Math.max(0, ...f.map(x => x[key]));
+    T.innerHTML = `<thead><tr><th class="l">${esc(SN[$('#anStage').value])}</th><th>Largest diagonal</th><th>Largest chord</th><th>Diagonals vs as entered</th><th>Chords vs as entered</th><th class="l">What changes</th></tr></thead><tbody>`
+      + REF.variants.map((v, k) => `<tr><td class="l"><b>${esc(v.name)}</b></td><td>${fx(mx(ff[k], 'd'), 1)}</td><td>${fx(mx(ff[k], 'c'), 1)}</td><td>${k ? fx(ratio(ff[k], 'd'), 2) + '×' : '–'}</td><td>${k ? fx(ratio(ff[k], 'c'), 2) + '×' : '–'}</td><td class="l" style="white-space:normal;min-width:260px;font-family:var(--f-body)">${esc(v.note)}</td></tr>`).join('') + '</tbody>';
+    // the frames carrying the most force, as entered, and what each variant gives them
+    const idx = b0.map((x, i) => i).sort((i, j) => Math.max(b0[j].d, b0[j].c) - Math.max(b0[i].d, b0[i].c)).slice(0, 15);
+    D.innerHTML = `<thead><tr><th class="l">Cross-frame</th>${REF.variants.map(v => `<th>${esc(v.name)}<br><span style="font-weight:400">diag / chord</span></th>`).join('')}</tr></thead><tbody>`
+      + idx.map(i => `<tr data-x="${esc(b0[i].id)}"><td class="l">${esc(b0[i].id)}</td>${ff.map(f => `<td>${fx(f[i].d, 1)} / ${fx(f[i].c, 1)}</td>`).join('')}</tr>`).join('') + '</tbody>';
+  }
+  $('#refDet').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
   $('#anXf').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
   $('#anStage').onchange = () => { if (AR && AR.res) showResults(); };
   $('#anGirder').onchange = () => { if (AR && AR.res) anTable(); };
@@ -2015,6 +2337,106 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       crossframes: Object.fromEntries(st.map(s => [s, AR.res[s].bRes.filter(b => b.kind !== 'deck').map(b => ({ id: b.id, girderA: b.gA, girderB: b.gB, V: r4(b.V), members: (b.members || []).map(m => ({ name: m.name, N: r4(m.N) })) }))])) };
     download('dead-load-results.json', JSON.stringify(out, null, 1), 'application/json');
   };
+
+  // ---------- live load (runs in a worker built from this page's own engine script) ----------
+  let LL = null, llKey = '', llQ = 'M', llWorker = null;
+  const llInputKey = () => anInputKey();
+  function llOpts() {
+    const w = doc.analysis.ll || {}, fL = +w.fL || 1, fR = +w.fR || 1;
+    const wheels = [{ fL: 1, fR: 1 }]; if (Math.abs(fL - 1) > 1e-6 || Math.abs(fR - 1) > 1e-6) wheels.push({ fL, fR });
+    return { wheels };
+  }
+  function makeWorker() {
+    try {
+      const src = document.getElementById('g2d-engine').textContent;
+      const code = src + '\nself.onmessage = e => { const { model, analysis, opt } = e.data; try { const G = self.G2D, F = G.build(model), R = G.analyze(F, analysis); if (R.errs && R.errs.length) { postMessage({ err: R.errs.join("; ") }); return; } const L = G.liveLoad(R, opt, p => postMessage({ p })); postMessage({ done: L }); } catch (err) { postMessage({ err: err.message }); } };';
+      return new Worker(URL.createObjectURL(new Blob([code], { type: 'text/javascript' })));
+    } catch (e) { return null; }
+  }
+  $('#btnLL').onclick = () => {
+    if (!F || F.fatal || F.errors.length) return;
+    const b = $('#btnLL'), prog = $('#llProg'), bar = prog.firstElementChild, key = llInputKey(), opt = llOpts();
+    b.disabled = true; prog.hidden = false; bar.style.width = '2%'; $('#llStatus').textContent = 'Influence surfaces…'; $('#llMsgs').innerHTML = '';
+    const t0 = performance.now();
+    const finish = (L, err) => {
+      b.disabled = false; prog.hidden = true;
+      if (err) { LL = null; $('#llMsgs').innerHTML = `<div class="msg err" role="alert"><b>The live-load analysis could not run</b><span>${esc(err)}</span></div>`; $('#llStatus').textContent = ''; showLL(); return; }
+      LL = L; llKey = key; $('#llStatus').textContent = `${L.NL} design lane${L.NL > 1 ? 's' : ''} on ${fx(L.W, 1)} ft · ${L.out.length} responses · ${(Math.round(performance.now() - t0) / 1000).toFixed(1)} s`; showLL();
+    };
+    if (!llWorker) llWorker = makeWorker();
+    const A = clone(doc.analysis);
+    if (llWorker) {
+      llWorker.onmessage = e => { const m = e.data; if (m.p != null) { bar.style.width = Math.round(5 + 95 * m.p) + '%'; $('#llStatus').textContent = m.p < 0.3 ? 'Influence surfaces…' : 'Placing lanes and trucks…'; } else if (m.done) finish(m.done); else if (m.err) finish(null, m.err); };
+      llWorker.onerror = () => { llWorker = null; runHere(); };
+      llWorker.postMessage({ model: engineModel(), analysis: A, opt });
+    } else runHere();
+    function runHere() { setTimeout(() => { try { const R = G.analyze(F, A); if (R.errs && R.errs.length) throw new Error(R.errs.join(' ')); finish(G.liveLoad(R, opt)); } catch (err) { finish(null, err.message); } }, 30); }
+  };
+  function showLL() {
+    const ok = LL && llKey === llInputKey();
+    if (LL && !ok) $('#llStatus').textContent = 'Inputs changed: run the live load again.';
+    if (!LL) { $('#llSvg').innerHTML = ''; ['#llTbl', '#llReac', '#llXf'].forEach(s => { $(s).innerHTML = ''; }); $('#llLegend').innerHTML = ''; $('#llNote').textContent = 'Influence surfaces for every result, with HL-93 placed on each; a typical bridge takes a few seconds.'; return; }
+    const sel = $('#llGirder'), gids = F.order.filter(g => LL.out.some(r => r.g === g));
+    if (sel.options.length !== gids.length) { sel.innerHTML = gids.map(g => `<option>${esc(g)}</option>`).join(''); }
+    llChart(); llTable(); llReac(); llXf();
+  }
+  const llSeries = (gid, q) => LL.out.filter(r => r.g === gid && r.kind === (q === 'F' ? 'M' : q)).map(r => ({ u: r.u, hi: q === 'F' ? r.fatMax : q === 'D' ? r.deflMax : r.max, lo: q === 'F' ? r.fatMin : q === 'D' ? r.deflMin : r.min }));
+  function llChart() {
+    const svgA = $('#llSvg'), box = $('#llChart'), W = box.clientWidth, H = box.clientHeight, q = llQ;
+    const along = alongRef(), ser = F.order.map((gid, i) => ({ gid, i, pts: llSeries(gid, q).map(p => Object.assign({ x: along(gid, p.u) }, p)) })).filter(s => s.pts.length);
+    let x0 = Infinity, x1 = -Infinity, y0 = 0, y1 = 0; ser.forEach(s => s.pts.forEach(p => { x0 = Math.min(x0, p.x); x1 = Math.max(x1, p.x); y0 = Math.min(y0, p.lo); y1 = Math.max(y1, p.hi); }));
+    if (y1 - y0 < 1e-9) y1 = y0 + 1;
+    const pad = { l: 62, r: 12, t: 12, b: 30 }, pw = W - pad.l - pad.r, ph = H - pad.t - pad.b;
+    const X = u => pad.l + (u - x0) / (x1 - x0) * pw, Y = v => pad.t + (y1 - v) / (y1 - y0) * ph;
+    let h = niceTicks(y0, y1, 5).map(t => `<line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(t)}" y2="${Y(t)}" stroke="var(--grid)"/><text x="${pad.l - 6}" y="${Y(t) + 4}" text-anchor="end" font-size="11" fill="var(--muted)" font-family="var(--f-mono)">${fmtN(t)}</text>`).join('');
+    h += `<line x1="${pad.l}" x2="${W - pad.r}" y1="${Y(0)}" y2="${Y(0)}" stroke="var(--muted)"/>`;
+    const gr = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]);
+    gr.brg.forEach(b => { h += `<line x1="${X(b.u)}" x2="${X(b.u)}" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--support)" stroke-dasharray="4 4" opacity=".6"/><text x="${X(b.u)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="var(--support)">${esc(b.support)}</text>`; });
+    ser.forEach(s => { ['hi', 'lo'].forEach(k => { const d = s.pts.map((p, j) => (j ? 'L' : 'M') + X(p.x).toFixed(1) + ' ' + Y(p[k]).toFixed(1)).join(''); h += `<path d="${d}" fill="none" stroke="${colorOf(s.i)}" stroke-width="2"${k === 'lo' ? ' stroke-dasharray="5 3"' : ''}/>`; }); });
+    const QL = { M: 'LL+I moment envelope, kip-ft', V: 'LL+I shear envelope, kip', F: 'Fatigue truck moment, kip-ft (15%, no lane, no multiple presence)', D: 'Live-load deflection, in (all lanes; truck, or 25% truck + lane)' };
+    h += `<text x="${pad.l}" y="${pad.t - 2}" font-size="11" fill="var(--muted)" dy="10" dx="4">${QL[q]}</text><line id="llX" x1="0" x2="0" y1="${pad.t}" y2="${H - pad.b}" stroke="var(--ink)" opacity="0"/>`;
+    svgA.setAttribute('viewBox', `0 0 ${W} ${H}`); svgA.innerHTML = h;
+    $('#llLegend').innerHTML = ser.map(s => `<span><i class="sw" style="background:${colorOf(s.i)}"></i>${esc(s.gid)}</span>`).join('') + '<span>solid: largest · dashed: smallest</span>';
+    $('#llNote').textContent = 'At the tenth points of each span. Includes dynamic load allowance and multiple presence factors (except fatigue); the 90% pair of trucks is included for negative moment between points of dead-load contraflexure and for pier reactions.';
+    llChart.state = { ser, X, x0, x1, pad, W };
+  }
+  $('#llChart').addEventListener('pointermove', e => {
+    const st = llChart.state; if (!st) return; const r = $('#llChart').getBoundingClientRect(), x = e.clientX - r.left, u = st.x0 + (x - st.pad.l) / (st.W - st.pad.l - st.pad.r) * (st.x1 - st.x0);
+    if (u < st.x0 || u > st.x1) { $('#llTip').hidden = true; return; }
+    const ln = $('#llX'); if (ln) { ln.setAttribute('x1', x); ln.setAttribute('x2', x); ln.setAttribute('opacity', '.35'); }
+    const rows = st.ser.map(s => { const p = s.pts.reduce((a, b) => (Math.abs(b.x - u) < Math.abs(a.x - u) ? b : a)); return `<span style="color:${colorOf(s.i)}">■</span> ${esc(s.gid)} ${fmtN(p.hi)} / ${fmtN(p.lo)}`; });
+    const tp = $('#llTip'); tp.innerHTML = rows.join('<br>'); tp.hidden = false; tp.style.left = Math.min(x + 12, r.width - tp.offsetWidth - 6) + 'px'; tp.style.top = '10px';
+  });
+  $('#llChart').addEventListener('pointerleave', () => { $('#llTip').hidden = true; const ln = $('#llX'); if (ln) ln.setAttribute('opacity', '0'); });
+  function llTable() {
+    const gid = $('#llGirder').value || F.order[0], M = LL.out.filter(r => r.g === gid && r.kind === 'M'), V = LL.out.filter(r => r.g === gid && r.kind === 'V'), D = LL.out.filter(r => r.g === gid && r.kind === 'D');
+    const cell = v => `<td${v < 0 ? ' class="neg"' : ''}>${fmtN(v)}</td>`;
+    $('#llTbl').innerHTML = `<thead><tr><th class="l">Span.pt</th><th>At ft</th><th>M+</th><th>M−</th><th>V+</th><th>V−</th><th>Fatigue M+</th><th>Fatigue M−</th><th>Deflection in</th></tr></thead><tbody>`
+      + M.map(m => { const v = V.find(x => x.span === m.span && x.pt === m.pt) || {}, d = D.find(x => Math.abs(x.u - m.u) < 1e-6) || {};
+        return `<tr><td class="l">${m.span}.${m.pt}</td><td>${fx(m.u, 1)}</td>${cell(m.max)}${cell(m.min)}${cell(v.max)}${cell(v.min)}${cell(m.fatMax)}${cell(m.fatMin)}${cell(d.deflMin)}</tr>`; }).join('') + '</tbody>';
+  }
+  function llReac() {
+    const sup = F.supports.map(s => s.id), rx = LL.out.filter(r => r.kind === 'R');
+    $('#llReac').innerHTML = `<thead><tr><th class="l">LL+I</th>${sup.map(s => `<th>${esc(s)}</th>`).join('')}</tr></thead><tbody>`
+      + F.order.map(g => `<tr><td class="l">${esc(g)}</td>${sup.map(s => { const r = rx.find(x => x.g === g && x.support === s); return r ? `<td>${fx(r.max, 1)} / <span${r.min < 0 ? ' class="neg"' : ''}>${fx(r.min, 1)}</span></td>` : '<td>–</td>'; }).join('')}</tr>`).join('') + '</tbody>';
+  }
+  function llXf() {
+    const xs = LL.out.filter(r => r.kind === 'X');
+    $('#llXf').innerHTML = `<thead><tr><th class="l">Cross-frame</th><th class="l">Girders</th><th class="l">Member</th><th>LL+I max</th><th>LL+I min</th><th>Fatigue range</th></tr></thead><tbody>`
+      + xs.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)}</td><td class="l">${esc(r.gA)}–${esc(r.gB)}</td><td class="l">${esc(r.member)}</td><td>${fx(r.max, 1)}</td><td${r.min < 0 ? ' class="neg"' : ''}>${fx(r.min, 1)}</td><td>${fx(r.fatMax - r.fatMin, 1)}</td></tr>`).join('') + '</tbody>';
+  }
+  $('#llXf').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  $('#llGirder').onchange = () => { if (LL) llTable(); };
+  document.querySelectorAll('#llQty button').forEach(b => b.addEventListener('click', () => { llQ = b.dataset.q; document.querySelectorAll('#llQty button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (LL) llChart(); }));
+  new ResizeObserver(() => { if (LL) llChart(); }).observe($('#llChart'));
+  $('#btnLLCsv').onclick = () => {
+    if (!LL) return; const t = ['kind,girder,span,point,at_ft,support,crossframe,member,llim_max,llim_min,fatigue_max,fatigue_min,deflection_in'].concat(LL.out.map(r => [r.kind, r.g || '', r.span || '', r.pt == null ? '' : r.pt, r.u == null ? '' : r.u.toFixed(3), r.support || '', r.id || '', r.member || '', r.max.toFixed(3), r.min.toFixed(3), r.fatMax.toFixed(3), r.fatMin.toFixed(3), r.deflMin == null ? '' : r.deflMin.toFixed(4)].join(','))).join('\n');
+    const b = $('#btnLLCsv'); const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy CSV'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('live-load.csv', t, 'text/csv'); done(); }); else { download('live-load.csv', t, 'text/csv'); done(); }
+  };
+  $('#btnLLJson').onclick = () => { if (!LL) return; const r4 = v => (v == null ? null : +(+v).toFixed(3));
+    download('live-load-results.json', JSON.stringify({ schema: 'opendot.g2d.liveload/1', units: 'kip, ft; deflection in', loading: 'HL-93, AASHTO LRFD 10th edition; LL+I includes dynamic load allowance and multiple presence; fatigue: one truck, 30 ft rear spacing, 15%', designLanes: LL.NL, roadway: r4(LL.W),
+      results: LL.out.map(r => ({ kind: { M: 'moment', V: 'shear', D: 'deflection', R: 'reaction', X: 'crossframe member' }[r.kind], girder: r.g, span: r.span, point: r.pt, at: r4(r.u), support: r.support, crossframe: r.id, member: r.member, max: r4(r.max), min: r4(r.min), fatigueMax: r4(r.fatMax), fatigueMin: r4(r.fatMin), deflection: r4(r.deflMin) })) }, null, 1), 'application/json'); };
 
   // ---------- header controls ----------
   document.querySelectorAll('#modeSel button').forEach(b => b.addEventListener('click', () => { doc.mode = b.dataset.mode; save(); renderRail(); run(); }));

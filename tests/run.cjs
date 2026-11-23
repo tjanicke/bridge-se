@@ -237,5 +237,48 @@ guard('Steel 2D Grillage solver', () => {
   near('truss: stiff diagonals bend as the chord couple, in^4', 12.5 / (29000 * 144 * (k[2][2] / det)) * 20736, 8.44 * 68 * 68 / 2, 1, 'A h^2 / 2');
 });
 
+// ---------- Steel 2D Grillage: cross-frame forces (phase 3) ----------
+guard('Steel 2D Grillage cross-frames', () => {
+  const G = load('steel-2d-grillage').G2D;
+  const F = G.build({ mode: 'concentric', concentric: { R: 0, nG: 4, spacing: 10, spans: [120, 120], skews: [60, 60, 60], ext: 1, crossframes: { spacing: 20 } } });
+  const A = { sections: [{ girders: '', rows: [{ L: 0, D: 54, tw: 0.5, bt: 16, tt: 1, bb: 18, tb: 1.5 }] }], deck: { ts: 8, wear: 0.5, haunch: 3.5, hw: 16, fc: 4, wc: 0.15, ohL: 3.5, ohR: 3.5, sip: 15, strips: true },
+    loads: { steelExtra: 5, xfWeight: 0.8, dc2: [{ name: 'L', w: 0.4, to: 'left', at: 0.75 }, { name: 'R', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: 40, e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true }, options: { warping: true, h: 2.5 } };
+  const R = G.analyze(F, A), c = G.consistency(R);
+  is('60° skew analysis: no errors', R.errs.length, 0);
+  near('consistency: member forces reproduce the frame end forces (relative)', c.res / c.ref, 0, 1e-9, 'truss forces back onto the girders');
+  const tot = st => R.res[st].reac.reduce((s, x) => s + x.R, 0);
+  near('equilibrium: DC2 reactions = parapet load, kip', tot('dc2'), 0.8 * F.girders[0].L * 0 + 0.8 * (F.girders[0].L + F.girders[3].L) / 2, 0.5, '0.4 k/ft on each edge girder line');
+  const C = G.refinements(F, A, R), ff = C.variants.map(v => G.frameForces(v.R, ['dc2'], C.cf));
+  const mx = (f, k) => Math.max(...f.map(x => x[k]));
+  is('deck tie: without it, chords carry more (composite stage)', mx(ff[2], 'c') > 1.3 * mx(ff[0], 'c'), true);
+  is('deck tie: without it, diagonals carry less (composite stage)', mx(ff[2], 'd') < 0.85 * mx(ff[0], 'd'), true);
+  is('stiffness factors: stiffer frames attract more force', mx(ff[1], 'd') > mx(ff[0], 'd'), true);
+});
+
+// ---------- Steel 2D Grillage: live load by influence surfaces (phase 4) ----------
+// NSBA Steel Bridge Design Handbook, Design Example 4 (2025): Figure 3 plates, Section 3 and 5 loads; HL-93 with its
+// centrifugal wheel factors (1.212 outside, 0.788 inside, and without). Its Tables 5-8 come from a 3D model of an earlier
+// set of plates, so the check is a few percent, not exact
+guard('Steel 2D Grillage live load', () => {
+  const G = load('steel-2d-grillage').G2D;
+  const F = G.build({ mode: 'concentric', concentric: { R: 700, turn: 'L', nG: 4, spacing: 11, spans: [160, 210, 160], skews: [0, 0, 0, 0], ext: 1, crossframes: { spacing: 20 } } });
+  const A = { sections: [{"girders":"G1","on":"","rows":[{"L":114,"D":84,"tw":0.5625,"bt":16,"tt":1,"bb":16,"tb":1},{"L":24.73,"D":84,"tw":0.625,"bt":21,"tt":1.25,"bb":21,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":21,"tt":2.5,"bb":21,"tb":3},{"L":23.27,"D":84,"tw":0.625,"bt":21,"tt":1.25,"bb":21,"tb":1.5},{"L":123.51,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1},{"L":23.27,"D":84,"tw":0.625,"bt":21,"tt":1.25,"bb":21,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":21,"tt":2.5,"bb":21,"tb":3},{"L":24.73,"D":84,"tw":0.625,"bt":21,"tt":1.25,"bb":21,"tb":1.5},{"L":113,"D":84,"tw":0.5625,"bt":16,"tt":1,"bb":16,"tb":1}]},{"girders":"G2","on":"","rows":[{"L":116.1,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1},{"L":25.14,"D":84,"tw":0.625,"bt":18,"tt":1.25,"bb":19,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":18,"tt":2.5,"bb":19,"tb":3},{"L":24.16,"D":84,"tw":0.625,"bt":18,"tt":1.25,"bb":19,"tb":1.5},{"L":125.04,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1},{"L":24.16,"D":84,"tw":0.625,"bt":18,"tt":1.25,"bb":19,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":18,"tt":2.5,"bb":19,"tb":3},{"L":25.14,"D":84,"tw":0.625,"bt":18,"tt":1.25,"bb":19,"tb":1.5},{"L":115.1,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1}]},{"girders":"G3","on":"","rows":[{"L":117.9,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1},{"L":25.86,"D":84,"tw":0.625,"bt":20,"tt":1.25,"bb":21,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":20,"tt":2.5,"bb":21,"tb":3},{"L":24.84,"D":84,"tw":0.625,"bt":20,"tt":1.25,"bb":21,"tb":1.5},{"L":126.96,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":20,"tb":1},{"L":24.84,"D":84,"tw":0.625,"bt":20,"tt":1.25,"bb":21,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":20,"tt":2.5,"bb":21,"tb":3},{"L":25.86,"D":84,"tw":0.625,"bt":20,"tt":1.25,"bb":21,"tb":1.5},{"L":116.9,"D":84,"tw":0.5625,"bt":18,"tt":1,"bb":18,"tb":1}]},{"girders":"G4","on":"","rows":[{"L":34,"D":84,"tw":0.5625,"bt":20,"tt":1,"bb":21,"tb":1},{"L":85.7,"D":84,"tw":0.5625,"bt":20,"tt":1,"bb":21,"tb":1.625},{"L":26.57,"D":84,"tw":0.625,"bt":28,"tt":1.25,"bb":27,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":28,"tt":2.5,"bb":27,"tb":3},{"L":25.43,"D":84,"tw":0.625,"bt":28,"tt":1.25,"bb":27,"tb":1.5},{"L":129.09,"D":84,"tw":0.5625,"bt":20,"tt":1,"bb":21,"tb":1.5},{"L":25.43,"D":84,"tw":0.625,"bt":28,"tt":1.25,"bb":27,"tb":1.5},{"L":36,"D":84,"tw":0.625,"bt":28,"tt":2.5,"bb":27,"tb":3},{"L":26.57,"D":84,"tw":0.625,"bt":28,"tt":1.25,"bb":27,"tb":1.5},{"L":85.7,"D":84,"tw":0.5625,"bt":20,"tt":1,"bb":21,"tb":1.625},{"L":33,"D":84,"tw":0.5625,"bt":20,"tt":1,"bb":21,"tb":1}]}],
+    deck: { ts: 9, wear: 0.5, haunch: 4, hw: 20, fc: 4, wc: 0.150, ohL: 3.75, ohR: 3.75, sip: 15, n: 7.56, strips: true },
+    loads: { steelExtra: 7, xfWeight: 0, dc2: [{ name: 'L', w: 0.495, to: 'left', at: 0.6 }, { name: 'R', w: 0.495, to: 'right', at: 0.6 }], dw: 30, dwEdge: 1.5 },
+    crossframe: { model: 'truss', type: 'X', endType: 'Kinv', h: 85, e: 0, zb: 0.75, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true }, options: { warping: true, h: 2.5 } };
+  const R = G.analyze(F, A), L = G.liveLoad(R, { wheels: [{ fL: 1, fR: 1 }, { fL: 0.788, fR: 1.212 }] });
+  is('E4 live load: roadway and design lanes', L.W.toFixed(1) + ' ft, ' + L.NL, '37.5 ft, 3');
+  const M = (g, i) => L.out.filter(r => r.kind === 'M' && r.g === g)[i];
+  near('E4 G4 LL+I positive moment, span 1 point 4, kip-ft', M('G4', 4).max, 5134, 0.04 * 5134, 'E4 Table 8: 5134');
+  near('E4 G1 LL+I positive moment, span 1 point 4, kip-ft', M('G1', 4).max, 3249, 0.06 * 3249, 'E4 Table 5: 3249');
+  near('E4 G2 LL+I positive moment, span 2 point 5, kip-ft', M('G2', 15).max, 2668, 0.04 * 2668, 'E4 Table 6: 2668');
+  near('E4 G4 fatigue positive moment, span 1 point 4, kip-ft', M('G4', 4).fatMax, 1611, 0.04 * 1611, 'E4 Table 8: 1611');
+  near('E4 G3 fatigue negative moment, pier 1, kip-ft', M('G3', 10).fatMin, -732, 0.06 * 732, 'E4 Table 7: -732');
+  const rx = L.out.filter(r => r.kind === 'R');
+  near('E4 live load: reactions symmetric about span 2 (G4 abutments), kip', rx.find(r => r.g === 'G4' && r.support === 'Abut 1').max - rx.find(r => r.g === 'G4' && r.support === 'Abut 2').max, 0, 1);
+  near('E4 G1 LL+I end shear, kip', L.out.filter(r => r.kind === 'V' && r.g === 'G1')[0].max, 109, 0.06 * 109, 'E4 Table 1: 109');
+});
+
 console.log('\n' + pass + ' passed, ' + fail + ' failed');
 process.exit(fail ? 1 : 0);
