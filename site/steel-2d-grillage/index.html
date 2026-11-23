@@ -4593,9 +4593,12 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   }
 
   // ---------- the deck: stations along the reference girder, girder positions across ----------
-  function deckGrid(R, ds) {
+  // curbs: the roadway edges, measured in from each deck edge (default: the DW exclusion at the barriers); a wider
+  // value leaves out a sidewalk or bike trail
+  function deckGrid(R, ds, curbs) {
     const md = R.md, F = md.F, ref = F.girders.find(g => g.id === F.order[Math.floor((F.order.length - 1) / 2)]);
     const deck = R.deck, ohL = +deck.ohL || 0, ohR = +deck.ohR || 0, bw = +R.loads.dwEdge || 0;
+    const cL = curbs && isFinite(+curbs.L) && curbs.L !== '' && curbs.L != null ? +curbs.L : bw, cR = curbs && isFinite(+curbs.R) && curbs.R !== '' && curbs.R != null ? +curbs.R : bw;
     const st = [];
     // stations evenly over the whole length at close to ds, so axle spacings are whole steps to within a fraction
     // of a percent
@@ -4611,13 +4614,19 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       gs.forEach(h => { const L = md.gNodes.get(h.g); let i = 1; while (i < L.length - 1 && L[i].u < h.u) i++; const a = L[i - 1], b = L[i], w = (h.u - a.u) / ((b.u - a.u) || 1); h.nw = [[a.id, 1 - w], [b.id, w]]; });
       st.push({ s, gs });
     }
-    // roadway: between the barriers at the deck edges, from the exterior girders of each station; the full length of
-    // the reference girder (stations with no girder hits are skipped)
-    // (from the stations that cross the most girders, so the girder ends, where a normal line can miss the outer
-    // girders, do not narrow it)
-    const most = Math.max(...st.map(x => x.gs.length)), full = st.filter(x => x.gs.length === most);
-    const tL = Math.min(...full.map(x => x.gs[0].t + ohL - bw)), tR = Math.max(...full.map(x => x.gs[x.gs.length - 1].t - ohR + bw));
-    return { st, ds, tL, tR, ref };
+    // roadway: between the curbs, from the exterior girders at each station, so it follows a flared or tapered deck.
+    // The transverse grid spans the widest station; at each station the surface is zero outside its own curbs, so
+    // lanes there carry nothing (the design lanes follow the roadway). Stations where a normal line misses an
+    // exterior girder (near the girder ends) take the curbs of the nearest station that finds both
+    const ext = x => x.gs.length && x.gs[0].g === F.order[0] && x.gs[x.gs.length - 1].g === F.order[F.order.length - 1];
+    st.forEach(x => { if (ext(x)) { x.cL = x.gs[0].t + ohL - cL; x.cR = x.gs[x.gs.length - 1].t - ohR + cR; } });
+    const good = st.filter(x => x.cL != null);
+    if (!good.length) { const most = Math.max(...st.map(x => x.gs.length)), full = st.filter(x => x.gs.length === most);
+      full.forEach(x => { x.cL = x.gs[0].t + ohL - cL; x.cR = x.gs[x.gs.length - 1].t - ohR + cR; }); good.push(...full); }
+    st.forEach(x => { if (x.cL == null) { const n = good.reduce((a, b) => (Math.abs(b.s - x.s) < Math.abs(a.s - x.s) ? b : a)); x.cL = n.cL; x.cR = n.cR; } });
+    const tL = Math.max(...st.map(x => x.cL)), tR = Math.min(...st.map(x => x.cR));
+    const varies = st.some(x => Math.abs(x.cL - tL) > 0.5 || Math.abs(x.cR - tR) > 0.5);
+    return { st, ds, tL, tR, ref, varies, wMin: Math.min(...st.map(x => x.cL - x.cR)), wMax: tL - tR };
   }
   // influence value of response r at station k, offset t (lever rule between the girders either side; beyond the
   // exterior girders, the line through the two outermost)
@@ -4699,11 +4708,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const t0 = Date.now();
     const inf = influence(R, p => onProgress && onProgress(0.3 * p));
     const t1 = Date.now();
-    const grid = deckGrid(R, opt.ds);
+    const grid = deckGrid(R, opt.ds, opt.curbs);
     const W = grid.tL - grid.tR, nt = Math.max(1, Math.floor(W + 1e-6) + 1), ts = Array.from({ length: nt }, (_, j) => grid.tR + j);
     const out = inf.resps.map((r, i) => {
       if (onProgress && i % 40 === 0) onProgress(0.3 + 0.7 * i / inf.resps.length);
-      const S = grid.st.map(row => surfaceRow(inf.IF[i], row, ts));
+      const S = grid.st.map(row => { const v = surfaceRow(inf.IF[i], row, ts); if (grid.varies) for (let j = 0; j < ts.length; j++) if (ts[j] > row.cL + 1e-6 || ts[j] < row.cR - 1e-6) v[j] = 0; return v; });
       // the 90% pair of trucks: negative moment between points of dead-load contraflexure, and pier reactions (3.6.1.3.1)
       const pier = r.kind === 'R' && R.md.F.supports.some(q => q.id === r.support && q.kind !== 'abutment');
       const dual = r.kind === 'M' && G.at(R.res.deck, r.g, r.u).M < 0 ? -1 : pier ? 1 : 0;
@@ -4717,7 +4726,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       if (r.kind === 'D') { o.deflMax = dmx; o.deflMin = dmn; }
       return o;
     });
-    return { out, W, nt, NL: Math.max(1, Math.floor(W / 12 + 1e-6)), ms: { influence: t1 - t0, placement: Date.now() - t1 }, grid: { tL: grid.tL, tR: grid.tR, ds: grid.ds } };
+    return { out, W, wMin: grid.wMin, varies: grid.varies, nt, NL: Math.max(1, Math.floor(W / 12 + 1e-6)), ms: { influence: t1 - t0, placement: Date.now() - t1 }, grid: { tL: grid.tL, tR: grid.tR, ds: grid.ds } };
   }
 
   Object.assign(G, { liveLoad, llInfluence: influence, llPlace: place, llDeckGrid: deckGrid, llSurfaceRow: surfaceRow });
@@ -5151,7 +5160,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <h3>Diaphragms</h3><div class="fields">${fNum('I', 'in⁴', b + '.diaphragm.I')}${fNum('J', 'in⁴', b + '.diaphragm.J')}</div>`, false)
       + grp('Live load (HL-93)', `<p class="hint">Design truck, design tandem and lane load in 12 ft design lanes that float across the roadway between the barriers (the width under Loads), with multiple presence factors and 33% dynamic load allowance on the truck and tandem; the 90% pair of trucks for negative moment and pier reactions; the fatigue truck. Results are unfactored.</p>
         <div class="fields">${fNum('Left wheel factor', '', b + '.ll.fL', 'Centrifugal force and superelevation (AASHTO 3.6.3)')}${fNum('Right wheel factor', '', b + '.ll.fR', 'Left + right = 2')}</div>
-        <p class="hint">With factors other than 1, both cases are run (with and without centrifugal force) and the worse is kept. Left and right are looking up-station.</p>`, false)
+        <p class="hint">With factors other than 1, both cases are run (with and without centrifugal force) and the worse is kept. Left and right are looking up-station.</p>
+        <div class="fields">${fNum('Roadway edge, left', 'ft', b + '.ll.curbL', 'In from the deck edge; blank: the DW edge')}${fNum('Roadway edge, right', 'ft', b + '.ll.curbR', 'Wider to leave out a sidewalk or bike trail')}</div>
+        <p class="hint">The roadway follows the deck from station to station, so lanes narrow with a tapered or flared deck.</p>`, false)
       + grp('Girder checks', `<p class="hint">AASHTO LRFD 10th edition, by the Steel Line Girder check engine at every tenth point, with the grid's forces: the dead-load stages, LL+I, the fatigue truck and flange lateral bending from warping.</p>
         <div class="fields">${fNum('Flange Fy', 'ksi', b + '.checks.Fyf')}${fNum('Web Fy', 'ksi', b + '.checks.Fyw')}
         ${fNum('Stiffener spacing', 'in', b + '.checks.do', 'Blank: unstiffened web')}${fNum('Connection plate width', 'in', b + '.checks.plateW', 'For lateral bending at its weld toe')}
@@ -5625,7 +5636,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   function llOpts() {
     const w = doc.analysis.ll || {}, fL = +w.fL || 1, fR = +w.fR || 1;
     const wheels = [{ fL: 1, fR: 1 }]; if (Math.abs(fL - 1) > 1e-6 || Math.abs(fR - 1) > 1e-6) wheels.push({ fL, fR });
-    return { wheels };
+    const cv = v => (v === '' || v == null || !isFinite(+v) ? null : +v);
+    return { wheels, curbs: { L: cv(w.curbL), R: cv(w.curbR) } };
   }
   function makeWorker() {
     try {
@@ -5642,7 +5654,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const finish = (L, err) => {
       b.disabled = false; prog.hidden = true;
       if (err) { LL = null; $('#llMsgs').innerHTML = `<div class="msg err" role="alert"><b>The live-load analysis could not run</b><span>${esc(err)}</span></div>`; $('#llStatus').textContent = ''; showLL(); return; }
-      LL = L; llKey = key; $('#llStatus').textContent = `${L.NL} design lane${L.NL > 1 ? 's' : ''} on ${fx(L.W, 1)} ft · ${L.out.length} responses · ${(Math.round(performance.now() - t0) / 1000).toFixed(1)} s`; showLL();
+      LL = L; llKey = key; $('#llStatus').textContent = `${L.NL} design lane${L.NL > 1 ? 's' : ''} on ${L.varies ? fx(L.wMin, 1) + '–' : ''}${fx(L.W, 1)} ft · ${L.out.length} responses · ${(Math.round(performance.now() - t0) / 1000).toFixed(1)} s`; showLL();
     };
     if (!llWorker) llWorker = makeWorker();
     const A = clone(doc.analysis);

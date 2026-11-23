@@ -256,6 +256,22 @@ guard('Steel 2D Grillage cross-frames', () => {
   is('stiffness factors: stiffer frames attract more force', mx(ff[1], 'd') > mx(ff[0], 'd'), true);
 });
 
+// ---------- Steel 2D Grillage: flared deck (phase 6) ----------
+// three girders spreading from 20 ft to 30 ft out to out over a 100 ft simple span: the roadway follows the deck
+guard('Steel 2D Grillage flared roadway', () => {
+  const G = load('steel-2d-grillage').G2D;
+  const F = G.build({ mode: 'xy', ext: 0, girders: [{ id: 'G1', pts: [[0, 10], [100, 15]], trim: true }, { id: 'G2', pts: [[0, 0], [100, 0]], trim: true }, { id: 'G3', pts: [[0, -10], [100, -15]], trim: true }],
+    supports: [{ id: 'A1', a: [0, 30], b: [0, -30], kind: 'abutment' }, { id: 'A2', a: [100, 30], b: [100, -30], kind: 'abutment' }], diaphragms: [], crossframes: { auto: true, spacing: 20, orient: 'normal', atSupports: true, clear: 2, panels: [], remove: [], add: [] } });
+  const A = { sections: [{ girders: '', rows: [{ L: 0, D: 48, tw: 0.5, bt: 14, tt: 1, bb: 16, tb: 1.25 }] }], deck: { ts: 8, wear: 0, haunch: 3, hw: 14, fc: 4, wc: 0.15, ohL: 3, ohR: 3, sip: 0, strips: true },
+    loads: { steelExtra: 0, xfWeight: 0, dc2: [], dw: 0, dwEdge: 1 }, crossframe: { model: 'truss', type: 'X', endType: 'X', h: 36, e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true }, options: { warping: false, h: 2.5 } };
+  const R = G.analyze(F, A), L = G.liveLoad(R, { ds: 2 }), Lc = G.liveLoad(R, { ds: 2, curbs: { L: 8, R: 1 } });
+  near('flared deck: widest roadway, ft', L.W, 34, 0.6, '30 ft out to out + 2 × (3 − 1)');
+  near('flared deck: narrowest roadway, ft', L.wMin, 24, 0.6, '20 ft out to out + 2 × (3 − 1)');
+  near('flared deck: a curb 8 ft in from the left edge narrows it by 7 ft', Lc.W, 27, 0.6);
+  const mid = r => r.kind === 'M' && r.g === 'G1' && r.pt === 5;
+  is('flared deck: the curb takes lanes off the left girder', Lc.out.find(mid).max < 0.8 * L.out.find(mid).max, true);
+});
+
 // ---------- Steel 2D Grillage: live load by influence surfaces (phase 4) ----------
 // NSBA Steel Bridge Design Handbook, Design Example 4 (2025): Figure 3 plates, Section 3 and 5 loads; HL-93 with its
 // centrifugal wheel factors (1.212 outside, 0.788 inside, and without). Its Tables 5-8 come from a 3D model of an earlier
