@@ -4055,9 +4055,17 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   }
   // equivalent beam between two girder nodes (cross-frame or diaphragm), with rigid offsets e at each end along it;
   // local DOFs [w1, ts1, tn1, w2, ts2, tn2]
-  function braceK(L, e, EI, GJ) {
+  function braceK(L, e, EI, GJ, kr) {
     const Lb = Math.max(0.1, L - 2 * e);
-    const K0 = girderK(Lb, EI, GJ, 0, false);
+    let K0 = girderK(Lb, EI, GJ, 0, false);
+    // kr = [k1, k2]: rotational springs (k-ft/rad) between each node's twist and the beam end (semi-rigid ends)
+    if (kr && (isFinite(kr[0]) || isFinite(kr[1]))) {
+      const m = [0, 1, 6, 3, 4, 7], A = Array.from({ length: 8 }, () => new Float64Array(8));
+      for (let i = 0; i < 6; i++) for (let j = 0; j < 6; j++) A[m[i]][m[j]] += K0[i][j];
+      [[2, 6, kr[0]], [5, 7, kr[1]]].forEach(([a, b, k]) => { const kk = isFinite(k) ? k : 1e3 * EI / Lb; A[a][a] += kk; A[b][b] += kk; A[a][b] -= kk; A[b][a] -= kk; });
+      const Ki = invert([[A[6][6], A[6][7]], [A[7][6], A[7][7]]]);
+      K0 = Array.from({ length: 6 }, (_, i) => Float64Array.from({ length: 6 }, (_, j) => A[i][j] - [6, 7].reduce((s, p, a) => s + [6, 7].reduce((t, q, b) => t + A[i][p] * Ki[a][b] * A[q][j], 0), 0)));
+    }
     // beam ends from nodes: w_b1 = w1 - e tn1 (phi = -tn), w_b2 = w2 + e tn2
     const T = Array.from({ length: 6 }, (_, i) => { const r = new Float64Array(6); r[i] = 1; return r; });
     T[0][2] = -e; T[3][5] = e;
@@ -4193,7 +4201,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         const kt = GS * (pr.J || 1) * IN4 / L; K[1][1] += kt; K[4][4] += kt; K[1][4] -= kt; K[4][1] -= kt;
         const I6 = Array.from({ length: 6 }, (_, i) => { const r = new Float64Array(6); r[i] = 1; return r; });
         B = { K, T: I6, K0: K, Tr };
-      } else B = braceK(L, (pr.e || 0) / 12, E * pr.I * IN4, GS * pr.J * IN4);
+      } else B = braceK(L, (pr.e || 0) / 12, E * pr.I * IN4, GS * pr.J * IN4, pr.kr);
       const R = rot(cx, cy), T = Array.from({ length: 6 }, () => new Float64Array(6));
       for (let e = 0; e < 2; e++) for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) T[e * 3 + i][e * 3 + j] = R[i][j];
       const K = mulTKT(T, B.K), dofs = [...gd(el.a).slice(0, 3), ...gd(el.b).slice(0, 3)];
@@ -4294,7 +4302,10 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // on the support lines
     crossframe: { model: 'truss', type: 'X', endType: 'X', h: 0, e: 0, zb: 0, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
     diaphragm: { I: 1500, J: 5 },
-    options: { warping: true, twistAtBearings: false, h: 2.5 },
+    // deckHoldsTop: in composite stages the deck holds the top flange, so a girder twists about it: warping constant
+    // Iyb h^2 and all lateral bending in the bottom flange. webFlex: the deck strips meet the girder's twist through
+    // the web's out-of-plane bending, except at cross-frames, diaphragms and bearings (plates there)
+    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true },
   };
 
   // ---------- sections along each girder ----------
@@ -4361,7 +4372,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (errs.length) return { errs, warns };
     const trib = tribFn(F, deck);
     const thOf = (gid, u) => Math.max(0, (num(deck.haunch) || 0) - S.rowAt(gid, u).tt); // bottom of deck above the top flange
-    const compAt = (gid, u, nn) => { const st = S.at(gid, u), tb = trib(gid, u); return G.composite(st, { b: tb.b * 12, ts: num(deck.ts), th: thOf(gid, u), jf: deck.strips ? 0.5 : 1 }, nn); }; // with deck strips, the plate's twisting stiffness is shared half and half
+    const compAt = (gid, u, nn) => { const st = S.at(gid, u), tb = trib(gid, u); const c = G.composite(st, { b: tb.b * 12, ts: num(deck.ts), th: thOf(gid, u), jf: deck.strips ? 0.5 : 1 }, nn); // with deck strips, the plate's twisting stiffness is shared half and half
+      return opt.deckHoldsTop !== false ? Object.assign(c, { Cw: st.Iyb * st.h * st.h }) : c; };
     // transverse deck strips for composite stages: from each girder, normal lines to the next girder every s ft
     const stripLines = [];
     if (deck.strips) {
@@ -4376,6 +4388,13 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         }
       });
     }
+    // a deck strip's end meets the girder's twist through the web bending out of plane (a plate strip of depth D,
+    // its bottom free to rotate with the flange: 3 E tw^3 / 12(1 - nu^2) / D per unit length), k-ft/rad over the
+    // strip width w ft; rigid within half a strip of a cross-frame, diaphragm or bearing, where plates stiffen the web
+    const plated = (gid, u, w) => F.crossframes.some(c => (c.gA === gid && Math.abs(c.uA - u) <= w / 2 + 1e-6) || (c.gB === gid && Math.abs(c.uB - u) <= w / 2 + 1e-6))
+      || F.members.some(m => (m.gA === gid && Math.abs(m.uA - u) <= w / 2 + 1e-6) || (m.gB === gid && Math.abs(m.uB - u) <= w / 2 + 1e-6))
+      || ((F.girders.find(g => g.id === gid) || {}).brg || []).some(b => Math.abs(b.u - u) <= w / 2 + 1e-6);
+    const webK = (gid, u, w) => { if (plated(gid, u, w)) return Infinity; const r = S.rowAt(gid, u); return 3 * 29000 * r.tw ** 3 / (12 * 0.91) / r.D * w * 12 / 12; };
     // cross-frame spec per stage: truss (with the deck tie in composite stages) or an equivalent beam
     const braceSpec = (stage, el) => {
       if (cf.model !== 'truss') return { I: num(cf.beam.I), J: num(cf.beam.J), e: num(cf.e) || 0 };
@@ -4397,7 +4416,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       deck: (stage, el) => {
         const st = STAGES.find(x => x.id === stage); if (stage !== 'll' && (!st || !st.comp)) return null;
         const w = el.src.w * 12, t = num(deck.ts), nn = stage === 'll' ? n : n3;
-        return { I: w * t ** 3 / 12 / nn, J: w * t ** 3 / 6 / nn, e: 0 };
+        return { I: w * t ** 3 / 12 / nn, J: w * t ** 3 / 6 / nn, e: 0, kr: opt.webFlex !== false ? [webK(el.src.gA, el.src.uA, el.src.w), webK(el.src.gB, el.src.uB, el.src.w)] : null };
       },
       stripLines, breaks: S.breaks, extra: gid => tenthPoints(F, gid), warping: !!opt.warping, twistAtBearings: !!opt.twistAtBearings, h: num(opt.h) || 2.5,
     });
@@ -4450,9 +4469,10 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         const u = s.u0 + s.L * i / 10, a = G.at(r, gid, u);
         const el = r.gRes.filter(e => e.g === gid).find(e => u >= e.ua - 1e-9 && u <= e.ub + 1e-9);
         const B = el ? (Math.abs(u - el.ua) < Math.abs(u - el.ub) ? el.B1 : el.B2) : 0;
-        const st = R.S.at(gid, u), Ml = B / (st.h / 12); // flange lateral moment, k-ft, each flange
+        const st = R.S.at(gid, u), Ml = B / (st.h / 12); // flange lateral moment, k-ft (both flanges; bottom only once the deck holds the top)
+        const held = R.opt.deckHoldsTop !== false && (stage === 'll' || (STAGES.find(x => x.id === stage) || {}).comp);
         const row = R.S.rowAt(gid, u);
-        out.push({ span: k + 1, pt: i, u, M: a.M, V: a.V, T: a.T, w: a.w * 12, B, Ml, flb: Math.abs(Ml) * 12 * 6 / (row.tb * row.bb ** 2), flt: Math.abs(Ml) * 12 * 6 / (row.tt * row.bt ** 2) });
+        out.push({ span: k + 1, pt: i, u, M: a.M, V: a.V, T: a.T, w: a.w * 12, B, Ml, flb: Math.abs(Ml) * 12 * 6 / (row.tb * row.bb ** 2), flt: held ? 0 : Math.abs(Ml) * 12 * 6 / (row.tt * row.bt ** 2) });
       }
     });
     return out;
@@ -4925,13 +4945,15 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // ---------- dead-load analysis input (phase 2) ----------
   // girder check inputs (phase 5): material, stiffeners, deck steel, fatigue
   const CK0 = () => ({ Fyf: 50, Fyw: 50, do: '', Ar: 0.62, yr: 2.5, fyr: 60, adtt: 1500, lanes: 2, life: 75, stiffCat: "C'", studCat: 'C', spliceCat: 'B', plateW: 7, ratio: 800 });
+  // options added after an input was saved take the engine's default (on)
+  const newOpts = d => { const o = d.analysis.options || (d.analysis.options = {}); ['deckHoldsTop', 'webFlex'].forEach(k => { if (o[k] === undefined) o[k] = true; }); };
   const AN0 = () => ({
     sections: [{ girders: '', on: '', rows: [{ L: 0, D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }],
     deck: { ts: 8, wear: 0.5, haunch: 3.5, hw: 16, fc: 4, wc: 0.150, ohL: 3.5, ohR: 3.5, sip: 15, n: '', strips: true },
     loads: { steelExtra: 5, xfWeight: 0.8, dc2: [{ name: 'Left barrier', w: 0.4, to: 'left', at: 0.75 }, { name: 'Right barrier', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
     crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
     diaphragm: { I: 1500, J: 5 },
-    options: { warping: true, twistAtBearings: false, h: 2.5 },
+    options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true },
     ll: { fL: 1, fR: 1 },
     checks: CK0(),
   });
@@ -4957,7 +4979,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   const fresh = () => ({ v: 1, mode: 'concentric', concentric: clone(EX.curved.concentric), alignment: clone(EX.flare.alignment), xy: clone(XY0), analysis: clone(EX.curved.analysis) });
 
   let doc = fresh();
-  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; if (!doc.analysis) doc.analysis = AN0(); if (!doc.analysis.ll) doc.analysis.ll = { fL: 1, fR: 1 }; if (!doc.analysis.checks) doc.analysis.checks = CK0(); } catch (e) { /* private window or blocked storage */ }
+  try { const s = JSON.parse(localStorage.getItem(KEY) || 'null'); if (s && s.v === 1 && s.concentric && s.alignment && s.xy) doc = s; if (!doc.analysis) doc.analysis = AN0(); if (!doc.analysis.ll) doc.analysis.ll = { fL: 1, fR: 1 }; if (!doc.analysis.checks) doc.analysis.checks = CK0(); newOpts(doc); } catch (e) { /* private window or blocked storage */ }
   let dxf = null, dxfMap = {}, dxfScale = 0, dxfTol = 0.05; // DXF import state (not saved)
   let F = null, sel = null;
   const save = () => { try { localStorage.setItem(KEY, JSON.stringify(doc)); } catch (e) { /* ignore */ } };
@@ -5174,6 +5196,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <p class="hint">Girders curved or kinked in plan are checked as noncompact in positive flexure, without Appendix A6 (6.10.6.2.2). The fatigue stress range at connection plates and stiffeners includes lateral bending from the grid.</p>`, false)
       + grp('Analysis options', `${fChk('Warping torsion in the girders (flange lateral bending)', b + '.options.warping')}
         ${fChk('Bearings restrain girder twist', b + '.options.twistAtBearings')}
+        ${fChk('Deck holds the top flange (composite stages twist about the deck; lateral bending in the bottom flange)', b + '.options.deckHoldsTop')}
+        ${fChk('Web flexibility between connection plates (deck strips meet the girder through the web)', b + '.options.webFlex')}
         <div class="fields">${fNum('Element length', 'ft', b + '.options.h', 'Largest; nodes also at every cross-frame')}</div>`, false);
   }
 
@@ -5800,7 +5824,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   $('#btnSave').onclick = () => download('steel-2d-grillage-input.json', JSON.stringify(doc, null, 1), 'application/json');
   $('#fileIn').addEventListener('change', e => {
     const f = e.target.files && e.target.files[0]; if (!f) return; const rd = new FileReader();
-    rd.onload = () => { try { const d = JSON.parse(String(rd.result)); if (!(d && d.v === 1 && d.concentric && d.alignment && d.xy)) throw new Error('not a Steel 2D Grillage input file'); doc = d; if (!doc.analysis) doc.analysis = AN0(); view = null; save(); renderRail(); run(); } catch (err) { msg(['That file could not be opened: ' + err.message], []); } };
+    rd.onload = () => { try { const d = JSON.parse(String(rd.result)); if (!(d && d.v === 1 && d.concentric && d.alignment && d.xy)) throw new Error('not a Steel 2D Grillage input file'); doc = d; if (!doc.analysis) doc.analysis = AN0(); newOpts(doc); view = null; save(); renderRail(); run(); } catch (err) { msg(['That file could not be opened: ' + err.message], []); } };
     rd.readAsText(f); e.target.value = '';
   });
   $('#btnReset').onclick = () => { doc = fresh(); dxf = null; view = null; save(); renderRail(); run(); };

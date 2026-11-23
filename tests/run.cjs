@@ -256,6 +256,28 @@ guard('Steel 2D Grillage cross-frames', () => {
   is('stiffness factors: stiffer frames attract more force', mx(ff[1], 'd') > mx(ff[0], 'd'), true);
 });
 
+// ---------- Steel 2D Grillage: composite twist about the deck, web flexibility (checked against 3D shell models) ----------
+guard('Steel 2D Grillage composite twist', () => {
+  const G = load('steel-2d-grillage').G2D;
+  // semi-rigid deck strip: end springs k in series with the beam; equal end rotations bend it in double curvature (6EI/L)
+  const EI = 1000, L = 10, k = 500, K = G.braceK(L, 0, EI, 100, [k, k]).K;
+  near('strip end springs: double curvature, k-ft/rad', K[2][2] + K[2][5], 1 / (1 / k + L / (6 * EI)), 1e-9, '1 / (1/k + L/6EI)');
+  near('strip end springs: single curvature, k-ft/rad', K[2][2] - K[2][5], 1 / (1 / k + L / (2 * EI)), 1e-9, '1 / (1/k + L/2EI)');
+  near('strip end springs: rigid ends unchanged', G.braceK(L, 0, EI, 100, [Infinity, Infinity]).K[2][2], 4 * EI / L, 1e-3, '4EI/L');
+  const F = G.build({ mode: 'concentric', concentric: { R: 400, turn: 'L', nG: 3, spacing: 10, spans: [120], skews: [0, 0], ext: 0, crossframes: { spacing: 20 } } });
+  const A = o => ({ sections: [{ girders: '', rows: [{ L: 0, D: 54, tw: 0.5, bt: 16, tt: 1, bb: 18, tb: 1.5 }] }], deck: { ts: 8, wear: 0, haunch: 3, hw: 16, fc: 4, wc: 0.15, ohL: 3.5, ohR: 3.5, sip: 0, strips: true },
+    loads: { steelExtra: 0, xfWeight: 0, dc2: [{ name: 'L', w: 0.5, to: 'left', at: 0.75 }], dw: 0, dwEdge: 1 },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: 44, e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true }, options: Object.assign({ warping: true, h: 2.5 }, o) });
+  const R1 = G.analyze(F, A({})), R0 = G.analyze(F, A({ deckHoldsTop: false, webFlex: false }));
+  const t1 = G.girderTable(R1, 'G1', 'dc2'), s1 = G.girderTable(R1, 'G1', 'steel');
+  is('deck holds the top flange: no top flange lateral bending once composite', t1.every(r => r.flt === 0) && s1.some(r => r.flt > 0), true);
+  const sec = R1.S.at('G1', 60), mx = (R, st) => Math.max(...G.girderTable(R, 'G1', st).map(r => Math.abs(r.Ml)));
+  is('deck holds the top flange: more bottom flange lateral bending (Cw = Iyb h^2)', mx(R1, 'dc2') > 1.2 * mx(R0, 'dc2'), true);
+  near('composite warping constant, in^6', sec.Iyb * sec.h ** 2, 1.5 * 18 ** 3 / 12 * (54 + 1.25) ** 2, 1, 'bottom flange Iy x h^2');
+  const C = G.refinements(F, A({}), R1).cf, dmax = R => Math.max(...G.frameForces(R, ['dc2'], C).map(x => x.d));
+  is('web flexibility: deck strips take less, cross-frame diagonals more (composite stage)', dmax(R1) > 1.1 * dmax(R0), true);
+});
+
 // ---------- Steel 2D Grillage: flared deck (phase 6) ----------
 // three girders spreading from 20 ft to 30 ft out to out over a 100 ft simple span: the roadway follows the deck
 guard('Steel 2D Grillage flared roadway', () => {
