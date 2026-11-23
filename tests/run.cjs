@@ -278,6 +278,23 @@ guard('Steel 2D Grillage live load', () => {
   const rx = L.out.filter(r => r.kind === 'R');
   near('E4 live load: reactions symmetric about span 2 (G4 abutments), kip', rx.find(r => r.g === 'G4' && r.support === 'Abut 1').max - rx.find(r => r.g === 'G4' && r.support === 'Abut 2').max, 0, 1);
   near('E4 G1 LL+I end shear, kip', L.out.filter(r => r.kind === 'V' && r.g === 'G1')[0].max, 109, 0.06 * 109, 'E4 Table 1: 109');
+
+  // phase 5: G4 through the Steel Line Girder check engine, with the grid's forces. Example 4 checks G4 by its own 3D
+  // analysis (stiffeners at 82 in., (ADTT)SL 1,000), so the ratios agree to a few hundredths, not exactly
+  const ctx = load('steel-2d-grillage'), LG = ctx.LGCheck, gm = G.girderModel(R, L, 'G4', { adtt: 1000, lanes: 1, do: 82 });
+  is('checks: the grillage page carries the Steel Line Girder engine unchanged', (() => {
+    const blk = f => [...fs.readFileSync(path.join(ROOT, 'site', f, 'index.html'), 'utf8').matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map(m => m[1]).filter(b => b.includes('root.LGCheck = api'));
+    const a = blk('steel-line-girder'), b = blk('steel-2d-grillage'); return a.length === 1 && b.length === 1 && a[0] === b[0]; })(), true);
+  is('checks: E4 G4 is curved (6.10.6.2.2)', gm.m.options.curved, true);
+  const r = LG.run(gm.m), S1 = gm.m.spans[0], top = (f) => r.checks.filter(f).reduce((a, c) => (!a || c.ratio > a.ratio ? c : a), null);
+  const pos = top(c => c.lim === 'Strength I' && c.what === 'Positive moment, bottom flange (+LL)' && c.x > 0.3 * S1 && c.x < 0.5 * S1);
+  is('checks: E4 G4-1 positive flexure is noncompact (fbu + fℓ/3 ≤ RhFyt)', /fbu \+ fℓ\/3/.test(pos.note), true);
+  near('checks: E4 G4-1 Strength I bottom flange ratio', pos.ratio, 0.953, 0.07, 'E4 8.1: 0.953');
+  const fat = top(c => c.lim === 'Fatigue I' && c.what === 'Cross-frame connection plate weld toe, bottom flange' && c.x > 0.3 * S1 && c.x < 0.6 * S1);
+  is('checks: fatigue at the connection plate includes lateral bending', /with lateral bending/.test(fat.note), true);
+  near('checks: E4 G4-1 Fatigue I connection plate ratio', fat.ratio, 0.990, 0.07, 'E4 8.1: 1.75(5.86 + 0.93)/12.0 = 0.990');
+  const neg = top(c => c.lim === 'Strength I' && /^Negative moment, bottom flange/.test(c.what) && Math.abs(c.x - S1) < 0.6);
+  near('checks: E4 G4-2 Strength I bottom flange ratio at the pier', neg.ratio, 0.92, 0.12, 'E4 8.2: 0.92 to 0.95');
 });
 
 console.log('\n' + pass + ' passed, ' + fail + ' failed');

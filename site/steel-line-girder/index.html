@@ -1348,6 +1348,24 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
   // shared model set-up: mesh, section properties, dead loads, influence-line grid
+  // ---- external forces (m.ext) from a system analysis: values along the girder, x from its first support (ft).
+  // Samples may repeat an x (left value, then right value) where the shear jumps
+  function extAt(xs, vs, s, side) {
+    const n = xs.length; if (!n) return 0;
+    // at the ends: the left value of the first x or the right value of the last, unless asked for the inside one
+    if (s <= xs[0] + 1e-6) { let k = 0; if (side === 'r') while (k + 1 < n && Math.abs(xs[k + 1] - xs[0]) < 1e-6) k++; return vs[k]; }
+    if (s >= xs[n - 1] - 1e-6) { let k = n - 1; if (side !== 'r') while (k > 0 && Math.abs(xs[k - 1] - xs[n - 1]) < 1e-6) k--; return vs[k]; }
+    let lo = 0, hi = n - 1; while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (xs[mid] < s) lo = mid; else hi = mid; }
+    // at a sample x: the first of equal xs from the left, the last from the right
+    if (Math.abs(xs[hi] - s) < 1e-6) { let k = hi; if (side === 'r') while (k + 1 < n && Math.abs(xs[k + 1] - s) < 1e-6) k++; return vs[k]; }
+    const f = (s - xs[lo]) / ((xs[hi] - xs[lo]) || 1); return vs[lo] * (1 - f) + vs[hi] * f;
+  }
+  function applyExtDL(E, x, A) {
+    const st = { dc1: ['dc1M', 'dc1V'], dc2: ['dc2M', 'dc2V'], dw: ['dwM', 'dwV'] };
+    Object.keys(st).forEach(k => { const [mk, vk] = st[k], o = A[k];
+      for (let i = 0; i < x.length; i++) { o.M[i] = extAt(E.x, E[mk], x[i], 'l'); o.Vl[i] = extAt(E.x, E[vk], x[i], 'l'); o.Vr[i] = extAt(E.x, E[vk], x[i], 'r'); } });
+    for (let i = 0; i < x.length; i++) A.uni.M[i] = extAt(E.x, E.signM || E.dc1M, x[i], 'l');
+  }
   function prepare(m, ed, opt) {
     const t0 = Date.now();
     const eta = m.code && +m.code.eta > 0 ? +m.code.eta : 1;
@@ -1410,6 +1428,9 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const uni = deadLoad(x, eSec.map(() => 1), shn, supX);
     const cl = +((m.construction || {}).cl) || 0;
     const clr = cl ? deadLoad(x, eSec.map(() => cl), sh1, supX) : null;
+    // forces from a system analysis (m.ext, e.g. Steel 2D Grillage): the dead-load stages replace this line analysis,
+    // and the negative-moment regions follow the external DC1 moment
+    if (m.ext && m.ext.dl) applyExtDL(m.ext.dl, x, { dc1, dc2, dw, uni });
 
     let h = 0.25; while (Ltot / h > 2400) h *= 2;
     const ng = Math.floor(Ltot / h + 1e-9) + 1;
@@ -1460,18 +1481,30 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       for (let e = 0; e < ne; e++) { const a = Math.max(x[e], supX[si]), b = Math.min(x[e + 1], supX[si + 1]); if (b > a) { const P = props[eSec[e]]; sum += deck.n * (P.s.I + P.s.A * P.eg ** 2) * (b - a); } }
       return sum / L;
     });
+    const EL = m.ext && m.ext.ll ? m.ext.ll : null, EF = m.ext && m.ext.fl ? m.ext.fl : null;
     for (let i = 0; i < nn; i++) {
       const s = x[i];
-      const { IMl, IVl, IVr } = influenceAt(ctx, s);
       const neg = uni.M[i] < -1e-9;
       const si = spanOf(s), frac = (s - supX[si]) / spans[si];
-      const Lm = llEnv(IMl, neg, si, false);
-      const Lvl = i > 0 ? llEnv(IVl, false, si, true) : { max: 0, min: 0 };
-      const Lvr = i < nn - 1 ? llEnv(IVr, false, si, true) : { max: 0, min: 0 };
       const hasF = adttSL > 0;
-      const Fm = hasF ? vehEnvelope(IMl, h, 'fatigue', IMf) : NONE;
-      const Fvl = hasF && i > 0 ? vehEnvelope(IVl, h, 'fatigue', IMf) : { max: 0, min: 0 };
-      const Fvr = hasF && i < nn - 1 ? vehEnvelope(IVr, h, 'fatigue', IMf) : { max: 0, min: 0 };
+      let Lm, Lvl, Lvr, Fm, Fvl, Fvr;
+      if (EL) { // external live load: already per girder, with dynamic load allowance and multiple presence
+        const at = (k, side) => extAt(EL.x, EL[k], s, side || 'l');
+        Lm = { max: at('Mmax'), min: at('Mmin'), maxCfg: 'system analysis', minCfg: 'system analysis' };
+        Lvl = i > 0 ? { max: at('Vmax', 'l'), min: at('Vmin', 'l') } : { max: 0, min: 0 };
+        Lvr = i < nn - 1 ? { max: at('Vmax', 'r'), min: at('Vmin', 'r') } : { max: 0, min: 0 };
+        Fm = hasF ? { max: at('FMmax'), min: at('FMmin') } : NONE;
+        Fvl = hasF && i > 0 ? { max: at('FVmax', 'l'), min: at('FVmin', 'l') } : { max: 0, min: 0 };
+        Fvr = hasF && i < nn - 1 ? { max: at('FVmax', 'r'), min: at('FVmin', 'r') } : { max: 0, min: 0 };
+      } else {
+        const { IMl, IVl, IVr } = influenceAt(ctx, s);
+        Lm = llEnv(IMl, neg, si, false);
+        Lvl = i > 0 ? llEnv(IVl, false, si, true) : { max: 0, min: 0 };
+        Lvr = i < nn - 1 ? llEnv(IVr, false, si, true) : { max: 0, min: 0 };
+        Fm = hasF ? vehEnvelope(IMl, h, 'fatigue', IMf) : NONE;
+        Fvl = hasF && i > 0 ? vehEnvelope(IVl, h, 'fatigue', IMf) : { max: 0, min: 0 };
+        Fvr = hasF && i < nn - 1 ? vehEnvelope(IVr, h, 'fatigue', IMf) : { max: 0, min: 0 };
+      }
 
       const adj = []; if (i > 0) adj.push(eSec[i - 1]); if (i < ne && !adj.includes(eSec[i])) adj.push(eSec[i]);
       let Ldf = spans[si];
@@ -1493,6 +1526,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         if (dfT.VF && dfT.VF.length === dfT.x.length && !(+fat.dfV > 0)) DFvF = dfT.VF[k];
       }
       if (llc.kind === 'ped' || llc.kind === 'H') { DFm = 1; DFv = 1; } // envelope is already per girder
+      if (EL) { DFm = 1; DFv = 1; DFmF = 1; DFvF = 1; } // system analysis: forces are per girder
       else if (llc.kind === 'permit' && llc.single) { DFm = DFmF; DFv = DFvF; } // MBE 6A.4.5.4.2b: one lane, multiple presence removed
       // stress cycles per truck passage (Table 6.6.1.2.5-2 / -1)
       let nCyc = 1.0;
@@ -1711,7 +1745,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // ---- flange lateral bending (6.10.1.6): user values and deck-overhang bracket loads (C6.10.3.4.1)
     const flc = m.flb || {};
     const flOn = flc.on === true;
-    const flUser = { str: flOn ? +flc.str || 0 : 0, svc: flOn ? +flc.svc || 0 : 0, conTop: flOn ? +flc.conTop || 0 : 0, conBot: flOn ? +flc.conBot || 0 : 0 };
+    // horizontally curved or kinked girders (6.10.6.2.2): composite sections in positive flexure are noncompact
+    const curved = !!(m.options && m.options.curved);
+    const flUser0 = { str: flOn ? +flc.str || 0 : 0, svc: flOn ? +flc.svc || 0 : 0, conTop: flOn ? +flc.conTop || 0 : 0, conBot: flOn ? +flc.conBot || 0 : 0 };
+    // per point from a system analysis (m.ext.fl: segments [x0, x1] with the largest fℓ in each, ksi), else the entered values
+    const flAt = s => { if (!EF) return flUser0; const k = EF.x0.findIndex((a, j) => s >= a - 1e-6 && s <= EF.x1[j] + 1e-6); return k < 0 ? flUser0 : { str: EF.str[k], svc: EF.svc[k], conTop: EF.conTop[k], conBot: EF.conBot[k], MlFat: EF.MlFat ? EF.MlFat[k] : 0 }; };
     const lbAtNode = i => Math.max(0, ...segOf(i).map(sg => sg.Lb)); // in.
     function bracketFl(i, P, comboA) {
       if (!flOn || !flc.bracket) return { top: 0, bot: 0, Ml: 0 };
@@ -1784,6 +1822,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     pois.forEach(p => {
       p.checks = [];
       const i = p.i;
+      const flUser = flAt(p.x);
       for (const id of p.secs) {
         const P = props[id], g = P.g, sec = secById[id], S = strengthSec(P), SV = serviceSec(P);
         // ======== Strength I flexure: positive and negative LL cases
@@ -1794,7 +1833,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           const Mu = sgn * strengthDemand(Mcomp, sgn * LL);
           if (Mu >= 0) {
             // positive flexure (6.10.7)
-            if (P.compact) {
+            if (P.compact && !curved) {
               let Mn = P.pl.Dp <= 0.1 * P.pl.Dt ? P.pl.Mp : P.pl.Mp * (1.07 - 0.7 * P.pl.Dp / P.pl.Dt);
               const MD1 = eta * gp(p.MDC1, 1.25, 0.9) * p.MDC1, MD2 = eta * (gp(p.MDC2, 1.25, 0.9) * p.MDC2 + gp(p.MDW, 1.5, 0.65) * p.MDW);
               const MADt = P.sn.Stop * (P.F.t - Math.abs(MD1 * 12 / P.s.Stop) - Math.abs(MD2 * 12 / P.s3n.Stop)) / 12;
@@ -1824,7 +1863,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           } else {
             // negative flexure (6.10.8 or A6)
             const MD1 = eta * gp(-p.MDC1, 1.25, 0.9) * p.MDC1, MD2 = eta * (gp(-p.MDC2, 1.25, 0.9) * p.MDC2 + gp(-p.MDW, 1.5, 0.65) * p.MDW);
-            const useA6 = m.options.appendixA6 !== false && P.a6ok;
+            const useA6 = m.options.appendixA6 !== false && P.a6ok && !curved; // 6.10.6.2.3: Appendix A6 for straight bridges only
             if (useA6) {
               const A = a6Props(ed, P, MD1, MD2);
               let best = null;
@@ -1944,8 +1983,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
           details.push({ name: sec.type === 'rolled' ? 'Rolled-beam base metal' : 'Flange-to-web fillet weld', cat: baseCat, flanges: ['top', 'bottom'], face: sec.type === 'rolled' ? 'outer' : 'inner' });
           if (fat.studs !== false) details.push({ name: 'Shear stud weld', cat: fat.studCat || 'C', flanges: ['top'], face: 'outer' });
           const xr = +p.x.toFixed(3), nearStiff = [...stiffX].some(v => Math.abs(v - p.x) < 0.0105);
-          if (braceX.has(xr)) details.push({ name: 'Cross-frame connection plate weld toe', cat: fat.stiffCat || "C'", flanges: ['top', 'bottom'], face: 'inner' });
-          else if (nearStiff) details.push({ name: 'Intermediate stiffener weld toe', cat: fat.stiffCat || "C'", flanges: ['top', 'bottom'], face: 'stiffener' });
+          if (braceX.has(xr)) details.push({ name: 'Cross-frame connection plate weld toe', cat: fat.stiffCat || "C'", flanges: ['top', 'bottom'], face: 'inner', plate: true });
+          else if (nearStiff) details.push({ name: 'Intermediate stiffener weld toe', cat: fat.stiffCat || "C'", flanges: ['top', 'bottom'], face: 'stiffener', plate: true });
           if (Fsplice.has(xr) && sec.type !== 'rolled') details.push({ name: 'Flange butt-weld splice', cat: fat.spliceCat || 'B', flanges: ['top', 'bottom'], face: 'outer' });
           // stress (tension +) at height y above the bottom of steel for moment M on section q
           const fAt = (M, q, y) => M * 12 * (q.yb - y) / q.I;
@@ -1959,7 +1998,16 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
               if (fdF > 0) { y = fl === 'top' ? y - 4 * g.tw : y + 4 * g.tw; where = 'web weld termination, 4tw from the ' + fl + ' flange (stiffener cut short of a tension flange)'; }
               else where = 'flange face at the web (stiffener welded to the compression flange)';
             }
-            const df = Math.abs(fAt(p.FMpos, P.sn, y) - fAt(p.FMneg, P.sn, y));
+            let df = Math.abs(fAt(p.FMpos, P.sn, y) - fAt(p.FMneg, P.sn, y));
+            // curved girders: flange lateral bending stress range at the detail (m.ext.fl.MlFat, kip-in., from the
+            // system analysis): none at the web, at the edge of a connection plate or stiffener, at the flange tip otherwise
+            let dfl = 0;
+            const flR = flAt(p.x);
+            if (flR.MlFat && fl === 'bottom') {
+              const b = g.bb, t = g.tb, xd = dt.plate ? Math.min(b / 2, g.tw / 2 + (+((m.ext && m.ext.fl && m.ext.fl.plateW) || 7))) : dt.face === 'inner' ? 0 : b / 2;
+              dfl = flR.MlFat * xd / (t * b ** 3 / 12);
+            }
+            df += dfl;
             if (df < 1e-6) return;
             const fd = fAt(p.MDC1, P.s, y) + fAt(p.MDC2 + p.MDW, P.s3n, y);
             const fLLt = Math.max(fAt(p.FMpos, P.sn, y), fAt(p.FMneg, P.sn, y), 0);
@@ -1968,7 +2016,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
             const skip = fd < 0 && -fd >= 2 * fLLt;
             push(p, { lim: R.combo, cat: 'fatigue', sec: id, what: dt.name + ', ' + fl + ' flange', art: '6.6.1.2', unit: 'ksi', demand: R.gamma * df, cap: R.dFn, ratio: skip ? 0 : R.gamma * df / R.dFn,
               calc: { t: 'fatigue', cat: dt.cat, A: (FAT[dt.cat] || FAT.C)[0], TH: (FAT[dt.cat] || FAT.C)[1], gamma: R.gamma, df, dFn: R.dFn, N: R.N, n: p.nCyc, adtt: adttSL, combo: R.combo, Mmax: p.FMpos, Mmin: p.FMneg, y, S: P.sn },
-              note: 'Category ' + dt.cat + ', stress at the ' + where + ', n = ' + p.nCyc + ', (ADTT)SL = ' + adttSL.toFixed(0) + (skip ? ', not checked: permanent compression ≥ 2× LL tension' : '') + (R.combo === 'Fatigue II' ? ', N = ' + R.N.toExponential(2) : ', infinite life') });
+              note: 'Category ' + dt.cat + ', stress at the ' + where + (dfl > 0 ? ', with lateral bending ' + dfl.toFixed(2) + ' ksi' : '') + ', n = ' + p.nCyc + ', (ADTT)SL = ' + adttSL.toFixed(0) + (skip ? ', not checked: permanent compression ≥ 2× LL tension' : '') + (R.combo === 'Fatigue II' ? ', N = ' + R.N.toExponential(2) : ', infinite life') });
           }));
           // special fatigue requirement for webs (6.10.5.3): stiffened interior panels only
           if (sc.type === 'stiffened interior') {
@@ -2019,6 +2067,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         st.maxDeck = { v: 0, x: null };
         pois.forEach(p => {
           const i = p.i;
+          const flUser = flAt(p.x);
           const seen = new Set();
           st.nodes[i].forEach(c => {
             const key = c.sec + '|' + c.comp; if (seen.has(key)) return; seen.add(key);
