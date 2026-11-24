@@ -491,7 +491,11 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
   // ---------- HL-93 parts, one lane (static vehicle and lane separately so that impact applies to the vehicle only) ----------
   function scanFS(IL, wts, offs, cb) { const ng = IL.length, n = ng + offs[offs.length - 1]; for (let i = 0; i < n; i++) { let sp = 0, sn = 0; for (let a = 0; a < wts.length; a++) { const j = i - offs[a]; if (j >= 0 && j < ng) { const v = wts[a] * IL[j]; if (v > 0) sp += v; else sn += v; } } cb(sp, sn, i); } }
   function scanF(IL, wts, offs) { const ng = IL.length, n = ng + offs[offs.length - 1], f = new Float64Array(n); for (let i = 0; i < n; i++) { let s = 0; for (let a = 0; a < wts.length; a++) { const j = i - offs[a]; if (j >= 0 && j < ng) s += wts[a] * IL[j]; } f[i] = s; } return f; }
-  function hl93Parts(IL, h, dual) {
+  // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11, Figure 5.11.1): axles front to rear, ft from the front
+  const IL120 = { w: [12, 24, 24, 20, 20, 20], o: [0, 10, 14, 36, 40, 44], len: 44 };
+  const il120Runs = st => [[IL120.w, IL120.o.map(st)], [IL120.w.slice().reverse(), IL120.o.map(v => st(IL120.len - v)).reverse()]];
+  // il: the IL-120 truck is a further design vehicle with the lane, IM and the dual-truck case (HL-93 still applies)
+  function hl93Parts(IL, h, dual, il) {
     const st = v => Math.round(v / h);
     let tP = 0, tN = 0, dP = 0, dN = 0, f14f = null, f14r = null;
     for (let s2 = 14; s2 <= 30; s2 += 1) {
@@ -499,15 +503,21 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
       scanFS(IL, [32, 32, 8], [0, st(s2), st(s2 + 14)], (p, n) => { if (p > tP) tP = p; if (n < tN) tN = n; });
     }
     scanFS(IL, [25, 25], [0, st(4)], (p, n) => { if (p > dP) dP = p; if (n < dN) dN = n; });
+    let iP = 0, iN = 0; if (il) il120Runs(st).forEach(([w, o]) => scanFS(IL, w, o, (p, n) => { if (p > iP) iP = p; if (n < iN) iN = n; }));
     let lP = 0, lN = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lP += IL[j]; else lN += IL[j]; }
     lP *= 0.64 * h; lN *= 0.64 * h;
-    const out = { truckP: tP, truckN: tN, tandemP: dP, tandemN: dN, laneP: lP, laneN: lN, vehP: Math.max(tP, dP), vehN: Math.min(tN, dN), dualN: 0 };
+    const out = { truckP: tP, truckN: tN, tandemP: dP, tandemN: dN, ilP: iP, ilN: iN, laneP: lP, laneN: lN, vehP: Math.max(tP, dP, iP), vehN: Math.min(tN, dN, iN), dualN: 0, dualIL: false };
     if (dual) {
       const neg = arr => { const n = arr.length; const o = new Float64Array(n); for (let i = 0; i < n; i++) o[i] = Math.min(arr[i], 0); return o; };
       f14f = neg(scanF(IL, [8, 32, 32], [0, st(14), st(28)])); f14r = neg(scanF(IL, [32, 32, 8], [0, st(14), st(28)]));
       const sep = st(78); let dmin = 0; // second truck's front axle at least 50 ft behind the first truck's rear axle
       for (const f of [f14f, f14r]) { let pm = Infinity; for (let a = sep; a < f.length; a++) { pm = Math.min(pm, f[a - sep]); const v = f[a] + pm; if (v < dmin) dmin = v; } }
       out.dualN = dmin;
+      if (il) { // two IL-120 trucks, 50 ft from the rear axle of one to the front axle of the next
+        const sepI = st(IL120.len + 50); let dI = 0;
+        for (const [w, o] of il120Runs(st)) { const f = neg(scanF(IL, w, o)); let pm = Infinity; for (let a = sepI; a < f.length; a++) { pm = Math.min(pm, f[a - sepI]); const v = f[a] + pm; if (v < dI) dI = v; } }
+        if (dI < out.dualN) { out.dualN = dI; out.dualIL = true; }
+      }
     }
     return out;
   }
@@ -653,6 +663,7 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
     }
     const dl = { DC1: uniform(loads.DC1), DC2: uniform(loads.DC2), DW: uniform(loads.DW) }, uni1 = uniform(1);
     const dualAt = s => cont && (m.dualTruck || 'contraflexure') !== 'off' && uni1.M(s) < 0;
+    const il120 = !!m.il120; // Illinois Tollway IL-120 design truck with HL-93 (SDM 5.11)
 
     // ----- support geometry and critical sections for shear -----
     const supW = supX.map((s, k) => (k === 0 || k === supX.length - 1 ? (+m.abutFace >= 0 && m.abutFace != null ? +m.abutFace : 0) : (+m.pierHalf >= 0 && m.pierHalf != null ? +m.pierHalf : 0))); // CL to face, ft
@@ -674,7 +685,7 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
     function effects(p) {
       const st = sOf(p.x);
       p.MDC1 = dl.DC1.M(p.x); p.MDC2 = dl.DC2.M(p.x); p.MDW = dl.DW.M(p.x);
-      const il = IL(p.x, 'r'), hp = hl93Parts(il.IM, hgrid, dualAt(p.x)), fp = fatigueParts(il.IM, hgrid);
+      const il = IL(p.x, 'r'), hp = hl93Parts(il.IM, hgrid, dualAt(p.x), il120), fp = fatigueParts(il.IM, hgrid);
       p.lane = hp; p.fat = fp; p.strip = st;
       // interior strip: g × [(1 + IM) vehicle + lane]; edge beam: [0.5(1 + IM) vehicle + frac × lane] / edge width
       const eW = st.Eedge / 12;
@@ -682,6 +693,11 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
       const sN = { int: st.g * ((1 + IM) * hp.vehN + hp.laneN), edge: (0.5 * (1 + IM) * hp.vehN + st.frac * hp.laneN) / eW };
       if (hp.dualN < 0) { const dI = 0.9 * st.g * ((1 + IM) * hp.dualN + hp.laneN), dE = 0.9 * (0.5 * (1 + IM) * hp.dualN + st.frac * hp.laneN) / eW; p.dualI = dI < sN.int; p.dualE = dE < sN.edge; sN.int = Math.min(sN.int, dI); sN.edge = Math.min(sN.edge, dE); }
       p.LLn = sN;
+      // load rating stays HL-93 (Illinois Tollway SDM 5.11: HL-93 ratings are reported); without IL-120 these are the same
+      if (il120) { const hr = hl93Parts(il.IM, hgrid, dualAt(p.x), false); p.LLpR = { int: st.g * ((1 + IM) * hr.vehP + hr.laneP), edge: (0.5 * (1 + IM) * hr.vehP + st.frac * hr.laneP) / eW };
+        const rN = { int: st.g * ((1 + IM) * hr.vehN + hr.laneN), edge: (0.5 * (1 + IM) * hr.vehN + st.frac * hr.laneN) / eW };
+        if (hr.dualN < 0) { rN.int = Math.min(rN.int, 0.9 * st.g * ((1 + IM) * hr.dualN + hr.laneN)); rN.edge = Math.min(rN.edge, 0.9 * (0.5 * (1 + IM) * hr.dualN + st.frac * hr.laneN) / eW); }
+        p.LLnR = rN; } else { p.LLpR = p.LLp; p.LLnR = p.LLn; }
       p.FLp = st.gF * (1 + IMf) * fp.max; p.FLn = st.gF * (1 + IMf) * fp.min;
       const D = p.MDC1 + p.MDC2;
       ['int', 'edge'].forEach(k => { p['MuP_' + k] = gF(p.MDC1, 1.25, 0.9, 1) + gF(p.MDC2, 1.25, 0.9, 1) + gF(p.MDW, 1.5, 0.65, 1) + 1.75 * Math.max(p.LLp[k], 0); p['MuN_' + k] = gF(p.MDC1, 1.25, 0.9, -1) + gF(p.MDC2, 1.25, 0.9, -1) + gF(p.MDW, 1.5, 0.65, -1) + 1.75 * Math.min(p.LLn[k], 0); p['MsP_' + k] = D + p.MDW + Math.max(p.LLp[k], 0); p['MsN_' + k] = D + p.MDW + Math.min(p.LLn[k], 0); });
@@ -744,9 +760,10 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
     const shearPts = pts.filter(p => crit.some(c => (c.side === 'r' ? p.x > c.x + 1e-6 : p.x < c.x - 1e-6) && Math.abs(p.x - supX[c.sup]) < spans[Math.min(c.sup, spans.length - 1)] / 2 + 1e-6));
     function shearAt(x, isCrit) {
       const st = sOf(x), eWin = st.Eedge, eW = eWin / 12;
-      const il = IL(x, 'r'), hpV = hl93Parts(il.IV, hgrid, false);
+      const il = IL(x, 'r'), hpV = hl93Parts(il.IV, hgrid, false, il120);
       const VDC1 = dl.DC1.V(x, 'r'), VDC2 = dl.DC2.V(x, 'r'), VDW = dl.DW.V(x, 'r');
       const VLLp = 0.5 * (1 + IM) * hpV.vehP + st.frac * hpV.laneP, VLLn = 0.5 * (1 + IM) * hpV.vehN + st.frac * hpV.laneN; // whole edge beam
+      const hR = il120 ? hl93Parts(il.IV, hgrid, false, false) : hpV, VLLpR = 0.5 * (1 + IM) * hR.vehP + st.frac * hR.laneP, VLLnR = 0.5 * (1 + IM) * hR.vehN + st.frac * hR.laneN; // HL-93 alone, for rating
       const VuP = (gF(VDC1, 1.25, 0.9, 1) + gF(VDC2, 1.25, 0.9, 1) + gF(VDW, 1.5, 0.65, 1)) * eW + 1.75 * Math.max(VLLp, 0);
       const VuN = (gF(VDC1, 1.25, 0.9, -1) + gF(VDC2, 1.25, 0.9, -1) + gF(VDW, 1.5, 0.65, -1)) * eW + 1.75 * Math.min(VLLn, 0);
       const sgn = Math.abs(VuP) >= Math.abs(VuN) ? 1 : -1, Vu = Math.abs(sgn > 0 ? VuP : VuN);
@@ -771,7 +788,7 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
       const phiV = 0.9;
       // longitudinal reinforcement for shear (5.7.3.5): T = |Mu|/(dv φf) + (Vu/φv − 0.5Vs) cot θ ≤ As fy (developed bars)
       const VsL = Math.min(Vs, Vu / phiV), Treq = Math.abs(Mu) * 12 / (dv * F.phi) + Math.max(Vu / phiV - 0.5 * VsL, 0) * cot, Tprov = AsE * fy;
-      return { x, isCrit, eWin, AvMin, minTr, sxe, Treq, Tprov, phiF: F.phi, VDC1, VDC2, VDW, VLLp, VLLn, VuP, VuN, Vu, Mu, MuUse, face, As: AsE, ds: stl.ds, a: F.a, dv, bv, es, beta, theta, Vc, Vs, Vn, phiV, ratio: Vu / (phiV * Vn), hasAv, partial: stl.partial, st };
+      return { x, isCrit, eWin, AvMin, minTr, sxe, Treq, Tprov, phiF: F.phi, VDC1, VDC2, VDW, VLLp, VLLn, VLLpR, VLLnR, VuP, VuN, Vu, Mu, MuUse, face, As: AsE, ds: stl.ds, a: F.a, dv, bv, es, beta, theta, Vc, Vs, Vn, phiV, ratio: Vu / (phiV * Vn), hasAv, partial: stl.partial, st };
     }
     crit.forEach(c => { const q = shearAt(c.x, true); q.sup = c.sup; shear.push(q); });
     shearPts.forEach(p => { if (!shear.some(q => Math.abs(q.x - p.x) < 1e-6)) shear.push(shearAt(p.x, false)); });
@@ -819,7 +836,7 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
     const naOf = (rfv, gll, cap) => rfv > 10 && gll < 0.001 * Math.abs(cap); // display only (same rule as the girder apps)
     pts.forEach(p => {
       ['int', 'edge'].forEach(k => {
-        [['P', p.flexP, p.LLp[k], 1], ['N', p.flexN, p.LLn[k], -1]].forEach(([sg, F, LL, sign]) => {
+        [['P', p.flexP, p.LLpR[k], 1], ['N', p.flexN, p.LLnR[k], -1]].forEach(([sg, F, LL, sign]) => {
           const ll = sign * LL; if (!(ll > 1e-9)) return;
           const noSteel = !(F.Mr > 0);
           const dead = sign * (gF(p.MDC1, 1.25, 0.9, sign) + gF(p.MDC2, 1.25, 0.9, sign) + gF(p.MDW, gDW, 0.65, sign));
@@ -830,7 +847,7 @@ footer{max-width:1500px;margin:24px auto 0;color:var(--muted);font-size:12px}
       });
     });
     shear.forEach(q => [1, -1].forEach(sgn => {
-      const ll = sgn * (sgn > 0 ? q.VLLp : q.VLLn); if (!(ll > 1e-9)) return;
+      const ll = sgn * (sgn > 0 ? q.VLLpR : q.VLLnR); if (!(ll > 1e-9)) return;
       const eW = q.eWin / 12;
       const dead = sgn * (gF(q.VDC1, 1.25, 0.9, sgn) + gF(q.VDC2, 1.25, 0.9, sgn) + gF(q.VDW, gDW, 0.65, sgn)) * eW;
       const cap = Math.max(0.85, phiC) * q.phiV * q.Vn; // φs = 1.0 for shear
@@ -1255,7 +1272,7 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const hp = p.lane, st = p.strip, eW = st.Eedge / 12;
     const veh = sign > 0 ? hp.vehP : hp.vehN, lane = sign > 0 ? hp.laneP : hp.laneN, eng = sign > 0 ? p.LLp[k] : p.LLn[k];
     const dual = sign < 0 && (k === 'int' ? p.dualI : p.dualE);
-    if (veh || lane) L.push({ note: 'One lane, static: ' + (dual ? 'two trucks ' + sg(hp.dualN) : (sign > 0 ? (hp.truckP >= hp.tandemP ? 'truck ' : 'tandem ') : (hp.truckN <= hp.tandemN ? 'truck ' : 'tandem ')) + sg(veh)) + ' k-ft, lane ' + sg(lane) + ' k-ft (influence-line analysis)' });
+    if (veh || lane) L.push({ note: 'One lane, static: ' + (dual ? (hp.dualIL ? 'two IL-120 trucks ' : 'two trucks ') + sg(hp.dualN) : (veh === (sign > 0 ? hp.ilP : hp.ilN) && veh !== (sign > 0 ? hp.truckP : hp.truckN) ? 'IL-120 truck ' : sign > 0 ? (hp.truckP >= hp.tandemP ? 'truck ' : 'tandem ') : (hp.truckN <= hp.tandemN ? 'truck ' : 'tandem ')) + sg(veh)) + ' k-ft, lane ' + sg(lane) + ' k-ft (influence-line analysis)' });
     let v;
     if (k === 'int') {
       if (dual) { v = 0.9 * st.g * ((1 + IM) * hp.dualN + lane); L.push({ lhs: 'M_{LL+IM}', expr: '0.9g[(1 + IM)M_{2 trucks} + M_{lane}]', sub: '0.9 × ' + fn(st.g, 4) + '[1.33' + ng(hp.dualN) + ' + ' + ng(lane) + ']', res: fn(v, 2), unit: 'k-ft/ft', ref: '3.6.1.3.1' }); }
@@ -1704,8 +1721,8 @@ function renderRail() {
       ${fld('Reinforcement', 'rebar', { options: [['A706', 'A706 Grade 60 (γ3 = 0.75)'], ['A615', 'A615 Grade 60 (γ3 = 0.67)']] })}${fld('Bar coating', 'coating', { options: [['epoxy', 'Epoxy coated'], ['none', 'Uncoated'], ['galv', 'Galvanized']] })}
       ${fld('Development length by', 'devEdition', { options: [['10', 'LRFD 10th (2024)'], ['9', 'LRFD 9th (2020)'], ['8', 'LRFD 8th (2017)']] })}${fld('Crack exposure γe', 'gammaE', { step: 0.05 })}</div>`) +
     g('Loads', `<div class="fields">${fld('Parapets, number', 'parapet.n', { step: 1 })}${fld('Parapet weight, k/ft each', 'parapet.w', { step: 0.01 })}${fld('Parapet base width, in.', 'parapet.base', { step: 0.5 })}${fld('Future wearing surface, psf', 'fws', { step: 5 })}
-      ${fld('Added DC1, ksf', 'dc1x', { step: 0.005 })}${fld('Added DC2, ksf', 'dc2x', { step: 0.005 })}${fld('Added DW, ksf', 'dwx', { step: 0.005 })}${fld('90% dual truck', 'dualTruck', { options: [['contraflexure', 'Between contraflexure points'], ['off', 'Not applied']] })}</div>
-      <p class="hint">Parapet weight is spread over the out-to-out width as DC2 (DG 3.2.11). Live load per lane is HL-93 with IM 33% on the truck or tandem only.</p>`) +
+      ${fld('Added DC1, ksf', 'dc1x', { step: 0.005 })}${fld('Added DC2, ksf', 'dc2x', { step: 0.005 })}${fld('Added DW, ksf', 'dwx', { step: 0.005 })}${fld('90% dual truck', 'dualTruck', { options: [['contraflexure', 'Between contraflexure points'], ['off', 'Not applied']] })}${fld('Design truck', 'il120', { options: [['', 'HL-93'], ['1', 'HL-93 and Illinois Tollway IL-120']] })}</div>
+      <p class="hint">Parapet weight is spread over the out-to-out width as DC2 (DG 3.2.11). Live load per lane is HL-93 with IM 33% on the truck or tandem only. The Illinois Tollway IL-120 truck (Structure Design Manual 5.11: 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft) is added as a further design truck with the lane, IM and the 90% two-truck case; the larger effect governs.</p>`) +
     g('Reinforcement', `<div class="fields">${fld('Bottom clear cover, in.', 'coverBot', { step: 0.25 })}${fld('Top clear cover, in.', 'coverTop', { step: 0.25 })}</div>
       <h3>Bottom longitudinal</h3>${zoneTable('bot')}<h3>Top longitudinal</h3>${zoneTable('top')}
       <p class="hint">Zones that overlap add. Bars ending inside the slab are developed linearly over ℓ<sub>d</sub>; bars at the slab ends are taken as anchored.</p>`) +

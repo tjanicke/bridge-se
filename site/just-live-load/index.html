@@ -568,6 +568,9 @@ const ConsysEngine = (() => {
     return sense === 'max' ? (x1 - s.x) : (s.x - x0);
   }
 
+  /* Illinois Tollway IL-120 design truck (Structure Design Manual Figure 5.11.1), 6 ft gauge */
+  const IL120 = { w: [12, 24, 24, 20, 20, 20], s: [10, 4, 22, 4, 4], len: 44 };
+
   /* ---------------- Full analysis ---------------- */
   function analyze(inp) {
     const t0 = Date.now();
@@ -595,6 +598,10 @@ const ConsysEngine = (() => {
       const h = o.hl93, IM = num(h.im, 33) / 100, w = num(h.lane, 0.64);
       const dfM = num(h.dfM, 1), dfV = num(h.dfV, 1);
       const TD = runVehicle(m, { weights: [25, 25], spacings: [4], varIndex: -1 }, { step, neglect: neglectDesign });
+      // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11): 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft,
+      // applied like the design truck (with the design lane, IM, and two trucks at 90% for negative moment and interior
+      // reactions); the HL-93 truck and tandem still apply, and the governing effect is taken
+      const IL = h.il120 ? runVehicle(m, { weights: IL120.w, spacings: IL120.s, varIndex: -1 }, { step, neglect: neglectDesign, record: dualIdx }) : null;
       const dualOn = nsp > 1 && h.dual !== 'off';
       const fam = { id: 'hl93', name: 'HL-93', code: 'AASHTO LRFD', max: new Float64Array(nr), min: new Float64Array(nr), detail: [] };
       const dqIndex = new Map(dualIdx.map((r, q) => [r, q]));
@@ -607,7 +614,12 @@ const ConsysEngine = (() => {
         let mxInfo = T.maxInfo[r], mnInfo = T.minInfo[r];
         if (td.max > mx) { mx = td.max; mxC = 'Tandem + Lane'; mxInfo = TD.maxInfo[r]; }
         if (td.min < mn) { mn = td.min; mnC = 'Tandem + Lane'; mnInfo = TD.minInfo[r]; }
-        const d = { truckMax: T.max[r], truckMin: T.min[r], tandemMax: TD.max[r], tandemMin: TD.min[r], laneP, laneN, IM, mxInfo, mnInfo, dualMin: null, dualMax: null };
+        if (IL) {
+          const a = IL.max[r] * (1 + IM) + laneP, b = IL.min[r] * (1 + IM) + laneN;
+          if (a > mx) { mx = a; mxC = 'IL-120 + Lane'; mxInfo = IL.maxInfo[r]; }
+          if (b < mn) { mn = b; mnC = 'IL-120 + Lane'; mnInfo = IL.minInfo[r]; }
+        }
+        const d = { truckMax: T.max[r], truckMin: T.min[r], tandemMax: TD.max[r], tandemMin: TD.min[r], ilMax: IL ? IL.max[r] : null, ilMin: IL ? IL.min[r] : null, laneP, laneN, IM, mxInfo, mnInfo, dualMin: null, dualMax: null };
         if (dualOn && dqIndex.has(r)) {
           const qi = dqIndex.get(r);
           if (q.type === 'M') {
@@ -617,12 +629,16 @@ const ConsysEngine = (() => {
               const v = 0.9 * (dc.val * (1 + IM) + laneN);
               d.dualMin = dc.val; d.dualInfo = dc.info;
               if (v < mn) { mn = v; mnC = '90% (Dual Truck + Lane)'; d.mnInfo = null; }
+              if (IL) { const di = dualCombine(IL.rec, qi, IL120.len, 50, 'min'), vi = 0.9 * (di.val * (1 + IM) + laneN);
+                d.dualIlMin = di.val; if (vi < mn) { mn = vi; mnC = '90% (Dual IL-120 + Lane)'; d.mnInfo = null; d.dualInfo = di.info; } }
             }
           } else if (q.type === 'R') {
             const dc = dualCombine(T.rec, qi, 28, 50, 'max');
             const v = 0.9 * (dc.val * (1 + IM) + laneP);
             d.dualMax = dc.val; d.dualInfo = dc.info;
             if (v > mx) { mx = v; mxC = '90% (Dual Truck + Lane)'; d.mxInfo = null; }
+            if (IL) { const di = dualCombine(IL.rec, qi, IL120.len, 50, 'max'), vi = 0.9 * (di.val * (1 + IM) + laneP);
+              d.dualIlMax = di.val; if (vi > mx) { mx = vi; mxC = '90% (Dual IL-120 + Lane)'; d.mxInfo = null; d.dualInfo = di.info; } }
           }
         }
         fam.max[r] = mx * df; fam.min[r] = mn * df; d.ctrlMax = mxC; d.ctrlMin = mnC; d.df = df;
@@ -815,7 +831,7 @@ const DEFAULT = () => ({
     {len:68,E:29000,I1:50000,I2:''},{len:32,E:29000,I1:90000,I2:''},{len:64,E:29000,I1:50000,I2:''}],
   divisions:10, segPts:true, extraPts:'',
   options:{ step:0.5, varInc:1, neglectDesign:true, neglectPermit:false,
-    hl93:{ on:true, im:33, lane:0.64, dual:'spec', fatigue:false, imFat:15, dfM:1, dfV:1 },
+    hl93:{ on:true, im:33, lane:0.64, dual:'spec', il120:false, fatigue:false, imFat:15, dfM:1, dfV:1 },
     hs:{ on:true, scale:1, impact:'', military:false, dfM:1, dfV:1, truckOn:true, laneOn:true, laneW:0.64, lanePM:18, lanePV:26, lane2nd:true, governing:false },
     legal:LEGAL_DEF(),
     permits:[ newPermit('type3s2') ] }
@@ -889,10 +905,12 @@ function renderInputs() {
         <option value="off" ${o.hl93.dual === 'off' ? 'selected' : ''}>Off</option></select>`, 'full')}
       ${fld('Distribution factor, moment', inp('options.hl93.dfM', 'n', 'number', 'step="any"'))}
       ${fld('Distribution factor, shear/reaction', inp('options.hl93.dfV', 'n', 'number', 'step="any"'))}
+      <div class="fld">${chk('options.hl93.il120', 'Illinois Tollway IL-120 truck')}</div>
       <div class="fld">${chk('options.hl93.fatigue', 'Fatigue truck')}</div>
       ${fld('Fatigue IM (%)', inp('options.hl93.imFat', 'n', 'number', 'step="any"'))}
     </div>
     <div class="hint df">${DF_NOTE} The fatigue truck uses the same factors.</div>
+    <div class="hint">IL-120 (Illinois Tollway Structure Design Manual 5.11): 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft, run like the design truck with the design lane, IM and the 90% two-truck case. The HL-93 truck and tandem still apply; the larger effect governs. Not used for fatigue.</div>
   </fieldset>
   <fieldset><legend><span class="swatch" style="background:var(--c-hs)"></span>AASHTO Standard (LFD) HS <span class="sp"></span><label class="sw chk"><input type="checkbox" data-path="options.hs.on" ${o.hs.on ? 'checked' : ''}> On</label></legend>
     <div class="row">
@@ -1117,6 +1135,7 @@ function notesItems() {
       <li>Influence lines are exact for the discretized beam: a point load anywhere in an element is applied through Hermite equivalent nodal loads; moments and shears follow from statics on the support reactions.</li>
       <li>Vehicles run both directions in ${f2(+S.options.step || 0.5)} ft steps, plus every position that puts an axle on an analysis point or support. Variable axle spacing is searched from 14 to 30 ft in ${f2(+S.options.varInc || 1)} ft increments.</li>
       <li><b>HL-93</b> (LRFD 3.6.1.2–3.6.1.3): max of truck + lane and tandem + lane; IM applies to truck and tandem only. 90% of two design trucks (14 ft rear spacing, ≥ 50 ft between them) plus 90% lane for negative moment ${S.options.hl93.dual === 'all' ? 'at all points' : 'between points of contraflexure under uniform load'} and for interior-support reactions. Lane load is placed on the adverse portions of the influence line.</li>
+      <li><b>Illinois Tollway IL-120</b> (Structure Design Manual 5.11, when chosen under HL-93): the IL-120 design truck (12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft) replaces the design truck as an added case: IL-120 + lane with IM, and 90% of two IL-120 trucks (≥ 50 ft apart) plus 90% lane where the dual truck applies. The HL-93 truck and tandem still apply and the governing effect is reported. Not used for fatigue.</li>
       <li><b>HS loading</b> (Standard Spec 3.7, 3.11): reported as separate envelopes. <b>Truck</b> is the HS truck with 14–30 ft variable rear spacing (and Alternate Military Loading if checked). <b>Lane</b> is the uniform load on the matching-sign portions of the influence line plus the concentrated load (moment value for moments, shear value for shears and reactions) at the peak ordinate; for negative moment on continuous spans a second concentrated load is placed in another span. <b>Governing</b> is the larger of the two at each point. Impact I = 50/(L + 125) ≤ 30% applies to both. L = span for +M, average of the span and its nearer neighbor for −M, distance to the far end of the span for shear, and average of adjacent spans for interior reactions.</li>
       <li><b>AASHTO routine commercial load effects</b> (MBE 6A.4.4.2.1a, Appendix D6A): envelope of the Type 3, Type 3S2 and Type 3-3 trucks with IM, and the lane-type model. For negative moment and interior reactions on continuous spans the lane-type model is 0.75 × two Type 3-3 trucks in the same direction with 30 ft clear between them, plus 0.2 klf on adverse portions; for spans over 200 ft it is 0.75 × one Type 3-3 plus 0.2 klf for all effects. IM applies to the trucks, not the lane. The ADTT &lt; 500 option omits the lane and uses 1.0 in place of 0.75. Negative moment is checked at every analysis point. Load effects only, not a complete legal-load rating: no rating factors are computed, and specialized hauling vehicles (SU4–SU7), emergency vehicles and state legal loads, which may also be required for rating, are not included.</li>
       <li><b>Permits</b> run as entered (all axles included unless you turn on the neglect option), with a fixed impact or the LFD formula, plus an optional lane load on adverse portions without impact, applied to all effects or to negative moment only.</li>
@@ -1166,6 +1185,7 @@ function inputSummary() {
       ['Neglect non-contributing axles', `Design trucks: ${yn(o.neglectDesign !== false)} · Permits: ${yn(!!o.neglectPermit)}${o.legal && o.legal.on ? ` · Legal: ${yn(o.legal.neglect !== false)}` : ''}`],
       ['Elements', m.nodes.length - 1]])}`;
   if (o.hl93.on) h += `<h3>AASHTO LRFD HL-93</h3>${kv([['IM', nv(o.hl93.im, 33) + '%'], ['Design lane', f2(nv(o.hl93.lane, 0.64)) + ' klf'], ['Dual truck (90%)', m.spans.length > 1 ? dualTxt : 'Not applicable (single span)'],
+      ['Illinois Tollway IL-120 truck', o.hl93.il120 ? 'Yes: 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft, with the design lane (SDM 5.11)' : 'No'],
       ['Fatigue truck', o.hl93.fatigue ? `Yes, IM ${nv(o.hl93.imFat, 15)}%` : 'No'], ['Distribution factors', dfs(o.hl93)]])}`;
   if (o.hs.on) h += `<h3>AASHTO Standard (LFD) HS${+(20 * sc).toFixed(3)}</h3>${kv([['Scale', sc], ['Impact', o.hs.impact === '' || o.hs.impact == null || !Number.isFinite(parseFloat(o.hs.impact)) ? '50/(L + 125) ≤ 30%' : parseFloat(o.hs.impact) + '% (override)'],
       ['Alternate Military Loading', yn(o.hs.military)], ['Lane', `${f2(nv(o.hs.laneW, 0.64) * sc)} klf; ${f2(nv(o.hs.lanePM, 18) * sc)} k (moment), ${f2(nv(o.hs.lanePV, 26) * sc)} k (shear, reactions)`],
@@ -1237,8 +1257,11 @@ function famCard(f, r, type, u) {
   if (f.id === 'hl93') {
     rows.push(['Truck (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`], ['Tandem (+ / −)', `${f1(d.tandemMax)} / ${f1(d.tandemMin)}`],
       ['Lane (+ / −)', `${f1(d.laneP)} / ${f1(d.laneN)}`], ['IM', pct(d.IM)]);
+    if (d.ilMax != null) rows.push(['IL-120 (+ / −)', `${f1(d.ilMax)} / ${f1(d.ilMin)}`]);
     if (d.dualMin != null) rows.push(['Dual trucks (−)', f1(d.dualMin)]);
     if (d.dualMax != null) rows.push(['Dual trucks (+)', f1(d.dualMax)]);
+    if (d.dualIlMin != null) rows.push(['Dual IL-120 (−)', f1(d.dualIlMin)]);
+    if (d.dualIlMax != null) rows.push(['Dual IL-120 (+)', f1(d.dualIlMax)]);
   } else if (f.id === 'hs') {
     rows.push(['Truck (+ / −)', `${f1(d.truckMax)} / ${f1(d.truckMin)}`]);
     if (S.options.hs.military) rows.push(['Military (+ / −)', `${f1(d.milMax)} / ${f1(d.milMin)}`]);

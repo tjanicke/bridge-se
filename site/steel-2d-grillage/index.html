@@ -534,7 +534,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     }
     return { p: fp, n: fn };
   }
-  function llEnvelope(IL, h, IM, dual) {
+  // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11, Figure 5.11.1): axles front to rear, ft from the front
+  const IL120 = { w: [12, 24, 24, 20, 20, 20], o: [0, 10, 14, 36, 40, 44], len: 44 };
+  // both directions on the grid of step h: [weights, offsets in steps]
+  const il120Runs = st => [[IL120.w, IL120.o.map(st)], [IL120.w.slice().reverse(), IL120.o.map(v => st(IL120.len - v)).reverse()]];
+  function llEnvelope(IL, h, IM, dual, il) {
     const st = v => Math.round(v / h);
     let tMax = 0, tMin = 0, cfgMax = '', cfgMin = '';
     let f14f = null, f14r = null;
@@ -552,6 +556,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       if (ft.p[i] > tMax) { tMax = ft.p[i]; cfgMax = 'Tandem'; }
       if (ft.n[i] < tMin) { tMin = ft.n[i]; cfgMin = 'Tandem'; }
     }
+    // with the IL-120 option, the IL-120 truck is a further design vehicle (with the lane, IM and the dual-truck case)
+    const fil = il ? il120Runs(st).map(([w, o]) => movingFS(IL, w, o)) : [];
+    fil.forEach(f => { for (let i = 0; i < f.p.length; i++) {
+      if (f.p[i] > tMax) { tMax = f.p[i]; cfgMax = 'IL-120'; }
+      if (f.n[i] < tMin) { tMin = f.n[i]; cfgMin = 'IL-120'; } } });
     let lp = 0, ln = 0;
     for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; }
     lp *= 0.64 * h; ln *= 0.64 * h;
@@ -570,6 +579,12 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       }
       const dv = 0.9 * (dmin * (1 + IM) + ln);
       if (dv < min) { min = dv; minCfg = '90% dual truck + lane'; }
+      if (il) { // two IL-120 trucks, 50 ft from the rear axle of one to the front axle of the next
+        const sepI = st(IL120.len + 50); let dI = 0;
+        for (const f of fil.map(q => q.n)) { let pm = Infinity; for (let a = sepI; a < f.length; a++) { pm = Math.min(pm, f[a - sepI]); const v = f[a] + pm; if (v < dI) dI = v; } }
+        const vI = 0.9 * (dI * (1 + IM) + ln);
+        if (vI < min) { min = vI; minCfg = '90% dual IL-120 + lane'; }
+      }
     }
     return { max, min, maxCfg, minCfg };
   }
@@ -861,7 +876,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   }
 
   // ---------- generic vehicle envelope on an influence line ----------
-  function vehEnvelope(IL, h, kind, IM, dual) {
+  function vehEnvelope(IL, h, kind, IM, dual, il) {
     const st = v => Math.round(v / h);
     let tMax = 0, tMin = 0;
     const run = (wts, offs) => { const f = movingF(IL, wts, offs); for (let i = 0; i < f.length; i++) { if (f[i] > tMax) tMax = f[i]; if (f[i] < tMin) tMin = f[i]; } return f; };
@@ -872,11 +887,12 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (kind === 'defl') { // design truck alone, or 25% truck + lane (3.6.1.3.2); non-contributing axles neglected
       const runS = (wts, offs) => { const f = movingFS(IL, wts, offs); for (let i = 0; i < f.p.length; i++) { if (f.p[i] > tMax) tMax = f.p[i]; if (f.n[i] < tMin) tMin = f.n[i]; } };
       for (let s2 = 14; s2 <= 30; s2 += 2) { runS([8, 32, 32], [0, st(14), st(14 + s2)]); runS([32, 32, 8], [0, st(s2), st(s2 + 14)]); }
+      if (il) il120Runs(st).forEach(([w, o]) => runS(w, o)); // Illinois Tollway: the IL-120 truck too (SDM 5.11)
       let lp = 0, ln = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; }
       lp *= 0.64 * h; ln *= 0.64 * h;
       return { max: Math.max(tMax * (1 + IM), 0.25 * tMax * (1 + IM) + lp), min: Math.min(tMin * (1 + IM), 0.25 * tMin * (1 + IM) + ln) };
     }
-    return llEnvelope(IL, h, IM, dual);
+    return llEnvelope(IL, h, IM, dual, il);
   }
   function dfMoment1(S, L, ts, Kg) { return 0.06 + Math.pow(S / 14, 0.4) * Math.pow(S / L, 0.3) * Math.pow(Kg / (12 * L * ts ** 3), 0.1); }
   const MPF = n => (n <= 1 ? 1.2 : n === 2 ? 1.0 : n === 3 ? 0.85 : 0.65);
@@ -903,6 +919,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   function liveOpts(m) {
     const L = m.live || {}, d = m.df || {};
     const out = { design: L.design === 'ped' ? 'ped' : 'hl93', permit: L.permit === 'include' || L.permit === 'only' ? L.permit : 'none' };
+    out.il120 = out.design === 'hl93' && !!L.il120; // Illinois Tollway IL-120 design truck with HL-93 (SDM 5.11)
     if (out.design === 'ped') {
       const p = L.ped || {}, S = +d.S || 0, ext = d.girder === 'exterior', de = +d.de || 0;
       const width = +p.width > 0 ? +p.width : (ext ? S / 2 + de : S);
@@ -1386,7 +1403,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // live load envelope at a point, per lane (HL-93, permit) or per girder (pedestrian, maintenance vehicle)
     const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
     const llEnv = (IL, neg, si, forShear) => {
-      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg, llc.il);
       const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
       const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
       if (llc.kind === 'ped' || llc.kind === 'H') {
@@ -1486,7 +1503,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       uniq.forEach((nd, k) => {
         const IL = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; } // in. downward per kip
-        const env = vehEnvelope(IL, h, 'defl', IM);
+        const env = vehEnvelope(IL, h, 'defl', IM, null, llc.il);
         const dd = env.max * dfD, si = spanOf(x[nd]);
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
@@ -2141,7 +2158,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const DF = tubDF(m), RS = tubRestrictions(m, T);
     const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
     const llEnv = (IL, neg, si, forShear) => {
-      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg, llc.il);
       const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
       const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
       if (llc.kind === 'permit') {
@@ -2208,7 +2225,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       uniq.forEach((nd, k) => {
         const IL = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; }
-        const env = vehEnvelope(IL, h, 'defl', IM);
+        const env = vehEnvelope(IL, h, 'defl', IM, null, llc.il);
         const dd = env.max * dfD, si = spanOf(x[nd]);
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
@@ -2575,9 +2592,16 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const keyAll = cs => { const n = new Map(); return cs.map(c => { const k = keyOf(c), j = n.get(k) || 0; n.set(k, j + 1); return k + '#' + j; }); };
     const keyMap = cs => { const ks = keyAll(cs); return new Map(cs.map((c, j) => [ks[j], c])); };
     const pedLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, gSv: 1.3, ped: L.ped } : null;
-    const designLL = pedLL || { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 };
+    const designLL = pedLL || { kind: 'hl93', name: L.il120 ? 'HL-93 and IL-120' : 'HL-93', gS: 1.75, gSv: 1.3, il: !!L.il120 };
     let base = null;
     if (L.permit !== 'only') base = runCase_(m, ed, ctx, designLL);
+    // with the IL-120 truck the design checks take the larger effect, but the load rating stays HL-93 (Illinois Tollway SDM 5.11)
+    if (base && designLL.il) {
+      const hr = runCase_(m, ed, ctx, { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 });
+      const map = keyMap(hr.checks), bk = keyAll(base.checks);
+      base.checks.forEach((c, j) => { const q = map.get(bk[j]); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
+      base.rating = hr.rating;
+    }
     // pedestrian bridges are rated for the maintenance vehicle (or the pedestrian load where vehicles are kept off)
     if (base && L.ped) {
       base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
@@ -3358,7 +3382,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   }
 
 
-  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES, tubCfg, tubGeom, tubProps, tubDF, tubRestrictions, boxEffWidth };
+  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, llEnvelope, vehEnvelope, IL120, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES, tubCfg, tubGeom, tubProps, tubDF, tubRestrictions, boxEffWidth };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LGCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -4532,7 +4556,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   Object.assign(G, { analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular, eqBeamI, frameForces, refinements, consistency });
 })(typeof window !== 'undefined' ? window : globalThis);
 
-// Steel 2D Grillage: live load by influence surfaces (phase 4). HL-93 (AASHTO LRFD 10th edition 3.6.1): design truck,
+// Steel 2D Grillage: live load by influence surfaces (phase 4). HL-93 (AASHTO LRFD 10th edition 3.6.1), optionally with the
+// Illinois Tollway IL-120 truck (opt.il120; deflection includes it, fatigue does not): design truck,
 // design tandem, design lane load, floating 12 ft design lanes, multiple presence factors, dynamic load allowance,
 // the 90% dual-truck case, and the fatigue truck. Attaches to root.G2D.
 (function (root) {
@@ -4622,19 +4647,33 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const deck = R.deck, ohL = +deck.ohL || 0, ohR = +deck.ohR || 0, bw = +R.loads.dwEdge || 0;
     const cL = curbs && isFinite(+curbs.L) && curbs.L !== '' && curbs.L != null ? +curbs.L : bw, cR = curbs && isFinite(+curbs.R) && curbs.R !== '' && curbs.R != null ? +curbs.R : bw;
     const st = [];
+    // the deck ends at the end supports (supports where every girder bearing there starts, or every one ends): on a
+    // skewed bridge the stations run past the reference girder's own ends, along its end tangents, until they have
+    // crossed every girder's end, and each station is cut off at the end support lines
+    const sub = (a, b) => [a[0] - b[0], a[1] - b[1]], dot = (a, b) => a[0] * b[0] + a[1] * b[1], crs = (a, b) => a[0] * b[1] - a[1] * b[0];
+    const ends = F.supports.filter(q => { const at = F.girders.map(g => { const k = g.brg.findIndex(b => b.support === q.id); return k < 0 ? null : k === 0 ? 'first' : k === g.brg.length - 1 ? 'last' : 'mid'; }).filter(Boolean);
+      return at.length && (at.every(v => v === 'first') || at.every(v => v === 'last')); });
+    const mid = ref.P.at(ref.L / 2), p0 = ref.P.at(0), t0 = ref.P.tan(0), p1 = ref.P.at(ref.L), t1 = ref.P.tan(ref.L);
+    let sMin = 0, sMax = ref.L;
+    F.girders.forEach(g => { sMin = Math.min(sMin, dot(sub(g.P.at(0), p0), t0) - 0.5); sMax = Math.max(sMax, ref.L + dot(sub(g.P.at(g.L), p1), t1) + 0.5); });
+    const rowAt = s => s < 0 ? { p: [p0[0] + t0[0] * s, p0[1] + t0[1] * s], t: t0 } : s > ref.L ? { p: [p1[0] + t1[0] * (s - ref.L), p1[1] + t1[1] * (s - ref.L)], t: t1 } : { p: ref.P.at(s), t: ref.P.tan(s) };
     // stations evenly over the whole length at close to ds, so axle spacings are whole steps to within a fraction
     // of a percent
-    const n = Math.max(2, Math.round(ref.L / ds)); ds = ref.L / n;
+    const n = Math.max(2, Math.round((sMax - sMin) / ds)); ds = (sMax - sMin) / n;
     for (let k = 0; k <= n; k++) {
-      // just inside the ends, so the normal line finds every girder there
-      const s = Math.min(ref.L - 0.05, Math.max(0.05, k * ds)), p = ref.P.at(s), t = ref.P.tan(s), nrm = [-t[1], t[0]], hits = [];
+      // just inside the reference girder's ends, so the normal line finds every girder there
+      const s0 = sMin + k * ds, s = s0 >= 0 && s0 <= ref.L ? Math.min(ref.L - 0.05, Math.max(0.05, s0)) : s0, rw = rowAt(s), p = rw.p, t = rw.t, nrm = [-t[1], t[0]], hits = [];
       F.girders.forEach(g => { G.lineHits(p, nrm, g.P).forEach(h => { if (h.u > -1e-6 && h.u < g.L + 1e-6 && Math.abs(h.t) < 200) hits.push({ g: g.id, u: Math.max(0, Math.min(g.L, h.u)), t: h.t }); }); });
       // nearest hit per girder
       const by = {}; hits.forEach(h => { if (!by[h.g] || Math.abs(h.t) < Math.abs(by[h.g].t)) by[h.g] = h; });
       const gs = Object.values(by).sort((a, b) => b.t - a.t); // left (t +) to right
       // node weights on each girder (linear between the two nodes around u)
       gs.forEach(h => { const L = md.gNodes.get(h.g); let i = 1; while (i < L.length - 1 && L[i].u < h.u) i++; const a = L[i - 1], b = L[i], w = (h.u - a.u) / ((b.u - a.u) || 1); h.nw = [[a.id, 1 - w], [b.id, w]]; });
-      st.push({ s, gs });
+      // the deck along this line: on the inside of every end support line (t from lo to hi)
+      let lo = -Infinity, hi = Infinity;
+      ends.forEach(q => { const sg = Math.sign(crs(q.d, sub(mid, q.p))) || 1, a = sg * crs(q.d, sub(p, q.p)), b = sg * crs(q.d, nrm);
+        if (Math.abs(b) < 1e-9) { if (a < 0) { lo = Infinity; hi = -Infinity; } } else if (b > 0) lo = Math.max(lo, -a / b); else hi = Math.min(hi, -a / b); });
+      st.push({ s, gs, lo, hi, p, nrm });
     }
     // roadway: between the curbs, from the exterior girders at each station, so it follows a flared or tapered deck.
     // The transverse grid spans the widest station; at each station the surface is zero outside its own curbs, so
@@ -4647,8 +4686,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       full.forEach(x => { x.cL = x.gs[0].t + ohL - cL; x.cR = x.gs[x.gs.length - 1].t - ohR + cR; }); good.push(...full); }
     st.forEach(x => { if (x.cL == null) { const n = good.reduce((a, b) => (Math.abs(b.s - x.s) < Math.abs(a.s - x.s) ? b : a)); x.cL = n.cL; x.cR = n.cR; } });
     const tL = Math.max(...st.map(x => x.cL)), tR = Math.min(...st.map(x => x.cR));
-    const varies = st.some(x => Math.abs(x.cL - tL) > 0.5 || Math.abs(x.cR - tR) > 0.5);
-    return { st, ds, tL, tR, ref, varies, wMin: Math.min(...st.map(x => x.cL - x.cR)), wMax: tL - tR };
+    // the roadway's width before the end cuts (lanes are laid out on the full roadway), then the cut at the end supports
+    const wMax0 = tL - tR, wMin0 = Math.min(...st.map(x => x.cL - x.cR));
+    st.forEach(x => { x.cut = x.hi < x.cL - 1e-6 || x.lo > x.cR + 1e-6; x.cL = Math.min(x.cL, x.hi); x.cR = Math.max(x.cR, x.lo); });
+    const varies = st.some(x => x.cut || Math.abs(x.cL - tL) > 0.5 || Math.abs(x.cR - tR) > 0.5);
+    return { st, ds, tL, tR, ref, varies, wMin: wMin0, wMax: wMax0 };
   }
   // influence value of response r at station k, offset t (lever rule between the girders either side; beyond the
   // exterior girders, the line through the two outermost)
@@ -4684,6 +4726,15 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const m = nk + 2 * o14, g = new Float64Array(m);
       for (let i = 0; i < m; i++) { const k = i - 2 * o14; g[i] = Math.max(0, sign * (8 * at(k) + 32 * at(k + o14) + 32 * at(k + 2 * o14)), sign * (32 * at(k) + 32 * at(k + o14) + 8 * at(k + 2 * o14))); }
       let best = 0, pre = 0; for (let i = gap; i < m; i++) { pre = Math.max(pre, g[i - gap]); best = Math.max(best, pre + g[i]); } return best; };
+    // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11): 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft,
+    // a further design vehicle with the lane, IM and the 90% pair (opt.il120); both directions
+    const ilW = [12, 24, 24, 20, 20, 20], ilO = [0, 10, 14, 36, 40, 44].map(st), ilL = ilO[5];
+    const il1 = (k, sign) => { let f = 0, r = 0; for (let a = 0; a < 6; a++) { f += ilW[a] * at(k + ilO[a]); r += ilW[a] * at(k + ilL - ilO[a]); } return Math.max(sign * f, sign * r); };
+    const il120 = sign => { let best = 0; for (let k = -ilL; k < nk; k++) { const v = il1(k, sign); if (v > best) best = v; } return best; };
+    const dualIl = sign => { // two IL-120 trucks, at least 50 ft from the rear axle of one to the front axle of the next
+      const m = nk + ilL, g = new Float64Array(m), gp = st(50) + ilL;
+      for (let i = 0; i < m; i++) g[i] = Math.max(0, il1(i - ilL, sign));
+      let best = 0, pre = 0; for (let i = gp; i < m; i++) { pre = Math.max(pre, g[i - gp]); best = Math.max(best, pre + g[i]); } return best; };
     const colPos = new Float64Array(nt), colNeg = new Float64Array(nt);
     for (let j = 0; j < nt; j++) { let p = 0, q = 0; for (let k = 0; k < nk; k++) { const w = (k === 0 || k === nk - 1 ? 0.5 : 1) * ds, v = S[k][j]; if (v > 0) p += v * w; else q -= v * w; } colPos[j] = p * 0.064; colNeg[j] = q * 0.064; }
     const res = {};
@@ -4693,8 +4744,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       for (let k = 0; k < nk; k++) A[k] = (fR * S[k][j - 3] + fL * S[k][j + 3]) / 2;
       let bp = tandem(1), bn = tandem(-1);
       for (const r of rs) { bp = Math.max(bp, truck(r, 1)); bn = Math.max(bn, truck(r, -1)); }
+      if (opt.il120) { bp = Math.max(bp, il120(1)); bn = Math.max(bn, il120(-1)); }
       trP[j] = bp * (1 + IM); trN[j] = bn * (1 + IM);
-      if (opt.dual) { duP[j] = dualBest(1) * (1 + IM); duN[j] = dualBest(-1) * (1 + IM); }
+      if (opt.dual) { duP[j] = Math.max(dualBest(1), opt.il120 ? dualIl(1) : 0) * (1 + IM); duN[j] = Math.max(dualBest(-1), opt.il120 ? dualIl(-1) : 0) * (1 + IM); }
       // fatigue: one truck, 30 ft rear spacing, 15%, no lane, wheel factors 1, anywhere with wheels 2 ft inside the curbs
       if (j >= 5 && j < nt - 5) { for (let k = 0; k < nk; k++) A[k] = (S[k][j - 3] + S[k][j + 3]) / 2; fP = Math.max(fP, truck(st(30), 1) * 1.15); fN = Math.max(fN, truck(st(30), -1) * 1.15); }
     }
@@ -5185,6 +5237,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       + grp('Live load (HL-93)', `<p class="hint">Design truck, design tandem and lane load in 12 ft design lanes that float across the roadway between the barriers (the width under Loads), with multiple presence factors and 33% dynamic load allowance on the truck and tandem; the 90% pair of trucks for negative moment and pier reactions; the fatigue truck. Results are unfactored.</p>
         <div class="fields">${fNum('Left wheel factor', '', b + '.ll.fL', 'Centrifugal force and superelevation (AASHTO 3.6.3)')}${fNum('Right wheel factor', '', b + '.ll.fR', 'Left + right = 2')}</div>
         <p class="hint">With factors other than 1, both cases are run (with and without centrifugal force) and the worse is kept. Left and right are looking up-station.</p>
+        ${fChk('Illinois Tollway IL-120 design truck with HL-93 (Structure Design Manual 5.11)', b + '.ll.il120')}
+        <p class="hint">IL-120: 12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft, 6 ft gauge, run like the design truck with the lane load, IM and the 90% pair; the HL-93 truck and tandem still apply and the larger effect governs. Deflection includes it; fatigue does not.</p>
         <div class="fields">${fNum('Roadway edge, left', 'ft', b + '.ll.curbL', 'In from the deck edge; blank: the DW edge')}${fNum('Roadway edge, right', 'ft', b + '.ll.curbR', 'For a raised sidewalk or median vehicles cannot cross')}</div>
         <p class="hint">The roadway follows the deck from station to station, so lanes narrow with a tapered or flared deck. A shared-use path behind a separation barrier is normally left in the roadway (all girders designed for HL-93), with the barrier as DC2.</p>`, false)
       + grp('Girder checks', `<p class="hint">AASHTO LRFD 10th edition, by the Steel Line Girder check engine at every tenth point, with the grid's forces: the dead-load stages, LL+I, the fatigue truck and flange lateral bending from warping.</p>
@@ -5664,7 +5718,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const w = doc.analysis.ll || {}, fL = +w.fL || 1, fR = +w.fR || 1;
     const wheels = [{ fL: 1, fR: 1 }]; if (Math.abs(fL - 1) > 1e-6 || Math.abs(fR - 1) > 1e-6) wheels.push({ fL, fR });
     const cv = v => (v === '' || v == null || !isFinite(+v) ? null : +v);
-    return { wheels, curbs: { L: cv(w.curbL), R: cv(w.curbR) } };
+    return { wheels, curbs: { L: cv(w.curbL), R: cv(w.curbR) }, il120: !!w.il120 };
   }
   function makeWorker() {
     try {

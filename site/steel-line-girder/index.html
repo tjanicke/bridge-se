@@ -606,7 +606,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     }
     return { p: fp, n: fn };
   }
-  function llEnvelope(IL, h, IM, dual) {
+  // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11, Figure 5.11.1): axles front to rear, ft from the front
+  const IL120 = { w: [12, 24, 24, 20, 20, 20], o: [0, 10, 14, 36, 40, 44], len: 44 };
+  // both directions on the grid of step h: [weights, offsets in steps]
+  const il120Runs = st => [[IL120.w, IL120.o.map(st)], [IL120.w.slice().reverse(), IL120.o.map(v => st(IL120.len - v)).reverse()]];
+  function llEnvelope(IL, h, IM, dual, il) {
     const st = v => Math.round(v / h);
     let tMax = 0, tMin = 0, cfgMax = '', cfgMin = '';
     let f14f = null, f14r = null;
@@ -624,6 +628,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       if (ft.p[i] > tMax) { tMax = ft.p[i]; cfgMax = 'Tandem'; }
       if (ft.n[i] < tMin) { tMin = ft.n[i]; cfgMin = 'Tandem'; }
     }
+    // with the IL-120 option, the IL-120 truck is a further design vehicle (with the lane, IM and the dual-truck case)
+    const fil = il ? il120Runs(st).map(([w, o]) => movingFS(IL, w, o)) : [];
+    fil.forEach(f => { for (let i = 0; i < f.p.length; i++) {
+      if (f.p[i] > tMax) { tMax = f.p[i]; cfgMax = 'IL-120'; }
+      if (f.n[i] < tMin) { tMin = f.n[i]; cfgMin = 'IL-120'; } } });
     let lp = 0, ln = 0;
     for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; }
     lp *= 0.64 * h; ln *= 0.64 * h;
@@ -642,6 +651,12 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       }
       const dv = 0.9 * (dmin * (1 + IM) + ln);
       if (dv < min) { min = dv; minCfg = '90% dual truck + lane'; }
+      if (il) { // two IL-120 trucks, 50 ft from the rear axle of one to the front axle of the next
+        const sepI = st(IL120.len + 50); let dI = 0;
+        for (const f of fil.map(q => q.n)) { let pm = Infinity; for (let a = sepI; a < f.length; a++) { pm = Math.min(pm, f[a - sepI]); const v = f[a] + pm; if (v < dI) dI = v; } }
+        const vI = 0.9 * (dI * (1 + IM) + ln);
+        if (vI < min) { min = vI; minCfg = '90% dual IL-120 + lane'; }
+      }
     }
     return { max, min, maxCfg, minCfg };
   }
@@ -933,7 +948,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
   // ---------- generic vehicle envelope on an influence line ----------
-  function vehEnvelope(IL, h, kind, IM, dual) {
+  function vehEnvelope(IL, h, kind, IM, dual, il) {
     const st = v => Math.round(v / h);
     let tMax = 0, tMin = 0;
     const run = (wts, offs) => { const f = movingF(IL, wts, offs); for (let i = 0; i < f.length; i++) { if (f[i] > tMax) tMax = f[i]; if (f[i] < tMin) tMin = f[i]; } return f; };
@@ -944,11 +959,12 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     if (kind === 'defl') { // design truck alone, or 25% truck + lane (3.6.1.3.2); non-contributing axles neglected
       const runS = (wts, offs) => { const f = movingFS(IL, wts, offs); for (let i = 0; i < f.p.length; i++) { if (f.p[i] > tMax) tMax = f.p[i]; if (f.n[i] < tMin) tMin = f.n[i]; } };
       for (let s2 = 14; s2 <= 30; s2 += 2) { runS([8, 32, 32], [0, st(14), st(14 + s2)]); runS([32, 32, 8], [0, st(s2), st(s2 + 14)]); }
+      if (il) il120Runs(st).forEach(([w, o]) => runS(w, o)); // Illinois Tollway: the IL-120 truck too (SDM 5.11)
       let lp = 0, ln = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; }
       lp *= 0.64 * h; ln *= 0.64 * h;
       return { max: Math.max(tMax * (1 + IM), 0.25 * tMax * (1 + IM) + lp), min: Math.min(tMin * (1 + IM), 0.25 * tMin * (1 + IM) + ln) };
     }
-    return llEnvelope(IL, h, IM, dual);
+    return llEnvelope(IL, h, IM, dual, il);
   }
   function dfMoment1(S, L, ts, Kg) { return 0.06 + Math.pow(S / 14, 0.4) * Math.pow(S / L, 0.3) * Math.pow(Kg / (12 * L * ts ** 3), 0.1); }
   const MPF = n => (n <= 1 ? 1.2 : n === 2 ? 1.0 : n === 3 ? 0.85 : 0.65);
@@ -975,6 +991,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   function liveOpts(m) {
     const L = m.live || {}, d = m.df || {};
     const out = { design: L.design === 'ped' ? 'ped' : 'hl93', permit: L.permit === 'include' || L.permit === 'only' ? L.permit : 'none' };
+    out.il120 = out.design === 'hl93' && !!L.il120; // Illinois Tollway IL-120 design truck with HL-93 (SDM 5.11)
     if (out.design === 'ped') {
       const p = L.ped || {}, S = +d.S || 0, ext = d.girder === 'exterior', de = +d.de || 0;
       const width = +p.width > 0 ? +p.width : (ext ? S / 2 + de : S);
@@ -1458,7 +1475,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     // live load envelope at a point, per lane (HL-93, permit) or per girder (pedestrian, maintenance vehicle)
     const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
     const llEnv = (IL, neg, si, forShear) => {
-      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg, llc.il);
       const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
       const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
       if (llc.kind === 'ped' || llc.kind === 'H') {
@@ -1558,7 +1575,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       uniq.forEach((nd, k) => {
         const IL = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; } // in. downward per kip
-        const env = vehEnvelope(IL, h, 'defl', IM);
+        const env = vehEnvelope(IL, h, 'defl', IM, null, llc.il);
         const dd = env.max * dfD, si = spanOf(x[nd]);
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
@@ -2213,7 +2230,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const DF = tubDF(m), RS = tubRestrictions(m, T);
     const NONE = { max: 0, min: 0, maxCfg: '', minCfg: '' };
     const llEnv = (IL, neg, si, forShear) => {
-      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg);
+      if (llc.kind === 'hl93') return vehEnvelope(IL, h, 'hl93', IM, neg, llc.il);
       const out = { max: 0, min: 0, maxCfg: '', minCfg: '' };
       const take = (a, b, cfg) => { if (a > out.max) { out.max = a; out.maxCfg = cfg; } if (b < out.min) { out.min = b; out.minCfg = cfg; } };
       if (llc.kind === 'permit') {
@@ -2280,7 +2297,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       uniq.forEach((nd, k) => {
         const IL = new Float64Array(ng); let e = 0;
         for (let j = 0; j < ng; j++) { while (e < ne - 1 && xg[j] > x[e + 1]) e++; IL[j] = -hermite(U[k], x, e, xg[j]) * 12; }
-        const env = vehEnvelope(IL, h, 'defl', IM);
+        const env = vehEnvelope(IL, h, 'defl', IM, null, llc.il);
         const dd = env.max * dfD, si = spanOf(x[nd]);
         if (dd > deflection[si].delta) { deflection[si].delta = dd; deflection[si].x = x[nd]; }
       });
@@ -2647,9 +2664,16 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const keyAll = cs => { const n = new Map(); return cs.map(c => { const k = keyOf(c), j = n.get(k) || 0; n.set(k, j + 1); return k + '#' + j; }); };
     const keyMap = cs => { const ks = keyAll(cs); return new Map(cs.map((c, j) => [ks[j], c])); };
     const pedLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, gSv: 1.3, ped: L.ped } : null;
-    const designLL = pedLL || { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 };
+    const designLL = pedLL || { kind: 'hl93', name: L.il120 ? 'HL-93 and IL-120' : 'HL-93', gS: 1.75, gSv: 1.3, il: !!L.il120 };
     let base = null;
     if (L.permit !== 'only') base = runCase_(m, ed, ctx, designLL);
+    // with the IL-120 truck the design checks take the larger effect, but the load rating stays HL-93 (Illinois Tollway SDM 5.11)
+    if (base && designLL.il) {
+      const hr = runCase_(m, ed, ctx, { kind: 'hl93', name: 'HL-93', gS: 1.75, gSv: 1.3 });
+      const map = keyMap(hr.checks), bk = keyAll(base.checks);
+      base.checks.forEach((c, j) => { const q = map.get(bk[j]); if (q) { c.RFinv = q.RFinv; c.RFop = q.RFop; c.rfNA = q.rfNA; c.rating = q.rating; } else if (c.rating) { delete c.RFinv; delete c.RFop; } });
+      base.rating = hr.rating;
+    }
     // pedestrian bridges are rated for the maintenance vehicle (or the pedestrian load where vehicles are kept off)
     if (base && L.ped) {
       base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
@@ -3430,7 +3454,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   }
 
 
-  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES, tubCfg, tubGeom, tubProps, tubDF, tubRestrictions, boxEffWidth };
+  const api = { RF_LL_MIN, RF_NA_MIN, rfDisplayNA, run, llEnvelope, vehEnvelope, IL120, deckWeight, haunchWeights, liveOpts, permitGamma, designLanes, lfdDF, lfdShear, lfdLTB, lfdRb, cbLFD, hybridR, lfdProps, hsEnvelope, impactSS, FSR, distFactors, sectionProps, geom, dfMoment, dfShear, shearCap, fatigueResistance, ltbPrismatic, ltbFromFe, cb9, cb10, lambdaRw, rbFactor, a6Props, a6LTB, flb, braceLocations, ES, tubCfg, tubGeom, tubProps, tubDF, tubRestrictions, boxEffWidth };
   if (typeof module !== 'undefined' && module.exports) module.exports = api; else root.LGCheck = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
@@ -4893,6 +4917,7 @@ function liveGroup(){
       ${sel('live.design','Design live load',model.kind==='tub'?[['hl93','HL-93 vehicular']]:[['hl93','HL-93 vehicular'],['ped','Pedestrian bridge (Guide Spec 2009/2015)']])}
       ${sel('live.permit','Permit trucks',[['none','None'],['include','Include with the design live load'],['only','Permit only']])}
     </div>
+    ${!ped?check('live.il120','Illinois Tollway IL-120 design truck with HL-93 (Structure Design Manual 5.11)'):''}
     ${ped?`<div class="fields">
       ${field('live.ped.width','Pedestrian width on this girder','ft',`placeholder="${ph.ext?'S/2 + de':'S'} (${fmt(ph.ext?(+model.df.S||0)/2+(+model.df.de||0):+model.df.S||0,2)})"`)}
       ${field('live.ped.clear','Clear deck width (H5 or H10)','ft',`placeholder="${+model.df.roadway>0?'roadway ('+model.df.roadway+')':'over 10 ft'}"`)}
@@ -5773,7 +5798,7 @@ function renderMethod(){
   if(res.kind==='tub'){ renderMethodTub(); return; }
   $('methodNotes').innerHTML=[
    `<li><b>Analysis.</b> Stiffness analysis with 10 to 40 elements per span, refined at supports, section breaks, stiffener panel ends, cross-frames and their quarter points. DC1 on the steel section, DC2 and DW on the long-term (3n) composite section, live load on the short-term (n) composite section. Uncracked composite stiffness throughout (6.10.1.5).</li>`,
-   `<li><b>Live load.</b> Exact influence lines from support-displacement shapes. HL-93 truck with rear spacing 14 to 30 ft, both directions, tandem, and 0.64 klf lane on the adverse parts of the influence line; 90% of two trucks with at least 50 ft between them plus 90% lane in negative-moment regions. Axles that do not contribute to the extreme being sought are neglected (3.6.1.3.1), for strength, service and deflection. IM 33% on truck and tandem. Fatigue truck with 30 ft rear spacing and IM 15% (3.6.1.4), taken as the whole truck because the stress range comes from one real vehicle passage.</li>`,
+   `<li><b>Live load.</b> Exact influence lines from support-displacement shapes. HL-93 truck with rear spacing 14 to 30 ft, both directions, tandem, and 0.64 klf lane on the adverse parts of the influence line; 90% of two trucks with at least 50 ft between them plus 90% lane in negative-moment regions. Axles that do not contribute to the extreme being sought are neglected (3.6.1.3.1), for strength, service and deflection. IM 33% on truck and tandem. Fatigue truck with 30 ft rear spacing and IM 15% (3.6.1.4), taken as the whole truck because the stress range comes from one real vehicle passage. With the Illinois Tollway option, the IL-120 truck (12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft; Structure Design Manual 5.11) is a further design vehicle with the lane, IM, the 90% two-truck case and deflection; the larger effect governs, the fatigue truck is unchanged, and the load rating stays HL-93.</li>`,
    ...liveNotes(),
    `<li><b>Strength I.</b> Both moment signs are checked at every point with the permanent-load factors (max or min) that are adverse, times η. Positive flexure per 6.10.7 (compact: Mn with the Dp/Dt reduction and optional 1.3RhMy cap; noncompact: flange stresses). Negative flexure by Appendix A6 when the section qualifies, otherwise 6.10.8 FLB, LTB and tension-flange yielding. Shear per 6.10.9, with tension-field action in stiffened interior panels.</li>`,
    `<li><b>Service II.</b> 0.95RhFyf for both flanges and web bend-buckling fc ≤ Fcrw where required (6.10.4.2.2). Negative flexure uses the steel + rebar section unless the uncracked option is on.</li>`,

@@ -378,7 +378,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     return f;
   }
   // one lane HL-93 (3.6.1.3.1): truck (14–30 ft rear spacing) or tandem, plus lane; 90% dual truck + lane for negative moment
-  function hl93(IL, h, IM, dual) {
+  // Illinois Tollway IL-120 design truck (Structure Design Manual 5.11, Figure 5.11.1): axles front to rear, ft from the front
+  const IL120 = { w: [12, 24, 24, 20, 20, 20], o: [0, 10, 14, 36, 40, 44], len: 44 };
+  const il120Runs = st => [[IL120.w, IL120.o.map(st)], [IL120.w.slice().reverse(), IL120.o.map(v => st(IL120.len - v)).reverse()]];
+  // il: the IL-120 truck is a further design vehicle (with the lane, IM and the dual-truck case); HL-93 still applies
+  function hl93(IL, h, IM, dual, il) {
     const st = v => Math.round(v / h);
     let tMax = 0, tMin = 0, f14f = null, f14r = null;
     for (let s2 = 14; s2 <= 30; s2 += 1) {
@@ -388,6 +392,8 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     }
     const ft = movingFS(IL, [25, 25], [0, st(4)]);
     for (let i = 0; i < ft.p.length; i++) { if (ft.p[i] > tMax) tMax = ft.p[i]; if (ft.n[i] < tMin) tMin = ft.n[i]; }
+    const fil = il ? il120Runs(st).map(([w, o]) => movingFS(IL, w, o)) : [];
+    fil.forEach(f => { for (let i = 0; i < f.p.length; i++) { if (f.p[i] > tMax) tMax = f.p[i]; if (f.n[i] < tMin) tMin = f.n[i]; } });
     let lp = 0, ln = 0; for (let j = 0; j < IL.length; j++) { if (IL[j] > 0) lp += IL[j]; else ln += IL[j]; }
     lp *= 0.64 * h; ln *= 0.64 * h;
     let max = tMax * (1 + IM) + lp, min = tMin * (1 + IM) + ln, dualGov = false;
@@ -396,6 +402,12 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
       for (const f of [f14f, f14r]) { let pm = Infinity; for (let a = sep; a < f.length; a++) { pm = Math.min(pm, f[a - sep]); const v = f[a] + pm; if (v < dmin) dmin = v; } }
       const dv = 0.9 * (dmin * (1 + IM) + ln);
       if (dv < min) { min = dv; dualGov = true; }
+      if (il) { // two IL-120 trucks, 50 ft from the rear axle of one to the front axle of the next
+        const sepI = st(IL120.len + 50); let dI = 0;
+        for (const f of fil.map(q => q.n)) { let pm = Infinity; for (let a = sepI; a < f.length; a++) { pm = Math.min(pm, f[a - sepI]); const v = f[a] + pm; if (v < dI) dI = v; } }
+        const vI = 0.9 * (dI * (1 + IM) + ln);
+        if (vI < min) { min = vI; dualGov = true; }
+      }
     }
     return { max, min, dualGov };
   }
@@ -404,9 +416,10 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     for (const f of [movingF(IL, [8, 32, 32], [0, st(14), st(44)]), movingF(IL, [32, 32, 8], [0, st(30), st(44)])]) for (let i = 0; i < f.length; i++) { if (f[i] > mx) mx = f[i]; if (f[i] < mn) mn = f[i]; }
     return { max: mx * (1 + IM), min: mn * (1 + IM) };
   }
-  function deflTruck(IL, h, IM) { // 3.6.1.3.2: truck alone or 25% truck + lane
+  function deflTruck(IL, h, IM, il) { // 3.6.1.3.2: truck alone or 25% truck + lane (Illinois Tollway: the IL-120 truck too)
     const st = v => Math.round(v / h); let t = 0;
     for (let s2 = 14; s2 <= 30; s2 += 2) for (const f of [movingFS(IL, [8, 32, 32], [0, st(14), st(14 + s2)]), movingFS(IL, [32, 32, 8], [0, st(s2), st(s2 + 14)])]) for (let i = 0; i < f.p.length; i++) if (f.p[i] > t) t = f.p[i];
+    if (il) il120Runs(st).forEach(([w, o]) => { const f = movingFS(IL, w, o); for (let i = 0; i < f.p.length; i++) if (f.p[i] > t) t = f.p[i]; });
     let lp = 0; for (let j = 0; j < IL.length; j++) if (IL[j] > 0) lp += IL[j]; lp *= 0.64 * h;
     return Math.max(t * (1 + IM), 0.25 * t * (1 + IM) + lp);
   }
@@ -473,6 +486,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
   function liveOpts(m) {
     const L = m.live || {};
     const out = { design: L.design === 'ped' ? 'ped' : 'hl93', permit: L.permit === 'include' || L.permit === 'only' ? L.permit : 'none' };
+    out.il120 = out.design === 'hl93' && !!L.il120; // Illinois Tollway IL-120 design truck with HL-93 (SDM 5.11)
     if (out.design === 'ped') {
       const deck = m.kind === 'deck', shp = m.shapeData || (deck ? DATA.deck[m.shape] : DATA.shapes[m.shape]) || {};
       const p = L.ped || {}, S = deck ? (m.S > 0 ? +m.S : (+shp.b || 0) / 12) : +m.S || 0, ext = !deck && m.girder === 'exterior';
@@ -1061,7 +1075,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     const simpV = !lfd && (m.opts && m.opts.shearMethod) === 'simplified'; // concurrent shear for Vi (5.7.3.4.3)
     const ZF = { max: 0, min: 0 };
     function llEnv(ILa, dual, si, isMoment, s) {
-      if (llc.kind === 'hl93') return hl93(ILa, hgrid, IMp, dual);
+      if (llc.kind === 'hl93') return hl93(ILa, hgrid, IMp, dual, llc.il);
       if (lfd) {
         if (!isMoment) { const g = dfAt(spans[si]); ILa = scaleEnds(ILa, g.Vend / g.V); }
         const e = hsEnvelope(ILa, hgrid, isMoment ? 'M' : 'V', gSpanArr, Lf.military), sc = Lf.scale;
@@ -1108,6 +1122,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         if (llc.kind === 'hl93') {
           const cf = []; for (let s2 = 14; s2 <= 30; s2++) cf.push([[8, 32, 32], [0, st(14), st(14 + s2)]], [[32, 32, 8], [0, st(s2), st(s2 + 14)]]);
           cf.push([[25, 25], [0, st(4)]]);
+          if (llc.il) cf.push(...il120Runs(st));
           const ln = lane(0.64);
           G = add(bestOf(cf, true), ln, 1 + IMp, 1);
           if (sign < 0 && dual) { // two trucks, 14 ft rear spacing, at least 50 ft between them (front axle to rear axle)
@@ -1115,6 +1130,13 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
             for (const [w, o] of [[[8, 32, 32], [0, st(14), st(28)]], [[32, 32, 8], [0, st(14), st(28)]]]) {
               const n = ng + o[2], gs = []; for (let i = 0; i < n; i++) gs.push(grp(w, o, i, true));
               let pm = null; for (let k = sep; k < n; k++) { const c = gs[k - sep]; if (!pm || c.M < pm.M) pm = c; const t = add(gs[k], pm); if (!D || t.M < D.M) D = t; }
+            }
+            if (llc.il) { // two IL-120 trucks, 50 ft between them
+              const sepI = st(IL120.len + 50);
+              for (const [w, o] of il120Runs(st)) {
+                const n = ng + o[o.length - 1], gs = []; for (let i = 0; i < n; i++) gs.push(grp(w, o, i, true));
+                let pm = null; for (let k = sepI; k < n; k++) { const c = gs[k - sepI]; if (!pm || c.M < pm.M) pm = c; const t = add(gs[k], pm); if (!D || t.M < D.M) D = t; }
+              }
             }
             if (D) { const d = add(D, ln, 0.9 * (1 + IMp), 0.9); if (d.M < G.M) G = d; }
           }
@@ -1742,7 +1764,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
         for (let j = 0; j < ng; j++) { while (e < xd.length - 2 && xg[j] > xd[e + 1]) e++; ILd[j] = -hermite(sh[k], xd, e, xg[j]) / EI * 12; }
         let dv;
         if (lfd) { const e = hsEnvelope(ILd, hgrid, 'M', gSpanArr, false); dv = Lf.scale * Math.max(e.tMax, e.lMax) * (1 + impactStd(spans[k])) * mDefl; } // truck or lane, all lanes on all beams
-        else dv = deflTruck(ILd, hgrid, IMp) * mDefl;
+        else dv = deflTruck(ILd, hgrid, IMp, llc.il) * mDefl;
         const den = iowa && IA.peds ? 1000 : 800; // Iowa BDM 5.4.1.4.1.9: L/1000 with pedestrians
         deflection.push({ span: k + 1, x: s, delta: dv, limit: spans[k] * 12 / den, ratio: dv / (spans[k] * 12 / den), ...(iowa ? { den } : {}) });
       });
@@ -2017,9 +2039,11 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     if (errs.length) throw new Error(errs.join(' '));
     const L = liveOpts(m);
     if (L.ped && L.ped.noFit) throw new Error('The ' + L.ped.veh + ' maintenance vehicle does not fit the assumed lever-rule placement (wheels 2 ft and 8 ft from the rail face) on a ' + L.ped.clear + ' ft clear deck. Enter the vehicle distribution factor for the exterior beam from the wheel positions that fit.');
-    const designLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, ped: L.ped } : { kind: 'hl93', name: 'HL-93', gS: 1.75 };
+    const designLL = L.ped ? { kind: 'ped', name: 'Pedestrian' + (L.ped.veh ? ' or ' + L.ped.veh : ''), gS: 1.75, ped: L.ped } : { kind: 'hl93', name: L.il120 ? 'HL-93 and IL-120' : 'HL-93', gS: 1.75, il: !!L.il120 };
     let base = null;
     if (L.permit !== 'only') base = rc(m, designLL);
+    // with the IL-120 truck the design checks take the larger effect, but the load rating stays HL-93 (Illinois Tollway SDM 5.11)
+    if (base && designLL.il) base.rating = rc(m, { kind: 'hl93', name: 'HL-93', gS: 1.75 }).rating;
     if (base && L.ped) {
       base.ratingLoad = L.ped.veh ? { name: L.ped.veh + ' maintenance vehicle', tons: L.ped.W / 2, veh: L.ped.veh } : { name: 'pedestrian load, 90 psf' };
       if (L.ped.veh) base.rating = rc(m, { kind: 'H', name: L.ped.veh, gS: 1.75, ped: L.ped }).rating;
@@ -2048,7 +2072,7 @@ textarea{width:100%;min-height:160px;font:12px var(--f-mono);background:var(--bg
     return base;
   }
 
-  const api = { rfDisplayNA, run, liveOpts, lfdOpts, permitGamma, Ec, EcStd, designLanes, buildStrands, rowY, DATA };
+  const api = { rfDisplayNA, run, hl93, deflTruck, liveOpts, lfdOpts, permitGamma, Ec, EcStd, designLanes, buildStrands, rowY, DATA };
   if (typeof module !== 'undefined') module.exports = api; else root.PPCHECK = api;
 })(this);
 </script>
@@ -3253,6 +3277,7 @@ function liveGroup(m) {
   return grp('Live load', '<div class="fields">' +
     sel('live.design', 'Design live load', [['hl93', 'HL-93 vehicular'], ['ped', 'Pedestrian bridge (Guide Spec 2009/2015)']], { w2: true }) +
     sel('live.permit', 'Permit trucks', [['none', 'None'], ['include', 'Include with the design live load'], ['only', 'Permit only']], { w2: true }) +
+    (ped ? '' : '<div class="w2" style="grid-column:1/-1">' + chk('live.il120', 'Illinois Tollway IL-120 design truck with HL-93 (Structure Design Manual 5.11)') + '</div>') +
     (ped ? fld('live.ped.width', 'Pedestrian width on this beam', 'ft', { ph: (ph.ext ? 'S/2 + de' : 'S') + ' (' + f2(ph.width || 0) + ')', blank: true }) +
       fld('live.ped.clear', 'Clear deck width (H5 or H10)', 'ft', { ph: +m.roadway > 0 ? 'roadway (' + m.roadway + ')' : 'over 10 ft', blank: true }) +
       fld('live.ped.dfVeh', 'Vehicle distribution factor', '', { ph: 'lever rule (' + f3((ph.lever || 0) * (ph.mpf || 1)) + ')', blank: true }) +
@@ -3904,7 +3929,7 @@ function renderMethod() {
   }
   const items = I ? [
     '<b>Analysis.</b> Beam, fillet and slab (DC1) act on the simple-span noncomposite beam between bearings. DC2, DW and HL-93 act on the composite girder, continuous over the piers when made continuous (constant stiffness, spans to CL pier). IDOT standard continuity details satisfy 5.12.3.3, so restraint moments are not computed.',
-    '<b>HL-93.</b> Design truck (14–30 ft rear axle spacing) or tandem plus 0.64 k/ft lane, IM 33%; 90% of two trucks 50 ft apart plus lane for negative moment between contraflexure points and at piers (3.6.1.3.1). Fatigue truck with 30 ft rear spacing and IM 15%; Fatigue I load factor 1.75.',
+    '<b>HL-93.</b> Design truck (14–30 ft rear axle spacing) or tandem plus 0.64 k/ft lane, IM 33%; 90% of two trucks 50 ft apart plus lane for negative moment between contraflexure points and at piers (3.6.1.3.1). Fatigue truck with 30 ft rear spacing and IM 15%; Fatigue I load factor 1.75. With the Illinois Tollway option, the IL-120 truck (12, 24, 24, 20, 20, 20 k at 10, 4, 22, 4, 4 ft; Structure Design Manual 5.11) is a further design vehicle with the lane, IM, the 90% two-truck case and deflection; the larger effect governs, the fatigue truck is unchanged, and the load rating stays HL-93.',
     '<b>Distribution.</b> Table 4.6.2.2.2b-1 with K<sub>g</sub> = n(I + Ae<sub>g</sub>²), n = E<sub>beam</sub>/E<sub>deck</sub>, fillet excluded; no moment skew reduction (BM 3.1.12); shear skew correction from Table 4.6.2.2.3c-1. Negative moment near piers uses the average of the adjacent spans. Typical bridges use the interior factors for all beams; atypical bridges use the governing exterior factor (lever rule with m = 1.0). Fatigue uses the one-lane factor divided by 1.2.',
     '<b>Losses.</b> Elastic shortening only, iterated from F<sub>t</sub> = 0.9F<sub>i</sub> at midspan with the beam weight on the full beam length; no elastic gains. Long-term losses by the approximate method (5.9.3.3) with H = 70%.',
     '<b>Release.</b> IDOT checks the lifting condition only: lifting points from BM Fig. 3.4.6-1 or Tables 3.4.6-3/4 (or entered), prestress ramped over 60d<sub>b</sub>.',

@@ -45,6 +45,16 @@ function is(name, v, want) { const ok = v === want; ok ? pass++ : fail++; consol
 // ---------- Steel Line Girder ----------
 guard('Steel Line Girder', () => {
   const S = load('steel-line-girder').LGCheck;
+  // Illinois Tollway IL-120 truck: midspan moment of a 100 ft simple span on a 0.5 ft influence-line grid
+  { const IL = Float64Array.from({ length: 201 }, (_, j) => { const x = j * 0.5; return x <= 50 ? x / 2 : (100 - x) / 2; });
+    const a = S.llEnvelope(IL, 0.5, 0.33, false, false), b = S.llEnvelope(IL, 0.5, 0.33, false, true);
+    near('steel LL: HL-93 midspan moment, 100 ft span, k-ft', a.max, 1520 * 1.33 + 800, 1e-6, 'truck 32(25) + 32(18) + 8(18) = 1520; lane 0.64 x 1250');
+    near('steel LL: with IL-120, k-ft', b.max, 2088 * 1.33 + 800, 1e-6, 'IL-120 2088 k-ft (brute force) x 1.33 + lane');
+    is('steel LL: IL-120 controls', b.maxCfg, 'IL-120 + lane');
+    // two spans of 100 ft: the dual IL-120 case at the pier can only add negative moment
+    const L2 = 200, IP = Float64Array.from({ length: 401 }, (_, j) => { const x = j * 0.5, a2 = x <= 100 ? x : 200 - x; return -a2 * (100 * 100 - a2 * a2) / (4 * 100 * 100); });
+    const c = S.llEnvelope(IP, 0.5, 0.33, true, false), d = S.llEnvelope(IP, 0.5, 0.33, true, true);
+    is('steel LL: IL-120 does not reduce the pier moment envelope', d.min <= c.min + 1e-9, true); }
   // permit rating with a weak web at 1-3 ft: shear must govern the permit rating whatever the rating impact
   for (const im of [0, 20, 33]) {
     const m = fixture('slg-a1p.json'); m.live.permit = 'only'; m.live.permits.im = im;
@@ -91,6 +101,10 @@ guard('Steel Line Girder', () => {
 // ---------- Concrete Line Girder ----------
 guard('Concrete Line Girder', () => {
   const P = load('concrete-line-girder').PPCHECK;
+  { const IL = Float64Array.from({ length: 201 }, (_, j) => { const x = j * 0.5; return x <= 50 ? x / 2 : (100 - x) / 2; });
+    near('concrete LL: IL-120 + lane at midspan, 100 ft span, k-ft', P.hl93(IL, 0.5, 0.33, false, true).max, 2088 * 1.33 + 800, 1e-6, 'IL-120 2088 k-ft (brute force) x 1.33 + lane');
+    near('concrete LL: HL-93 alone, k-ft', P.hl93(IL, 0.5, 0.33, false, false).max, 1520 * 1.33 + 800, 1e-6);
+    near('concrete LL deflection: IL-120 alone governs over 25% + lane', P.deflTruck(IL, 0.5, 0, true), 2088, 1e-6, 'unit influence line'); }
   // LFD Vci with the shear concurrent with Mmax: TxDOT A.1 with weak stirrups at 0.39-0.45L
   { const m = clgEngineModel(fixture('clg-tx41.json'));
     m.stirrups = [{ from: 0, to: 0.39, Av: 0.5, s: 22 }, { from: 0.39, to: 0.45, Av: 0.27, s: 22 }, { from: 0.45, to: 1, Av: 0.5, s: 22 }];
@@ -141,6 +155,15 @@ guard('Concrete Slab Bridge', () => {
   near('slab Grade 100: φ', F.phi, 0.75, 1e-9, 'εt 0.00314 < εcl 0.004');
   const G = S.flexure(0.62, 8.5, 4, 60, 12);
   near('slab Grade 60, tension controlled: φ', G.phi, 0.9, 1e-9);
+  { const IL = Float64Array.from({ length: 201 }, (_, j) => { const x = j * 0.5; return x <= 50 ? x / 2 : (100 - x) / 2; });
+    const a = S.hl93Parts(IL, 0.5, false, false), b = S.hl93Parts(IL, 0.5, false, true);
+    near('slab LL: IL-120 truck at midspan, 100 ft span, k-ft', b.vehP, 2088, 1e-6, 'brute force');
+    near('slab LL: HL-93 truck alone, k-ft', a.vehP, 1520, 1e-6);
+    // whole slab runs with and without IL-120: the example bridge's live-load moments can only grow
+    const EX = load('concrete-slab-bridge').SLAB_EXAMPLES || {}, k0 = Object.keys(EX)[0];
+    if (k0) { const m0 = structuredClone(EX[k0].model || EX[k0]), r0 = S.run(m0), r1 = S.run(Object.assign(structuredClone(m0), { il120: '1' }));
+      const mx = r => Math.max(...r.pts.map(p => p.LLp ? p.LLp.int : 0));
+      is('slab run with IL-120: interior LL+IM moment does not drop', mx(r1) >= mx(r0) - 1e-9, true); } }
 });
 
 // ---------- Just Live Load ----------
@@ -152,6 +175,15 @@ guard('Just Live Load', () => {
     const f = r.families.find(q => q.id === 'fat'), k = r.model.resp.findIndex(q => JSON.stringify(q).includes('68.25'));
     near('fatigue moment range at 68.25 ft, 70-70 ft, axle neglect ' + (neglect ? 'on' : 'off'), f.max[k] - f.min[k], 408.98, 0.05, 'independent two-span influence line');
   }
+  // Illinois Tollway IL-120 truck on a 100 ft simple span: moment at midspan by brute force over every position
+  const IL = { w: [12, 24, 24, 20, 20, 20], s: [0, 10, 14, 36, 40, 44] }, ilM = x => (x < 0 || x > 100) ? 0 : x <= 50 ? x / 2 : (100 - x) / 2;
+  let best = 0; for (let p = -50; p <= 150; p += 0.25) for (const d of [1, -1]) best = Math.max(best, IL.w.reduce((a, w, i) => a + w * ilM(p - d * IL.s[i]), 0));
+  const r1 = E.analyze({ spans: [100], segments: [{ len: 100, E: 29000, I1: 50000, I2: '' }], divisions: 10, segPts: false, extraPts: '',
+    options: { step: 0.25, varInc: 1, neglectDesign: true, neglectPermit: false, hl93: { on: true, im: 33, lane: 0.64, dual: 'spec', il120: true, fatigue: false, dfM: 1, dfV: 1 }, hs: { on: false }, legal: { on: false }, permits: [] } });
+  const h = r1.families.find(q => q.id === 'hl93'), km = r1.model.resp.findIndex(q => q.type === 'M' && Math.abs(r1.model.sections[q.sec].x - 50) < 1e-6);
+  near('IL-120 truck moment at midspan, 100 ft span, k-ft', h.detail[km].ilMax, best, 1e-6, 'brute force: ' + best.toFixed(2));
+  near('HL-93 with IL-120: midspan moment, k-ft', h.max[km], Math.max(best, h.detail[km].truckMax, h.detail[km].tandemMax) * 1.33 + 0.64 * 1250, 1e-6, 'IL-120 governs: 1.33 x truck + 0.64 x 1250');
+  is('HL-93 with IL-120: IL-120 + Lane controls at midspan', h.detail[km].ctrlMax, 'IL-120 + Lane');
 });
 
 // ---------- Steel 2D Grillage (framing) ----------
@@ -296,6 +328,19 @@ guard('Steel 2D Grillage flared roadway', () => {
   near('flared deck: a curb 8 ft in from the left edge narrows it by 7 ft', Lc.W, 27, 0.6);
   const mid = r => r.kind === 'M' && r.g === 'G1' && r.pt === 5;
   is('flared deck: the curb takes lanes off the left girder', Lc.out.find(mid).max < 0.8 * L.out.find(mid).max, true);
+  // a 60° skewed deck: the loaded area is the parallelogram between the support lines (stations run past the middle
+  // girder's ends and are cut at the abutment lines), so its product of inertia is L tanθ W³/12, not 0 as for a rectangle
+  { const Fs = G.build({ mode: 'concentric', concentric: { R: 0, nG: 4, spacing: 10, spans: [120], skews: [60, 60], ext: 0, crossframes: { spacing: 20 } } });
+    const gS = G.llDeckGrid(G.analyze(Fs, A), 0.5, { L: 0, R: 0 }), cells = []; gS.st.forEach(r => { for (let t = r.cR + 0.05; t < r.cL; t += 0.1) cells.push([r.s, t]); });
+    const dA = gS.ds * 0.1, ar = cells.length * dA, sb = cells.reduce((q, c) => q + c[0], 0) / cells.length, tb = cells.reduce((q, c) => q + c[1], 0) / cells.length;
+    near('60° skew deck: loaded area, ft²', ar, 36 * 120, 0.01 * 36 * 120, '36 ft x 120 ft');
+    near('60° skew deck: product of inertia, ft⁴', Math.abs(cells.reduce((q, c) => q + (c[0] - sb) * (c[1] - tb) * dA, 0)), 120 * Math.tan(Math.PI / 3) * 36 ** 3 / 12, 0.03 * 808106, 'L tan60° W³/12'); }
+  // Illinois Tollway IL-120 truck: on a 100 ft span it raises the midspan moments; fatigue stays the HL-93 fatigue truck
+  const Li = G.liveLoad(R, { ds: 2, il120: true }), m2 = r => r.kind === 'M' && r.g === 'G2' && r.pt === 5;
+  const a0 = L.out.find(m2), a1 = Li.out.find(m2);
+  is('IL-120: G2 midspan LL+I moment rises', a1.max > 1.05 * a0.max, true);
+  near('IL-120: G2 midspan fatigue moment unchanged, kip-ft', a1.fatMax, a0.fatMax, 1e-9);
+  is('IL-120: no moment envelope drops', L.out.every((r, k) => Li.out[k].max >= r.max - 1e-9 && Li.out[k].min <= r.min + 1e-9), true);
 });
 
 // ---------- Steel 2D Grillage: live load by influence surfaces (phase 4) ----------
