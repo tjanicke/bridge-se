@@ -5332,7 +5332,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     add('Frame Section Assignments', M.FR.map(f => ({ Frame: f.id, SectionType: 'I/Wide Flange', AutoSelect: 'N.A.', AnalSect: f.sec, DesignSect: f.sec, MatProp: 'Default' })));
     add('Frame Releases 1 - General', M.FR.filter(f => Object.keys(f.rel).length).map(f => ({ Frame: f.id, PI: 'No', V2I: 'No', V3I: 'No', TI: f.rel.TI || 'No', M2I: f.rel.M2I || 'No', M3I: f.rel.M3I || 'No', PJ: 'No', V2J: 'No', V3J: 'No', TJ: 'No', M2J: f.rel.M2J || 'No', M3J: f.rel.M3J || 'No', PartialFix: 'No' })));
     // frame sections: small I shapes with the member's area (pinned truss members: only the area matters)
-    add('Frame Props 01 - General', Object.entries(M.xfA).map(([name, Ain]) => { const t3 = 0.5, t2 = 0.4, tf = 0.03, A = Ain / 144, hw = t3 - 2 * tf, tw = (A - 2 * t2 * tf) / hw;
+    add('Frame Props 01 - General', Object.entries(M.xfA).map(([name, Ain]) => { const t3 = 0.5, t2 = 0.4, A = Ain / 144, tf = 0.2 * A / t2, hw = t3 - 2 * tf, tw = 0.6 * A / hw; // flanges 40% of the area, web 60%: any area works
       const I33 = (t2 * t3 ** 3 - (t2 - tw) * hw ** 3) / 12, I22 = 2 * tf * t2 ** 3 / 12 + hw * tw ** 3 / 12, Jt = (2 * t2 * tf ** 3 + hw * tw ** 3) / 3;
       return { SectionName: name, Material: 'A709Gr50', Shape: 'I/Wide Flange', t3, t2, tf, tw: r6(tw), t2b: t2, tfb: tf, FilletRadius: 0, Area: r6(A), TorsConst: Jt, I33, I22, I23: 0, AS2: t3 * tw, AS3: 5 / 3 * t2 * tf,
         S33Top: I33 / (t3 / 2), S33Bot: I33 / (t3 / 2), S22Left: I22 / (t2 / 2), S22Right: I22 / (t2 / 2), Z33: t2 * tf * (t3 - tf) + tw * hw ** 2 / 4, Z22: tf * t2 ** 2 / 2 + hw * tw ** 2 / 4,

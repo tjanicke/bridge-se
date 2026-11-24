@@ -340,6 +340,9 @@ guard('Steel 2D Grillage cross-frames', () => {
   is('CSiBridge models: cross-frame members pair with the grid\'s, frame by frame', F.crossframes.every(c => MS.XF.filter(x => x.cf === c.id).length === RT.res.steel.bRes.find(b => b.id === c.id).members.length), true);
   const T = G.csiTables(MS, 't');
   is('CSiBridge tables: every row uses the table\'s own fields (CSiBridge v26)', (() => { try { G.csiWorkbook(T); return true; } catch (e) { return e.message; } })(), true);
+  // frame sections: any member area gives a valid I shape (a small angle, 1.5 in2, as well as a large one)
+  const small = Object.assign({}, MS, { xfA: { XF_A: 1.5, XF_B: 40 } }), TS = G.csiTables(small, 's')['Frame Props 01 - General'];
+  is('CSiBridge frame sections: positive web and flange thicknesses at 1.5 and 40 in2, areas kept', TS.every(r => r.tw > 0 && r.tf > 0 && r.t3 > 2 * r.tf) && TS.map(r => Math.round(r.Area * 144 * 100) / 100).join(',') === '1.5,40', true);
   globalThis.__csi = { G, MS, T };
 });
 
