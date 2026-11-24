@@ -196,7 +196,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <div class="anbar">
         <label class="f">Load<select id="anStage">
           <option value="steel">DC1 steel</option><option value="deck">DC1 deck</option><option value="dc1">DC1 total</option>
-          <option value="dc2">DC2</option><option value="dw">DW</option><option value="all" selected>DC1 + DC2 + DW</option></select></label>
+          <option value="dc2">DC2</option><option value="dw">DW</option><option value="fit" hidden disabled>EL, locked-in fit</option><option value="all" selected>DC1 + DC2 + DW</option></select></label>
         <div><span class="lbl" id="qLbl">Result</span><div class="seg small" role="group" aria-labelledby="qLbl" id="anQty">
           <button data-q="M" aria-pressed="true">Moment</button><button data-q="V">Shear</button><button data-q="T">Torque</button><button data-q="w">Deflection</button><button data-q="flb">Lateral flange</button></div></div>
       </div>
@@ -233,6 +233,10 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +; fatigue range from the fatigue truck)</span></h3>
       <div class="toolbar" style="margin-bottom:6px"><button id="btnLLCsv">Copy CSV</button><button id="btnLLJson">Live-load results as JSON</button></div>
       <div class="tbl-wrap"><table class="res" id="llXf"></table></div>
+      <h3 style="margin-top:14px">Cross-frame member design forces, kip <span class="status">(factored; tension +)</span></h3>
+      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfDesCsv">Copy CSV</button></div>
+      <div class="tbl-wrap"><table class="res" id="xfDes"></table></div>
+      <p class="hint" id="xfDesNote"></p>
     </section>
     <section class="card" id="ckCard">
       <div class="card-h"><h2>Girder checks, AASHTO LRFD 10th edition</h2><div class="toolbar"><span class="status" id="ckStatus"></span><button id="btnCk" class="primary">Run checks</button></div></div>
@@ -4104,7 +4108,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // the grid DOFs w (vertical), tn (rotation about the axis normal to the cross-frame, i.e. girder twist) and a
   // horizontal translation u that the grid does not carry. The truss is condensed onto (w1, tn1, w2, tn2) with u1 held
   // (rigid-body) and u2 and any interior node free, so the frame carries no net axial force, as a grid assumes.
-  // cf: { type: 'X'|'K'|'Kinv', h (in, chord work point to work point), e (in, connection offset from the web),
+  // cf: { type: 'X'|'K'|'Kinv'|'W', h (in, chord work point to work point), e (in, connection offset from the web),
   //   top, bot, diag: { A (in2), R (stiffness factor, AASHTO 4.6.3.3.4: 0.65 single angle, 0.75 flange-connected tee) },
   //   topChord: true|false, deckZ (in above the bottom work point: the deck ties the two girders laterally at that
   //   height, so the frame's ends cannot spread there; composite stages) }
@@ -4121,6 +4125,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       nodes.push([xm, 0]);
       if (cf.topChord !== false) m(0, 2, cf.top, 'top chord');
       m(1, 4, cf.bot, 'bottom chord A'); m(4, 3, cf.bot, 'bottom chord B'); m(0, 4, cf.diag, 'diagonal 1'); m(2, 4, cf.diag, 'diagonal 2');
+    } else if (type === 'W') { // W (two V's): top corners down to the bottom chord's quarter points, up to the top chord's middle
+      nodes.push([xa + (xb - xa) / 4, 0], [xm, h], [xb - (xb - xa) / 4, 0]); // 4 bottom 1/4, 5 top middle, 6 bottom 3/4
+      m(0, 5, cf.top, 'top chord A'); m(5, 2, cf.top, 'top chord B');
+      m(1, 4, cf.bot, 'bottom chord A'); m(4, 6, cf.bot, 'bottom chord middle'); m(6, 3, cf.bot, 'bottom chord B');
+      m(0, 4, cf.diag, 'diagonal 1'); m(4, 5, cf.diag, 'diagonal 2'); m(5, 6, cf.diag, 'diagonal 3'); m(6, 2, cf.diag, 'diagonal 4');
     } else { // inverted V: diagonals from the bottom corners to the middle of the top chord
       nodes.push([xm, h]);
       m(0, 4, cf.top, 'top chord A'); m(4, 2, cf.top, 'top chord B'); m(1, 3, cf.bot, 'bottom chord'); m(1, 4, cf.diag, 'diagonal 1'); m(3, 4, cf.diag, 'diagonal 2');
@@ -4142,7 +4151,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       Am[2 * node][it] = z; if (end) { if (zD == null) Am[2 * node][4] = 1; else { Am[2 * node][1] += zD; Am[2 * node][3] -= zD; } }
       Am[2 * node + 1][iw] = 1; Am[2 * node + 1][it] = -(x - xg); };
     tie(0, 0); tie(1, 0); tie(2, 1); tie(3, 1);
-    if (nn > 4) { Am[8][5] = 1; Am[9][6] = 1; }
+    for (let k = 4; k < nn; k++) { Am[2 * k][5 + 2 * (k - 4)] = 1; Am[2 * k + 1][6 + 2 * (k - 4)] = 1; }
     const Kq = Array.from({ length: nq }, () => new Float64Array(nq));
     for (let i = 0; i < nq; i++) for (let j = 0; j < nq; j++) { let s = 0; for (let a = 0; a < nt; a++) { if (!Am[a][i]) continue; for (let b = 0; b < nt; b++) s += Am[a][i] * Kt[a][b] * Am[b][j]; } Kq[i][j] = s; }
     // condense the slaves (u2, interior) onto the masters (w1, tn1, w2, tn2)
@@ -4150,7 +4159,26 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const Kss = sl.map(i => sl.map(j => Kq[i][j])), Ksm = sl.map(i => ms.map(j => Kq[i][j]));
     const inv = sl.length ? invert(Kss) : [], X = inv.map(r => ms.map((_, j) => -r.reduce((s, v, k) => s + v * Ksm[k][j], 0))); // slaves = X masters
     const K4 = ms.map(i => ms.map(j => Kq[i][j] + sl.reduce((s, si, k) => s + Kq[i][si] * X[k][j], 0)));
-    return { K4, X, sl, Am, mem, nodes, nq, zD };
+    // lack of fit: the frame made to fit its girders displaced by m0 = [w1, tn1, w2, tn2] (no spread between the ends;
+    // interior nodes at their detailed places on the chords, so interpolated between the corners). Each member's made length
+    // is its length in that geometry; e: the change (ft). Returns the member changes, the condensed end forces that the
+    // frame puts on the girders when forced in from the no-load geometry (F4), and the slave offsets (q = X m + qs0)
+    const Kinv = inv;
+    function lof(m0) {
+      const q = new Float64Array(nq); m0.forEach((v, i) => { q[i] = v; });
+      const u = Am.map(r => r.reduce((s, v, j) => s + v * q[j], 0));
+      for (let k = 4; k < nn; k++) { const [x, z] = nodes[k], f = (x - xa) / (xb - xa), [ia, ib] = z > h / 2 ? [0, 2] : [1, 3];
+        u[2 * k] = u[2 * ia] * (1 - f) + u[2 * ib] * f; u[2 * k + 1] = u[2 * ia + 1] * (1 - f) + u[2 * ib + 1] * f; }
+      const e = mem.map(p => p.c * (u[2 * p.j] - u[2 * p.i]) + p.sn * (u[2 * p.j + 1] - u[2 * p.i + 1]));
+      // equivalent generalized forces of the initial elongations, k e along each member
+      const Fq = new Float64Array(nq);
+      mem.forEach((p, k) => { const v = [-p.c, -p.sn, p.c, p.sn], dd = [2 * p.i, 2 * p.i + 1, 2 * p.j, 2 * p.j + 1];
+        dd.forEach((a, t) => { const fa = p.k * e[k] * v[t]; for (let j = 0; j < nq; j++) if (Am[a][j]) Fq[j] += Am[a][j] * fa; }); });
+      const fs = sl.map(i => Fq[i]), F4 = ms.map((i, j) => Fq[i] + X.reduce((s, r, k) => s + r[j] * fs[k], 0));
+      const qs0 = Kinv.map(r => r.reduce((s, v, k) => s + v * fs[k], 0));
+      return { e, F4, qs0 };
+    }
+    return { K4, X, sl, Am, mem, nodes, nq, zD, lof };
   }
   function invert(M) {
     const n = M.length, A = M.map((r, i) => [...r, ...Array.from({ length: n }, (_, j) => (i === j ? 1 : 0))]);
@@ -4163,11 +4191,12 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return A.map(r => r.slice(n));
   }
   // member axial forces (kip, tension +) from the brace's local DOFs [w1, ts1, tn1, w2, ts2, tn2]
-  function trussForces(T, dl) {
+  // lf: a lack of fit from T.lof (members made longer by e; slaves offset by qs0)
+  function trussForces(T, dl, lf) {
     const m = [dl[0], dl[2], dl[3], dl[5]], q = new Float64Array(T.nq);
-    m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0); });
+    m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0) + (lf ? lf.qs0[k] : 0); });
     const u = T.Am.map(r => r.reduce((s, v, j) => s + v * q[j], 0));
-    const out = T.mem.map(p => ({ name: p.name, N: p.k * (p.c * (u[2 * p.j] - u[2 * p.i]) + p.sn * (u[2 * p.j + 1] - u[2 * p.i + 1])) }));
+    const out = T.mem.map((p, k) => ({ name: p.name, N: p.k * (p.c * (u[2 * p.j] - u[2 * p.i]) + p.sn * (u[2 * p.j + 1] - u[2 * p.i + 1]) - (lf ? lf.e[k] : 0)) }));
     // with the deck tie, the deck takes the net horizontal force of the frame (equal and opposite to the members')
     if (T.zD != null) out.push({ name: 'deck tie', N: -T.mem.reduce((s, p, k) => s + out[k].N * p.c, 0) });
     return out;
@@ -4232,6 +4261,16 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const K = mulTKT(T, B.K), dofs = [...gd(el.a).slice(0, 3), ...gd(el.b).slice(0, 3)];
       assemble(dofs, K);
       Object.assign(el, { L, cx, cy, B, T, dofs });
+      // lack of fit: the brace was made to fit the girders displaced by d0 (its local DOFs). A truss frame's members take
+      // their made lengths (T.lof); a beam's end forces are K (dl - d0). With no load the girders take the nodal loads T' F0
+      const d0 = loads.lof && loads.lof[el.id]; el.lf = null; el.F0 = null;
+      if (d0) {
+        let q;
+        if (B.Tr) { el.lf = B.Tr.lof([d0[0], d0[2], d0[3], d0[5]]); q = new Float64Array(6); [0, 2, 3, 5].forEach((ix, i) => { q[ix] = el.lf.F4[i]; }); }
+        else q = B.K.map(r => r.reduce((s, v, j) => s + v * d0[j], 0));
+        el.F0 = q; el.d0 = d0;
+        for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += T[j][i] * q[j]; f[dofs[i]] += s; }
+      }
     });
     // point loads (downward k)
     (loads.points || []).forEach(q => { f[q.node.dof] -= q.P; });
@@ -4262,21 +4301,22 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     });
     const bRes = bEls.filter(el => !el.off).map(el => {
       const dl = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.T[i][j] * d[el.dofs[j]]; dl[i] = s; }
+      if (el.F0 && !el.lf) for (let i = 0; i < 6; i++) dl[i] -= el.d0[i]; // a beam brace: K (dl - d0)
       const db = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.T[i][j] * dl[j]; db[i] = s; }
-      const fb = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.K0[i][j] * db[j]; fb[i] = s; }
+      const fb = new Float64Array(6); for (let i = 0; i < 6; i++) { let s = 0; for (let j = 0; j < 6; j++) s += el.B.K0[i][j] * db[j]; fb[i] = s - (el.lf ? el.F0[i] : 0); }
       // bending moment at each end of the equivalent beam (sagging +) and shear; truss member forces when modeled so
       const o = { id: el.id, kind: el.kind, gA: el.a.g, gB: el.b.g, V: fb[0], MA: fb[2], MB: -fb[5], T: -fb[1] };
       o.L = el.L;
       if (el.B.Tr) {
-        o.members = trussForces(el.B.Tr, dl);
+        o.members = trussForces(el.B.Tr, dl, el.lf);
         // consistency: the member forces, put back on the truss nodes and onto the girders, must give the forces the
         // condensed frame passes to the girders (K4 d), with nothing left over at the free DOFs
         const T = el.B.Tr, q = new Float64Array(T.nq), m = [dl[0], dl[2], dl[3], dl[5]];
-        m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0); });
+        m.forEach((v, i) => { q[i] = v; }); T.X.forEach((r, k) => { q[T.sl[k]] = r.reduce((s, v, j) => s + v * m[j], 0) + (el.lf ? el.lf.qs0[k] : 0); });
         const Rn = new Float64Array(2 * T.nodes.length);
         T.mem.forEach((p, k) => { const N = o.members[k].N; Rn[2 * p.i] -= N * p.c; Rn[2 * p.i + 1] -= N * p.sn; Rn[2 * p.j] += N * p.c; Rn[2 * p.j + 1] += N * p.sn; });
         const Q = Array.from({ length: T.nq }, (_, j) => T.Am.reduce((s, r, a) => s + r[j] * Rn[a], 0));
-        const K4m = T.K4.map(r => r.reduce((s, v, j) => s + v * m[j], 0));
+        const K4m = T.K4.map((r, i) => r.reduce((s, v, j) => s + v * m[j], 0) - (el.lf ? el.lf.F4[i] : 0));
         let res = 0, ref = 1e-9; for (let i = 0; i < 4; i++) { res = Math.max(res, Math.abs(Q[i] - K4m[i])); ref = Math.max(ref, Math.abs(K4m[i])); }
         T.sl.forEach(i => { res = Math.max(res, Math.abs(Q[i])); });
         o.check = { res, ref };
@@ -4381,6 +4421,20 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   const modular = fc => 29000 / (120000 * 0.145 ** 2 * fc ** 0.33);
 
   // ---------- the analysis ----------
+  // the properties of one cross-frame: intermediate frames use the cross-frame input; frames on support lines use
+  // cf.end where it gives a value (its own type, depth, bottom work point, offset and members) and the intermediate
+  // values where it is blank. cf.endType is the older way to give only the end type
+  function frameProps(cf, onSupport) {
+    if (!onSupport) return cf;
+    const e = cf.end || {}, has = v => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
+    const memb = k => (e[k] && has(e[k].A) ? { A: num(e[k].A) } : cf[k]);
+    return Object.assign({}, cf, {
+      type: e.type || cf.endType || cf.type,
+      h: has(e.h) && num(e.h) > 0 ? num(e.h) : cf.h, zb: has(e.zb) ? num(e.zb) : cf.zb, e: has(e.e) ? num(e.e) : cf.e,
+      top: memb('top'), bot: memb('bot'), diag: memb('diag'),
+      topChord: e.topChord != null ? e.topChord : cf.topChord,
+    });
+  }
   function analyze(F, A) {
     A = A || {};
     const deck = Object.assign({}, DEF.deck, A.deck), loads = Object.assign({}, DEF.loads, A.loads);
@@ -4427,9 +4481,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const comp = stage === 'll' || (STAGES.find(x => x.id === stage) || {}).comp, R = comp ? (num(cf.Rc) > 0 ? num(cf.Rc) : 1) : (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1);
       const sA = S.at(el.a.g, el.a.u), sB = S.at(el.b.g, el.b.u), d = Math.max(sA.d, sB.d);
       const mem = q => ({ A: num(q && q.A) || 0, R });
-      const type = el.src && el.src.tag === 'support' ? cf.endType || cf.type : cf.type;
-      const tr = { type, h: num(cf.h), e: num(cf.e) || 0, top: mem(cf.top), bot: mem(cf.bot), diag: mem(cf.diag), topChord: cf.topChord !== false };
-      if (comp && cf.deckTie) tr.deckZ = d + Math.max(thOf(el.a.g, el.a.u), thOf(el.b.g, el.b.u)) + num(deck.ts) / 2 - (num(cf.zb) || 0);
+      const c = frameProps(cf, el.src && el.src.tag === 'support');
+      const tr = { type: c.type, h: num(c.h), e: num(c.e) || 0, top: mem(c.top), bot: mem(c.bot), diag: mem(c.diag), topChord: c.topChord !== false };
+      if (comp && cf.deckTie) tr.deckZ = d + Math.max(thOf(el.a.g, el.a.u), thOf(el.b.g, el.b.u)) + num(deck.ts) / 2 - (num(c.zb) || 0);
       return { truss: tr, J: 1 };
     };
     const md = G.model(F, {
@@ -4474,9 +4528,30 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const r = G.solve(md, st.id, { line: line[st.id], points: st.id === 'steel' ? pts : [], torque: st.id === 'dc2' ? dc2Torque : null });
       res[st.id] = r;
     });
+    // fit (AASHTO 6.7.2; NCHRP Report 924): with SDLF or TDLF detailing the cross-frames and diaphragms are made to fit
+    // the girders in their target geometry under the steel (SDLF) or the steel and wet deck (TDLF): cambered to the grid's
+    // deflections and slopes, with the webs plumb (no twist). On the steel they are forced into place from the no-load
+    // geometry. Their locked-in effects (EL) are the grid's exact linear response to that lack of fit, computed on the steel
+    // grid: cross-frame forces, flange lateral bending, girder moments and reactions. With independent girders that deflect
+    // without twisting (straight, skewed) this is close to the negative of the frames' forces under the detailing load
+    const fit = opt.fit === 'SDLF' || opt.fit === 'TDLF' ? opt.fit : '';
+    if (fit) {
+      const det = fit === 'SDLF' ? ['steel'] : ['steel', 'deck'], lof = {};
+      const target = (node) => { const t = F.girders.find(g => g.id === node.g).P.tan(node.u), v = [0, 0, 0];
+        det.forEach(sid => { const d = res[sid].d; v[0] += d[node.dof]; v[1] += d[node.dof + 1]; v[2] += d[node.dof + 2]; });
+        const tw = v[1] * t[0] + v[2] * t[1]; v[1] -= tw * t[0]; v[2] -= tw * t[1]; return v; }; // the twist taken out
+      md.bEls.forEach(el => { if (el.kind === 'deck' || el.off) return;
+        const g6 = [...target(el.a), ...target(el.b)], dl = new Float64Array(6);
+        for (let i = 0; i < 6; i++) { let v = 0; for (let j = 0; j < 6; j++) v += el.T[i][j] * g6[j]; dl[i] = v; }
+        lof[el.id] = dl; });
+      res.fit = G.solve(md, 'steel', { lof });
+      // NSBA / NCHRP 924 guidance: TDLF is discouraged on curved girders beyond Ls/R of about 0.03 (the span's turn, rad)
+      const turn = Math.max(0, ...F.girders.flatMap(g => g.spans.map(sp => { const a = g.P.tan(sp.u0), b = g.P.tan(sp.u1); return Math.abs(Math.atan2(a[0] * b[1] - a[1] * b[0], a[0] * b[0] + a[1] * b[1])); })));
+      if (fit === 'TDLF' && turn > 0.03) warns.push(`TDLF on curved girders (span Ls/R up to ${turn.toFixed(3)}): NCHRP Report 924 and the NSBA fit guidance discourage TDLF beyond about 0.03; SDLF is the usual choice.`);
+    }
     // tributary sanity
     if (F.members.length && cf.model === 'truss') warns.push('Diaphragms are modeled as beams (I, J given under Diaphragms).');
-    return { md, res, stages: STAGES, n, n3, S, trib, stripLines, line, errs, warns, cf, deck, loads, opt };
+    return { md, res, stages: STAGES, fit, n, n3, S, trib, stripLines, line, errs, warns, cf, deck, loads, opt };
   }
 
   // tenth points of each span of a girder (u along it)
@@ -4553,7 +4628,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return { res, ref };
   }
 
-  Object.assign(G, { analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular, eqBeamI, frameForces, refinements, consistency });
+  Object.assign(G, { frameProps, analyze, girderTable, tenthPoints, STAGES, DEF_ANALYSIS: DEF, modular, eqBeamI, frameForces, refinements, consistency });
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // Steel 2D Grillage: live load by influence surfaces (phase 4). HL-93 (AASHTO LRFD 10th edition 3.6.1), optionally with the
@@ -4607,6 +4682,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       }));
     }
     md.bEls.filter(e => e.kind === 'xf' && e.B && e.B.Tr).forEach(e => e.B.Tr.mem.forEach((m, j) => out.push({ kind: 'X', id: e.id, gA: e.a.g, gB: e.b.g, member: m.name, el: e, j })));
+    // top chords with the deck tie's force added either way (for design: 3D models show the top chord sharing the deck's
+    // horizontal force at the frame, with either sign); not shown in the member table
+    md.bEls.filter(e => e.kind === 'xf' && e.B && e.B.Tr && e.B.Tr.zD != null).forEach(e => e.B.Tr.mem.forEach((m, j) => { if (/^top chord/.test(m.name)) [1, -1].forEach(t => out.push({ kind: 'X', id: e.id, gA: e.a.g, gB: e.b.g, member: m.name + (t > 0 ? ' + deck tie' : ' − deck tie'), el: e, j, tie: t })); }));
     return out;
   }
   function evalAll(resps, d, big, out, col) {
@@ -4619,7 +4697,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       } else if (r.kind === 'B') { let e = cache.get(r.el); if (!e) { e = gEnd(r.el, d); cache.set(r.el, e); } v = r.atStart ? e.B1 : e.B2; }
       else if (r.kind === 'D') v = d[r.node.dof] * 12;
       else if (r.kind === 'R') v = -big * d[r.node.dof];
-      else if (r.kind === 'X') { let f = cache.get(r.el); if (!f) { f = G.trussForces(r.el.B.Tr, bLocal(r.el, d)); cache.set(r.el, f); } v = f[r.j].N; }
+      else if (r.kind === 'X') { let f = cache.get(r.el); if (!f) { f = G.trussForces(r.el.B.Tr, bLocal(r.el, d)); cache.set(r.el, f); } v = f[r.j].N + (r.tie ? r.tie * f[f.length - 1].N : 0); }
       out[i][col] = v;
     });
   }
@@ -4796,7 +4874,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         mx = Math.max(mx, p[1].v); mn = Math.min(mn, -p[-1].v); fmx = Math.max(fmx, p[1].fat); fmn = Math.min(fmn, -p[-1].fat);
         if (r.kind === 'D') { dmx = Math.max(dmx, p[1].defl || 0); dmn = Math.min(dmn, -(p[-1].defl || 0)); }
       });
-      const o = { kind: r.kind, g: r.g, span: r.span, pt: r.pt, u: r.u, support: r.support, id: r.id, gA: r.gA, gB: r.gB, member: r.member, max: mx, min: mn, fatMax: fmx, fatMin: fmn, dual: !!dual };
+      const o = { kind: r.kind, g: r.g, span: r.span, pt: r.pt, u: r.u, support: r.support, id: r.id, gA: r.gA, gB: r.gB, member: r.member, tie: r.tie || 0, max: mx, min: mn, fatMax: fmx, fatMin: fmn, dual: !!dual };
       if (r.kind === 'D') { o.deflMax = dmx; o.deflMin = dmn; }
       return o;
     });
@@ -4859,13 +4937,15 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // ---- the grid's dead load: element ends along the girder (left and right values at every node)
     const dl = { x: [], dc1M: [], dc1V: [], dc2M: [], dc2V: [], dwM: [], dwV: [], signM: [] };
     const els = (st) => R.res[st].gRes.filter(e => e.g === gid);
-    const E = { steel: els('steel'), deck: els('deck'), dc2: els('dc2'), dw: els('dw') };
+    // EL (locked-in fit effects): its major-axis moments and shears ride with DC1 (so factored 1.25 rather than 1.0, a small
+    // difference: they are minor next to DC1); its lateral bending is taken at 1.0 below. Zero without SDLF / TDLF
+    const E = { steel: els('steel'), deck: els('deck'), dc2: els('dc2'), dw: els('dw'), fit: R.res.fit ? els('fit') : els('steel').map(e => ({ M1: 0, M2: 0, V1: 0, w: 0, L: e.L, B1: 0, B2: 0 })) };
     E.steel.forEach((e, k) => {
       if (e.ub < x0 - 1e-6 || e.ua > x1 + 1e-6) return;
       [0, 1].forEach(end => {
         const u = end ? e.ub : e.ua; if (u < x0 - 1e-6 || u > x1 + 1e-6) return;
         const M = st => (end ? E[st][k].M2 : E[st][k].M1), V = st => (end ? E[st][k].V1 - E[st][k].w * E[st][k].L : E[st][k].V1);
-        dl.x.push(X(u)); dl.dc1M.push(M('steel') + M('deck')); dl.dc1V.push(V('steel') + V('deck'));
+        dl.x.push(X(u)); dl.dc1M.push(M('steel') + M('deck') + M('fit')); dl.dc1V.push(V('steel') + V('deck') + V('fit'));
         dl.dc2M.push(M('dc2')); dl.dc2V.push(V('dc2')); dl.dwM.push(M('dw')); dl.dwV.push(V('dw')); dl.signM.push(M('deck'));
       });
     });
@@ -4881,8 +4961,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const ord = ll.x.map((x, i) => i).sort((a, b) => ll.x[a] - ll.x[b] || a - b);
     Object.keys(ll).forEach(k => { ll[k] = ord.map(i => ll[k][i]); });
     // ---- fℓ per unbraced segment (6.10.1.6): from the warping bimoment, Mℓ = B/h in each flange, fℓ = 6Mℓ/(tf bf²).
-    // Strength I: |1.25(DC1 + DC2) + 1.5DW + 1.75LL|, Service II: |DC + DW + 1.3LL|, both in the bottom flange;
-    // constructibility: 1.4 × DC1 in each flange. The largest in the segment is used for the whole segment
+    // Strength I: |1.25(DC1 + DC2) + 1.5DW + EL + 1.75LL|, Service II: |DC + DW + EL + 1.3LL|, both in the bottom flange;
+    // constructibility: 1.4 × DC1 + EL in each flange (EL: locked-in fit effects, load factor 1.0). The largest in the segment is used for the whole segment
     const fl = { x0: [], x1: [], str: [], svc: [], conTop: [], conBot: [], MlFat: [] };
     const Bll = LL.out.filter(r => r.kind === 'B' && r.g === gid);
     const Bdl = (st, u) => { const es = E[st]; let best = null, bd = Infinity; es.forEach(e => { [[e.ua, e.B1], [e.ub, e.B2]].forEach(([uu, B]) => { const d = Math.abs(uu - u); if (d < bd) { bd = d; best = B; } }); }); return best || 0; };
@@ -4894,12 +4974,12 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const ends = E.steel.flatMap((e, j) => [[e.ua, j, 0], [e.ub, j, 1]]).filter(([u]) => u >= a - 1e-6 && u <= b + 1e-6);
       ends.forEach(([u, j, end]) => {
         const B = st => (end ? E[st][j].B2 : E[st][j].B1);
-        const d1 = B('steel') + B('deck'), d = 1.25 * (d1 + B('dc2')) + 1.5 * B('dw'), s0 = d1 + B('dc2') + B('dw');
+        const d1 = B('steel') + B('deck'), el = B('fit'), d = 1.25 * (d1 + B('dc2')) + 1.5 * B('dw') + el, s0 = d1 + B('dc2') + B('dw') + el;
         const L = Bll.reduce((q, r) => (Math.abs(r.u - u) < 0.05 ? r : q), null);
         const lmax = L ? L.max : 0, lmin = L ? L.min : 0;
         str = Math.max(str, flOf(u, d + 1.75 * lmax, 'bot'), flOf(u, d + 1.75 * lmin, 'bot'));
         svc = Math.max(svc, flOf(u, s0 + 1.3 * lmax, 'bot'), flOf(u, s0 + 1.3 * lmin, 'bot'));
-        cT = Math.max(cT, flOf(u, 1.4 * d1, 'top')); cB = Math.max(cB, flOf(u, 1.4 * d1, 'bot'));
+        cT = Math.max(cT, flOf(u, 1.4 * d1 + el, 'top')); cB = Math.max(cB, flOf(u, 1.4 * d1 + el, 'bot'));
         // fatigue: the range of the bottom flange lateral moment Mℓ = B/h, kip-in. (the engine places it at each detail)
         if (L) mf = Math.max(mf, Math.abs(L.fatMax - L.fatMin) / (S.at(gid, u).h / 12) * 12);
       });
@@ -4961,7 +5041,42 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return { girders: res, deflection: deflectionChecks(R, LL, num((opt || {}).ratio) || DEF.ratio) };
   }
 
-  Object.assign(G, { girderModel, runChecks, deflectionChecks, CHECK_DEF: DEF });
+  // ---------- cross-frame member design forces (kip, tension +), AASHTO LRFD 10th edition ----------
+  // Unfactored: DC1 (steel + wet deck), EL (locked-in fit effects, SDLF or TDLF), DC2, DW, LL+I max and min, the fatigue
+  // truck's range. Strength I: 1.25 / 0.90 DC, 1.50 / 0.65 DW (Table 3.4.1-2, the factor that makes the force larger in each
+  // direction), 1.0 EL, 1.75 LL+I. Construction (deck placement): 1.4 DC1 + EL, as the girder constructibility check.
+  // Fatigue I: 1.75 times the range. Top chords in the composite stages are taken with the deck tie's force added either way
+  // (3D models put part of the deck's horizontal force at the frame into the top chord, with either sign), so the grid's
+  // composite top chord forces are an upper bound rather than the near-zero of a rigid deck tie
+  function xfDesign(R, LL) {
+    const st = s => (R.res[s] ? R.res[s].bRes.filter(b => b.kind === 'xf') : null), S1 = st('steel');
+    if (!S1 || !S1.length || !S1[0].members) return { rows: [], fit: R.fit || '' };
+    const D = st('deck'), C2 = st('dc2'), W = st('dw'), EL = st('fit');
+    const comb = (terms, ll, dir) => terms.reduce((a, [x, gmax, gmin]) => a + (dir * x >= 0 ? gmax : gmin) * x, 0) + 1.75 * ll;
+    const rows = [];
+    S1.forEach((b, k) => {
+      const tieOf = L => { const t = L && L[k].members.find(m => m.name === 'deck tie'); return t ? t.N : 0; };
+      b.members.forEach((m, j) => {
+        const N = L => (L ? L[k].members[j].N : 0), dc1 = N(S1) + N(D), el = N(EL), top = /^top chord/.test(m.name);
+        const lls = (LL ? LL.out : []).filter(r => r.kind === 'X' && r.id === b.id && (r.member === m.name || (top && r.tie && r.member.indexOf(m.name + ' ') === 0)));
+        // variants: the member alone, and for a top chord with the deck tie added (t = +1) and taken away (t = -1)
+        const vars = top ? [0, 1, -1] : [0];
+        let smax = -Infinity, smin = Infinity, fat = 0, llmax = -Infinity, llmin = Infinity;
+        vars.forEach(t => {
+          const dc2 = N(C2) + t * tieOf(C2), dw = N(W) + t * tieOf(W), r = lls.find(q => (q.tie || 0) === t);
+          const lmax = r ? r.max : 0, lmin = r ? r.min : 0;
+          const terms = [[dc1 + dc2, 1.25, 0.9], [dw, 1.5, 0.65], [el, 1, 1]];
+          smax = Math.max(smax, comb(terms, lmax, 1)); smin = Math.min(smin, comb(terms, lmin, -1));
+          llmax = Math.max(llmax, lmax); llmin = Math.min(llmin, lmin); if (r) fat = Math.max(fat, 1.75 * (r.fatMax - r.fatMin));
+        });
+        rows.push({ id: b.id, gA: b.gA, gB: b.gB, member: m.name, dc1, el, dc2: N(C2), dw: N(W), tie: top ? Math.abs(tieOf(C2)) + Math.abs(tieOf(W)) : 0,
+          llMax: isFinite(llmax) ? llmax : 0, llMin: isFinite(llmin) ? llmin : 0, strMax: smax, strMin: smin, con: 1.4 * dc1 + el, fatigue: fat });
+      });
+    });
+    return { rows, fit: R.fit || '' };
+  }
+
+  Object.assign(G, { girderModel, runChecks, deflectionChecks, xfDesign, CHECK_DEF: DEF });
 })(typeof window !== 'undefined' ? window : globalThis);
 </script>
 <script>
@@ -5207,7 +5322,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <td><input class="n" data-k="${b}.loads.dc2.${i}.at" data-t="num" value="${esc(it.at == null ? '' : it.at)}" aria-label="In from edge ft"></td>
       <td><button data-act="del" data-arr="${b}.loads.dc2" data-i="${i}" aria-label="Remove">×</button></td></tr>`).join('');
     const truss = A.crossframe.model !== 'beam';
-    const types = [['X', 'X with chords'], ['K', 'K (V to bottom chord)'], ['Kinv', 'Inverted K (to top chord)']];
+    const types = [['X', 'X with chords'], ['K', 'K (V to bottom chord)'], ['Kinv', 'Inverted K (to top chord)'], ['W', 'W (two V\'s)']];
     return `<h2 class="railh">Dead-load analysis</h2>`
       + grp('Girder sections', `<p class="hint">Plates by length along the girder from its start, in inches; the last row runs to the end. A table can serve several girders (blank = every girder not named elsewhere); its lengths are then scaled to each girder's length, as on a concentric curve.</p>${secs}
         <div class="toolbar"><button data-act="add" data-arr="${b}.sections" data-tpl="sectable">Add section table</button></div>`, true)
@@ -5229,7 +5344,13 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         ${fNum('Top chord area', 'in²', b + '.crossframe.top.A')}${fNum('Bottom chord area', 'in²', b + '.crossframe.bot.A')}
         ${fNum('Diagonal area', 'in²', b + '.crossframe.diag.A')}${fNum('Connection offset', 'in', b + '.crossframe.e', 'From the web')}
         ${fNum('Stiffness factor, noncomposite', '', b + '.crossframe.Rnc', 'AASHTO 4.6.3.3.4c: 0.65')}${fNum('Stiffness factor, composite', '', b + '.crossframe.Rc', 'AASHTO 4.6.3.3.4c: 0.75')}</div>
+        <h3>End and support frames</h3><p class="hint">Frames on bearing lines, often deeper channels or a W. Blank: the intermediate value.</p>
+        <div class="fields">${fNum('Depth, work points', 'in', b + '.crossframe.end.h')}${fNum('Bottom work point', 'in', b + '.crossframe.end.zb')}
+        ${fNum('Top chord area', 'in²', b + '.crossframe.end.top.A')}${fNum('Bottom chord area', 'in²', b + '.crossframe.end.bot.A')}
+        ${fNum('Diagonal area', 'in²', b + '.crossframe.end.diag.A')}${fNum('Connection offset', 'in', b + '.crossframe.end.e')}</div>
         ${fChk('Top chord (X and V types)', b + '.crossframe.topChord')}
+        <h3>Fit condition</h3><div class="fields">${fSel('Detailed to fit', b + '.options.fit', [['', 'No-load (no locked-in forces)'], ['SDLF', 'SDLF, steel dead load'], ['TDLF', 'TDLF, total dead load']])}</div>
+        <p class="hint">SDLF and TDLF frames are made to fit the girders cambered and plumb under the steel, or the steel and wet deck, and forced in on the steel. Their locked-in effects (EL, load factor 1.0) are the grid's exact linear response to that lack of fit: cross-frame forces, flange lateral bending, girder moments and reactions (AASHTO 6.7.2, NCHRP Report 924).</p>
         ${fChk('Deck ties the frames at deck level in the composite stages', b + '.crossframe.deckTie')}
         <p class="hint">Each frame is a planar truss between the two girder webs, condensed onto the girders' deflection and twist, so its stiffness in bending and in shear are both exact. The factors reduce member axial stiffness for single angles and flange-connected tees; use 1 for other members.</p>`
         : `<div class="fields">${fNum('I', 'in⁴', b + '.crossframe.beam.I')}${fNum('J', 'in⁴', b + '.crossframe.beam.J')}${fNum('Connection offset', 'in', b + '.crossframe.e')}</div><p class="hint">For comparison with programs that use one equivalent beam per cross-frame.</p>`}
@@ -5532,8 +5653,9 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // ---------- dead-load analysis: run and show ----------
   let AR = null, anKey = '', anQ = 'M', anTmr = 0, anSlow = false;
   const QN = { M: ['Moment', 'kip-ft'], V: ['Shear', 'kip'], T: ['Torque', 'kip-ft'], w: ['Deflection', 'in'], flb: ['Bottom flange lateral bending', 'ksi'] };
-  const SN = { steel: 'DC1 steel', deck: 'DC1 deck', dc1: 'DC1 total', dc2: 'DC2', dw: 'DW', all: 'DC1 + DC2 + DW' };
-  const parts = s => (s === 'dc1' ? ['steel', 'deck'] : s === 'all' ? ['steel', 'deck', 'dc2', 'dw'] : [s]);
+  const SN = { steel: 'DC1 steel', deck: 'DC1 deck', dc1: 'DC1 total', dc2: 'DC2', dw: 'DW', fit: 'EL, locked-in fit', all: 'DC1 + DC2 + DW' };
+  const hasFit = () => !!(AR && AR.res && AR.res.fit);
+  const parts = s => (s === 'dc1' ? ['steel', 'deck'] : s === 'all' ? ['steel', 'deck', 'dc2', 'dw'].concat(hasFit() ? ['fit'] : []) : s === 'fit' && !hasFit() ? ['steel', 'deck', 'dc2', 'dw'] : [s]);
   const anInputKey = () => JSON.stringify([engineModel(), doc.analysis]);
   function scheduleAnalysis() {
     clearTimeout(anTmr);
@@ -5591,6 +5713,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const ok = AR && AR.res;
     $('#anMsgs').innerHTML = AR && (AR.errs || []).length ? `<div class="msg err" role="alert"><b>The analysis could not run</b>${AR.errs.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : (AR && (AR.warns || []).length ? `<div class="msg wrn">${AR.warns.map(e => `<span>${esc(e)}</span>`).join('')}</div>` : '');
     if (!ok) { $('#anSvg').innerHTML = ''; ['#anTbl', '#anReac', '#anXf'].forEach(s => { $(s).innerHTML = ''; }); $('#anLegend').innerHTML = ''; return; }
+    const fo = $('#anStage').querySelector('option[value="fit"]'); fo.hidden = fo.disabled = !hasFit(); if (!hasFit() && $('#anStage').value === 'fit') $('#anStage').value = 'all';
+    $('#anStage').querySelector('option[value="all"]').textContent = hasFit() ? 'DC1 + DC2 + DW + EL' : 'DC1 + DC2 + DW';
     const sel = $('#anGirder'), gids = F.order;
     if (sel.options.length !== gids.length || [...sel.options].some((o, i) => o.value !== gids[i])) { const cur = sel.value; sel.innerHTML = gids.map(g => `<option>${esc(g)}</option>`).join(''); if (gids.includes(cur)) sel.value = cur; }
     drawChart(); anTable(); reacTable(); xfTable(); showRefinements(); showLL();
@@ -5703,7 +5827,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   };
   // stable results file for the next modules (splices, cross-frame connections): unfactored effects by stage
   $('#btnAnJson').onclick = () => {
-    if (!(AR && AR.res)) return; const r4 = v => +(+v).toFixed(3), st = ['steel', 'deck', 'dc2', 'dw'];
+    if (!(AR && AR.res)) return; const r4 = v => +(+v).toFixed(3), st = ['steel', 'deck', 'dc2', 'dw'].concat(hasFit() ? ['fit'] : []);
     const out = { schema: 'opendot.g2d.deadload/1', units: 'kip, ft, in (deflection), ksi (lateral flange)', stages: st.map(s => SN[s]), modularRatio: r4(AR.n),
       girders: F.order.map(gid => ({ id: gid, tenthPoints: G.girderTable(AR, gid, 'steel').map((r, i) => Object.assign({ span: r.span, point: r.pt, at: r4(r.u) }, Object.fromEntries(st.map(s => { const x = G.girderTable(AR, gid, s)[i]; return [s, { M: r4(x.M), V: r4(x.V), T: r4(x.T), defl: r4(x.w), fl_bottom: r4(x.flb), fl_top: r4(x.flt) }]; })))),
         reactions: Object.fromEntries(st.map(s => [s, AR.res[s].reac.filter(x => x.g === gid).map(x => ({ support: x.support, R: r4(x.R) }))])) })),
@@ -5749,10 +5873,10 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   function showLL() {
     const ok = LL && llKey === llInputKey();
     if (LL && !ok) $('#llStatus').textContent = 'Inputs changed: run the live load again.';
-    if (!LL) { $('#llSvg').innerHTML = ''; ['#llTbl', '#llReac', '#llXf'].forEach(s => { $(s).innerHTML = ''; }); $('#llLegend').innerHTML = ''; $('#llNote').textContent = 'Influence surfaces for every result, with HL-93 placed on each; a typical bridge takes a few seconds.'; showCk(); return; }
+    if (!LL) { $('#llSvg').innerHTML = ''; ['#llTbl', '#llReac', '#llXf', '#xfDes'].forEach(s => { $(s).innerHTML = ''; }); $('#llLegend').innerHTML = ''; $('#llNote').textContent = 'Influence surfaces for every result, with HL-93 placed on each; a typical bridge takes a few seconds.'; showCk(); return; }
     const sel = $('#llGirder'), gids = F.order.filter(g => LL.out.some(r => r.g === g));
     if (sel.options.length !== gids.length) { sel.innerHTML = gids.map(g => `<option>${esc(g)}</option>`).join(''); }
-    llChart(); llTable(); llReac(); llXf(); showCk();
+    llChart(); llTable(); llReac(); llXf(); xfDes(); showCk();
   }
   const llSeries = (gid, q) => LL.out.filter(r => r.g === gid && r.kind === (q === 'F' ? 'M' : q)).map(r => ({ u: r.u, hi: q === 'F' ? r.fatMax : q === 'D' ? r.deflMax : r.max, lo: q === 'F' ? r.fatMin : q === 'D' ? r.deflMin : r.min }));
   function llChart() {
@@ -5795,10 +5919,31 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       + F.order.map(g => `<tr><td class="l">${esc(g)}</td>${sup.map(s => { const r = rx.find(x => x.g === g && x.support === s); return r ? `<td>${fx(r.max, 1)} / <span${r.min < 0 ? ' class="neg"' : ''}>${fx(r.min, 1)}</span></td>` : '<td>–</td>'; }).join('')}</tr>`).join('') + '</tbody>';
   }
   function llXf() {
-    const xs = LL.out.filter(r => r.kind === 'X');
+    const xs = LL.out.filter(r => r.kind === 'X' && !r.tie);
     $('#llXf').innerHTML = `<thead><tr><th class="l">Cross-frame</th><th class="l">Girders</th><th class="l">Member</th><th>LL+I max</th><th>LL+I min</th><th>Fatigue range</th></tr></thead><tbody>`
       + xs.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)}</td><td class="l">${esc(r.gA)}–${esc(r.gB)}</td><td class="l">${esc(r.member)}</td><td>${fx(r.max, 1)}</td><td${r.min < 0 ? ' class="neg"' : ''}>${fx(r.min, 1)}</td><td>${fx(r.fatMax - r.fatMin, 1)}</td></tr>`).join('') + '</tbody>';
   }
+  // factored member forces for design, from the dead-load stages (the analysis for these inputs) and the live load
+  let XD = null;
+  function xfDes() {
+    XD = null; const T = $('#xfDes'); if (!T) return;
+    if (!LL || !LL.out.some(r => r.kind === 'X')) { T.innerHTML = ''; $('#xfDesNote').textContent = 'Cross-frames modeled as trusses get member design forces here after the live load runs.'; return; }
+    if (llKey !== llInputKey()) { T.innerHTML = ''; $('#xfDesNote').textContent = 'Inputs changed: run the live load again for the design forces.'; return; }
+    let R = AR && AR.res && anKey === llKey ? AR : null;
+    try { if (!R) R = G.analyze(F, clone(doc.analysis)); if (R.errs && R.errs.length) throw new Error(R.errs.join(' ')); XD = G.xfDesign(R, LL); }
+    catch (err) { T.innerHTML = ''; $('#xfDesNote').textContent = 'The design forces could not be found: ' + err.message; return; }
+    const c = v => `<td${v < 0 ? ' class="neg"' : ''}>${fx(v, 1)}</td>`, fit = !!XD.fit;
+    T.innerHTML = `<thead><tr><th class="l">Cross-frame</th><th class="l">Member</th><th>DC1</th>${fit ? '<th>EL</th>' : ''}<th>DC2</th><th>DW</th><th>LL+I max</th><th>LL+I min</th><th>Strength I max</th><th>Strength I min</th><th>Construction</th><th>Fatigue I range</th></tr></thead><tbody>`
+      + XD.rows.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)} <span class="status">${esc(r.gA)}–${esc(r.gB)}</span></td><td class="l">${esc(r.member)}${r.tie ? ' <span class="status">± deck tie</span>' : ''}</td>${c(r.dc1)}${fit ? c(r.el) : ''}${c(r.dc2)}${c(r.dw)}${c(r.llMax)}${c(r.llMin)}${c(r.strMax)}${c(r.strMin)}${c(r.con)}<td>${fx(r.fatigue, 1)}</td></tr>`).join('') + '</tbody>';
+    $('#xfDesNote').textContent = `Strength I: 1.25 (0.90) DC, 1.50 (0.65) DW, ${fit ? '1.0 EL (' + XD.fit + '), ' : ''}1.75 LL+I, the factors that make each extreme larger. Construction: 1.4 DC1${fit ? ' + EL' : ''}. Fatigue I: 1.75 × the fatigue truck's range. Top chords in the composite stages carry the deck tie's force added either way (marked ± deck tie): a 3D model shares the deck's horizontal force at the frame with the top chord, so the grid's near-zero composite top chord force is not used alone. Unfactored columns are the member alone.`;
+  }
+  $('#xfDes') && $('#xfDes').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
+  $('#btnXfDesCsv') && ($('#btnXfDesCsv').onclick = () => {
+    if (!XD) return; const f3 = v => (+v).toFixed(3);
+    const t = ['crossframe,girder_a,girder_b,member,dc1,el,dc2,dw,llim_max,llim_min,strength1_max,strength1_min,construction,fatigue1_range,deck_tie_added'].concat(XD.rows.map(r => [r.id, r.gA, r.gB, r.member, f3(r.dc1), f3(r.el), f3(r.dc2), f3(r.dw), f3(r.llMax), f3(r.llMin), f3(r.strMax), f3(r.strMin), f3(r.con), f3(r.fatigue), r.tie ? 'yes' : 'no'].join(','))).join('\n');
+    const b = $('#btnXfDesCsv'); const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy CSV'; }, 1500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('crossframe-design-forces.csv', t, 'text/csv'); done(); }); else { download('crossframe-design-forces.csv', t, 'text/csv'); done(); }
+  });
   $('#llXf').addEventListener('click', e => { const tr = e.target.closest('tr[data-x]'); if (!tr) return; sel = tr.dataset.x; drawPlan(); tables(); document.getElementById('plan').scrollIntoView({ behavior: 'smooth', block: 'center' }); });
   $('#llGirder').onchange = () => { if (LL) llTable(); };
   document.querySelectorAll('#llQty button').forEach(b => b.addEventListener('click', () => { llQ = b.dataset.q; document.querySelectorAll('#llQty button').forEach(x => x.setAttribute('aria-pressed', String(x === b))); if (LL) llChart(); }));

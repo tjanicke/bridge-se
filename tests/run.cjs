@@ -290,6 +290,40 @@ guard('Steel 2D Grillage cross-frames', () => {
   is('deck tie: without it, chords carry more (composite stage)', mx(ff[2], 'c') > 1.3 * mx(ff[0], 'c'), true);
   is('deck tie: without it, diagonals carry less (composite stage)', mx(ff[2], 'd') < 0.85 * mx(ff[0], 'd'), true);
   is('stiffness factors: stiffer frames attract more force', mx(ff[1], 'd') > mx(ff[0], 'd'), true);
+  // W end frame (two V's): rigid-body modes carry no force; each diagonal's vertical component is the frame shear (statics,
+  // a vertical cut through one panel crosses two horizontal chords and one diagonal)
+  const W = G.truss(12, { type: 'W', h: 40, e: 0, top: { A: 8.81 }, bot: { A: 3.82 }, diag: { A: 2.86 } });
+  const mvW = v => Math.max(...W.K4.map(r => Math.abs(r.reduce((s, x, j) => s + x * v[j], 0))));
+  near('W frame: rigid translation and rotation, largest force', Math.max(mvW([1, 0, 1, 0]), mvW([0, 1e-3, -12e-3, 1e-3])), 0, 1e-8);
+  const qW = [0, 0, 0.01, 0.002], VW = W.K4[0].reduce((s, x, j) => s + x * qW[j], 0), fW = G.trussForces(W, [qW[0], 0, qW[1], qW[2], 0, qW[3]]);
+  const sinW = 40 / Math.hypot(40, 36);
+  near('W frame: diagonal vertical component = frame shear, worst of 4 (relative)', Math.max(...fW.filter(m => /diag/.test(m.name)).map(m => Math.abs(Math.abs(m.N) * sinW - Math.abs(VW)))) / Math.abs(VW), 0, 1e-9, 'statics');
+  // end frames: own type, depth and members on support lines; blanks take the intermediate values
+  const fp = G.frameProps({ type: 'X', h: 40, zb: 1, e: 0, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, end: { type: 'W', h: 30, zb: '', top: { A: 8.81 }, bot: { A: '' }, diag: { A: 2.86 } } }, true);
+  is('end frame properties: W, 30 in., zb and bottom chord from the intermediate', [fp.type, fp.h, fp.zb, fp.top.A, fp.bot.A, fp.diag.A].join(' '), 'W 30 1 8.81 4 2.86');
+  const A2 = JSON.parse(JSON.stringify(A)); A2.crossframe.end = { type: 'W', h: 40, top: { A: 8.81 }, bot: { A: 3.82 }, diag: { A: 2.86 } };
+  const R2 = G.analyze(F, A2), c2 = G.consistency(R2), w2 = R2.res.dc2.bRes.find(b => b.kind === 'xf' && b.members && b.members.length > 6);
+  is('W end frames in the grid: support frames carry nine members', !!w2, true);
+  near('W end frames: consistency (relative)', c2.res / c2.ref, 0, 1e-9);
+  // lack of fit: an X frame (no interior nodes) made to fit displaced corners m0 puts K4 m0 on the girders
+  const TX = G.truss(12, { type: 'X', h: 40, e: 0, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 } }), m0 = [0.01, -0.002, -0.004, 0.003], LFX = TX.lof(m0);
+  near('lack of fit, X frame: end forces = K4 m0 (relative)', Math.max(...TX.K4.map((r, i) => Math.abs(r.reduce((a, v, j) => a + v * m0[j], 0) - LFX.F4[i]))) / Math.max(...LFX.F4.map(Math.abs)), 0, 1e-9, 'static condensation');
+  // a rigid motion of the corners (translation and in-plane rotation) leaves every member at its length, interior nodes too
+  ['Kinv', 'K', 'W'].forEach(ty => { const T = G.truss(12, { type: ty, h: 40, e: 0, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 } }), th = 0.002;
+    near(`lack of fit, ${ty} frame: rigid motion changes no member length, ft`, Math.max(...T.lof([0.01 - th * 0, th, 0.01 - th * 12, th]).e.map(Math.abs)), 0, 1e-12); });
+  // TDLF / SDLF on the 60° skew: exact lack-of-fit response, self-equilibrated, consistent, relieving the dead-load frame forces
+  const AT = JSON.parse(JSON.stringify(A)); AT.options.fit = 'TDLF'; const RT = G.analyze(F, AT);
+  const AS = JSON.parse(JSON.stringify(A)); AS.options.fit = 'SDLF'; const RS = G.analyze(F, AS);
+  near('TDLF: locked-in reactions sum to zero, kip', RT.res.fit.reac.reduce((a, r) => a + r.R, 0), 0, 1e-6);
+  near('TDLF: consistency with the lack of fit (relative)', G.consistency(RT).res / G.consistency(RT).ref, 0, 1e-9);
+  const mxN = (R, sts) => { let v = 0; R.res.steel.bRes.forEach((b, k) => { if (b.kind === 'xf') b.members.forEach((m, j) => { v = Math.max(v, Math.abs(sts.reduce((a, st) => a + R.res[st].bRes[k].members[j].N, 0))); }); }); return v; };
+  const nd = mxN(RT, ['steel', 'deck']), nT = mxN(RT, ['steel', 'deck', 'fit']), nS = mxN(RS, ['steel', 'deck', 'fit']);
+  is('TDLF relieves the largest DC1 member force on a straight skewed bridge more than SDLF', nT < nS && nS < nd, true);
+  // design forces: Strength I is the governing direction of each term with its factor
+  const LLx = G.liveLoad(RT, {}), XD = G.xfDesign(RT, LLx), rD = XD.rows.find(r => /^diagonal/.test(r.member));
+  const ll = LLx.out.find(r => r.kind === 'X' && r.id === rD.id && r.member === rD.member), g = (x, a, b) => (x >= 0 ? a : b) * x;
+  near('design forces: Strength I max of a diagonal, kip', rD.strMax, g(rD.dc1 + rD.dc2, 1.25, 0.9) + g(rD.dw, 1.5, 0.65) + rD.el + 1.75 * ll.max, 1e-9, 'Table 3.4.1-1 and -2');
+  is('design forces: composite top chords carry the deck tie either way', XD.rows.filter(r => /^top chord/.test(r.member)).every(r => r.tie > 0), true);
 });
 
 // ---------- Steel 2D Grillage: composite twist about the deck, web flexibility (checked against 3D shell models) ----------
