@@ -208,7 +208,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <div><h3>Bearing reactions, kip</h3><div class="tbl-wrap"><table class="res" id="anReac"></table></div></div>
       </div>
       <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +)</span></h3>
-      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button></div>
+      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button><button id="btnCsi" title="Three CSiBridge v26 Excel import models (steel, long-term and short-term composite) of thin shells, to check the grid in 3D">CSiBridge models</button><span class="status" id="csiStatus"></span></div>
       <div class="tbl-wrap"><table class="res" id="anXf"></table></div>
       <p class="hint" id="anCheck" style="margin-top:8px"></p>
       <h3 style="margin-top:16px">What each refinement does to the cross-frame forces</h3>
@@ -5078,6 +5078,390 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
 
   Object.assign(G, { girderModel, runChecks, deflectionChecks, xfDesign, CHECK_DEF: DEF });
 })(typeof window !== 'undefined' ? window : globalThis);
+
+/* Steel 2D Grillage — CSiBridge verification models.
+   A thin-shell model of the same bridge, written as CSiBridge (v26) Excel import tables, so a 3D model can check the grid:
+   webs (6 or more elements deep) and flanges (one element each side of the web) as thin shells, the deck as shells at E/n
+   tied to the tops of the webs by body constraints, cross-frames as pinned frame members at their work points, 1/2 in.
+   connection plates and bearing stiffeners on both sides, vertical bearings at the web bases, and in-plane restraint that
+   is statically determinate. Three models, one per stiffness the grid uses: the steel alone (DC1, EL), the long-term
+   composite deck at 3n (DC2, DW) and the short-term deck at n (live load test cases). Loads are the grid's own (the same
+   line loads, the same lack of fit), except where a shell can place them where they act: barriers on the deck edges and
+   the wearing surface over the roadway. Units: kip, ft. */
+(function () {
+  const G = globalThis.G2D;
+  // CSiBridge import tables used here: sheet name, table title, fields, units (kip, ft, F)
+  const TBL = {"Program Control":["Program Control",["ProgramName","Version","ProgLevel","LicenseNum","LicenseOS","LicenseSC","LicenseBR","LicenseHT","CurrUnits","SteelCode","ConcCode","AlumCode","ColdCode","ConcSCode","BridgeCode","BridgeSubst","BridgeRat","BridgeSeism","RegenHinge","BSchedGUID"],["Text","Text","Text","Text","Yes/No","Yes/No","Yes/No","Yes/No","Text","Text","Text","Text","Text","Text","Text","Text","Text","Text","Yes/No","Text"]],"Project Information":["Project Information",["Item","Data"],["Text","Text"]],"Active Degrees of Freedom":["Active Degrees of Freedom",["UX","UY","UZ","RX","RY","RZ"],["Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No"]],"Coordinate Systems":["Coordinate Systems",["Name","Type","X","Y","Z","AboutZ","AboutY","AboutX"],["Text","Text","ft","ft","ft","Degrees","Degrees","Degrees"]],"Database Format Types":["Database Format Types",["UnitsCurr","OverrideE"],["Yes/No","Yes/No"]],"MatProp 01 - General":["Material Properties 01 - General",["Material","Type","Grade","SymType","TempDepend","Color","GUID","Notes"],["Text","Text","Text","Text","Yes/No","Text","Text","Text"]],"MatProp 02 - Basic Mech Props":["Material Properties 02 - Basic Mechanical Properties",["Material","UnitWeight","UnitMass","E1","G12","U12","A1"],["Text","Kip/ft3","Kip-s2/ft4","Kip/ft2","Kip/ft2","Unitless","1/F"]],"MatProp 03a - Steel Data":["Material Properties 03a - Steel Data",["Material","Fy","Fu","EffFy","EffFu","SSCurveOpt","SSHysType","SHard","SMax","SRup","FinalSlope","CoupModType"],["Text","Kip/ft2","Kip/ft2","Kip/ft2","Kip/ft2","Text","Text","Unitless","Unitless","Unitless","Unitless","Text"]],"MatProp 03b - Concrete Data":["Material Properties 03b - Concrete Data",["Material","Fc","eFc","LtWtConc","SSCurveOpt","SSHysType","SFc","SCap","FinalSlope","FAngle","DAngle","CoupModType"],["Text","Kip/ft2","Kip/ft2","Yes/No","Text","Text","Unitless","Unitless","Unitless","Degrees","Degrees","Text"]],"Joint Coordinates":["Joint Coordinates",["Joint","CoordSys","CoordType","XorR","Y","Z","SpecialJt","GlobalX","GlobalY","GlobalZ","GUID"],["Text","Text","Text","ft","ft","ft","Yes/No","ft","ft","ft","Text"]],"Connectivity - Frame":["Connectivity - Frame",["Frame","JointI","JointJ","IsCurved","Length","CentroidX","CentroidY","CentroidZ","GUID"],["Text","Text","Text","Yes/No","ft","ft","ft","ft","Text"]],"Frame Section Assignments":["Frame Section Assignments",["Frame","SectionType","AutoSelect","AnalSect","DesignSect","MatProp"],["Text","Text","Text","Text","Text","Text"]],"Frame Releases 1 - General":["Frame Release Assignments 1 - General",["Frame","PI","V2I","V3I","TI","M2I","M3I","PJ","V2J","V3J","TJ","M2J","M3J","PartialFix"],["Text","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No"]],"Frame Props 01 - General":["Frame Section Properties 01 - General",["SectionName","Material","Shape","t3","t2","tf","tw","t2b","tfb","FilletRadius","Area","TorsConst","I33","I22","I23","AS2","AS3","S33Top","S33Bot","S22Left","S22Right","Z33","Z22","R33","R22","CGOffset3","CGOffset2","EccV2","EccV3","Cw","ConcCol","ConcBeam","Color","TotalWt","TotalMass","FromFile","AMod","A2Mod","A3Mod","JMod","I2Mod","I3Mod","MMod","WMod","GUID","Notes"],["Text","Text","Text","ft","ft","ft","ft","ft","ft","ft","ft2","ft4","ft4","ft4","ft4","ft2","ft2","ft3","ft3","ft3","ft3","ft3","ft3","ft","ft","ft","ft","ft","ft","ft6","Yes/No","Yes/No","Text","Kip","Kip-s2/ft","Yes/No","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Text","Text"]],"Connectivity - Area":["Connectivity - Area",["Area","NumJoints","Joint1","Joint2","Joint3","Joint4","Perimeter","AreaArea","Volume","CentroidX","CentroidY","CentroidZ","GUID"],["Text","Unitless","Text","Text","Text","Text","ft","ft2","ft3","ft","ft","ft","Text"]],"Area Section Assignments":["Area Section Assignments",["Area","Section","MatProp"],["Text","Text","Text"]],"Area Section Properties":["Area Section Properties",["Section","Material","MatAngle","AreaType","Type","DrillDOF","Thickness","BendThick","Arc","InComp","CoordSys","Color","TotalWt","TotalMass","F11Mod","F22Mod","F12Mod","M11Mod","M22Mod","M12Mod","V13Mod","V23Mod","MMod","WMod","GUID","Notes"],["Text","Text","Degrees","Text","Text","Yes/No","ft","ft","Degrees","Yes/No","Text","Text","Kip","Kip-s2/ft","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Unitless","Text","Text"]],"Joint Restraint Assignments":["Joint Restraint Assignments",["Joint","U1","U2","U3","R1","R2","R3"],["Text","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No"]],"Constraint Definitions - Body":["Constraint Definitions - Body",["Name","CoordSys","UX","UY","UZ","RX","RY","RZ"],["Text","Text","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No","Yes/No"]],"Joint Constraint Assignments":["Joint Constraint Assignments",["Joint","Constraint","Type"],["Text","Text","Text"]],"Load Pattern Definitions":["Load Pattern Definitions",["LoadPat","DesignType","SelfWtMult","AutoLoad","GUID","Notes"],["Text","Text","Unitless","Text","Text","Text"]],"Load Case Definitions":["Load Case Definitions",["Case","Type","InitialCond","ModalCase","BaseCase","MassSource","DesTypeOpt","DesignType","DesActOpt","DesignAct","AutoType","RunCase","CaseStatus","GUID","Notes"],["Text","Text","Text","Text","Text","Text","Text","Text","Text","Text","Text","Yes/No","Text","Text","Text"]],"Case - Static 1 - Load Assigns":["Case - Static 1 - Load Assignments",["Case","LoadType","LoadName","LoadSF"],["Text","Text","Text","Unitless"]],"Joint Loads - Force":["Joint Loads - Force",["Joint","LoadPat","CoordSys","F1","F2","F3","M1","M2","M3","GUID"],["Text","Text","Text","Kip","Kip","Kip","Kip-ft","Kip-ft","Kip-ft","Text"]],"Area Loads - Uniform":["Area Loads - Uniform",["Area","LoadPat","CoordSys","Dir","UnifLoad"],["Text","Text","Text","Text","Kip/ft2"]]};
+  const num = v => (v === '' || v == null ? NaN : +v);
+
+  // ---------- the model ----------
+  function csiModel(F, A, R, which, o) {
+    o = o || {};
+    const errs = [], warns = [];
+    if (!F || F.fatal || !R || !R.res) return { errs: ['Analyze the bridge first.'] };
+    const S = R.S, cf = R.cf, deck = R.deck, opt = R.opt, IDS = F.order, gird = id => F.girders.find(g => g.id === id);
+    if (cf.model !== 'truss') errs.push('The CSiBridge model needs cross-frames modeled as trusses (member areas).');
+    IDS.forEach(id => { const g = gird(id); if (g.startKind === 'member' || g.endKind === 'member') errs.push(`Girder ${id} frames into a member; the CSiBridge model needs every girder on bearings.`); });
+    const nb = new Set(IDS.map(id => gird(id).brg.length));
+    if (nb.size > 1) errs.push('Every girder needs the same number of bearings for the shell mesh (station lines run across all girders).');
+    if (F.members && F.members.length) warns.push(`${F.members.length} diaphragm or framing member${F.members.length > 1 ? 's are' : ' is'} not in the CSiBridge model.`);
+    if (errs.length) return { errs, warns };
+    const STEEL = which === 'steel', nMod = which === 'long' ? R.n3 : R.n;
+
+    // segments of each girder: [0, b1], [b1, b2], ..., [bn, L]; an end segment is kept when any girder has one
+    const cuts = id => { const g = gird(id); return [0, ...g.brg.map(b => b.u), g.L]; };
+    const nSegAll = cuts(IDS[0]).length - 1, segs = [];
+    for (let s = 0; s < nSegAll; s++) {
+      const lens = IDS.map(id => { const c = cuts(id); return c[s + 1] - c[s]; });
+      const mx = Math.max(...lens), mn = Math.min(...lens);
+      if (mx < 0.05) continue;
+      if (mn < 0.05) { errs.push('Some girders extend past their end bearings and others do not; the shell mesh needs the same ends on every girder.'); break; }
+      segs.push({ s, L: mx });
+    }
+    if (errs.length) return { errs, warns };
+    const segU = (id, s, f) => { const c = cuts(id); return c[s] + f * (c[s + 1] - c[s]); };
+    const segOf = (id, u) => { const c = cuts(id); let best = null; segs.forEach(q => { if (u >= c[q.s] - 1e-6 && u <= c[q.s + 1] + 1e-6 && !best) best = q; }); return best; };
+    const hEl = num(o.h) > 0 ? num(o.h) : 2.5;
+
+    // stations: per segment, fractions; cross-frame ends and plate changes are kept (priority), a regular grid fills in
+    const ST = []; // { s, f }
+    segs.forEach((q, si) => {
+      const pri = [];
+      F.crossframes.forEach(c => [[c.gA, c.uA], [c.gB, c.uB]].forEach(([g, u]) => { const sg = segOf(g, u); if (sg === q) pri.push({ f: (u - cuts(g)[q.s]) / (cuts(g)[q.s + 1] - cuts(g)[q.s]), p: 2 }); }));
+      IDS.forEach(g => S.breaks(g).forEach(u => { if (segOf(g, u) === q) pri.push({ f: (u - cuts(g)[q.s]) / (cuts(g)[q.s + 1] - cuts(g)[q.s]), p: 1 }); }));
+      const n = Math.max(2, Math.ceil(q.L / hEl)), grid = Array.from({ length: n + 1 }, (_, k) => ({ f: k / n, p: k === 0 || k === n ? 3 : 0 }));
+      const cand = [...pri, ...grid].sort((a, b) => a.f - b.f), out = [];
+      cand.forEach(c => { const l = out[out.length - 1], d = l ? (c.f - l.f) * q.L : 1e9;
+        if (!l || d > 0.4) out.push({ ...c, n: 1 });
+        else if (l.p === 3) { /* the segment's ends stay put */ }
+        else if (c.p === 3) out[out.length - 1] = { ...c, n: 1 };
+        else if (c.p > l.p) out[out.length - 1] = { ...c, n: 1 };
+        else if (c.p === l.p && c.p > 0) { l.f = (l.f * l.n + c.f) / (l.n + 1); l.n++; } });
+      out.forEach((c, k) => { if (si > 0 && k === 0) return; ST.push({ s: q.s, f: Math.min(1, Math.max(0, c.f)) }); });
+    });
+    const nearSt = (g, u) => { let b = 0, bd = 1e9; ST.forEach((t, i) => { const d = Math.abs(segU(g, t.s, t.f) - u); if (d < bd) { bd = d; b = i; } }); return { i: b, d: bd }; };
+
+    // web levels: bottom flange, the cross-frame work points (kept at their distance from the nearer flange), top flange,
+    // with levels added between so no web element is deeper than a sixth of the web
+    const rowAt = (g, i) => { const t = ST[i], t2 = ST[Math.min(ST.length - 1, i + 1)], u = (segU(g, t.s, t.f) + (i + 1 < ST.length ? segU(g, t2.s, t2.f) : segU(g, t.s, t.f))) / 2; return S.rowAt(g, i + 1 < ST.length ? u : segU(g, t.s, t.f) - 1e-6); };
+    const HSof = r => r.D + (r.tt + r.tb) / 2; // in, flange mid-plane to mid-plane
+    const ref = (() => { let r = null; IDS.forEach(g => ST.forEach((_, i) => { const q = rowAt(g, i); if (!r || HSof(q) > HSof(r)) r = q; })); return r; })();
+    const pI = G.frameProps(cf, false), pE = G.frameProps(cf, true);
+    const wp = p => { const r = ref, zb = (num(p.zb) || 0) - r.tb / 2, zt = zb + num(p.h); return [{ from: 'bot', d: zb }, { from: 'top', d: HSof(r) - zt }]; };
+    const lv = [{ from: 'bot', d: 0 }, ...wp(pI), ...wp(pE), { from: 'top', d: 0 }];
+    const zOf = (L, HS) => (L.from === 'bot' ? L.d : HS - L.d);
+    const H0 = HSof(ref);
+    lv.forEach(L => { if (L.d < 0 || zOf(L, H0) > H0 || zOf(L, H0) < 0) { warns.push('A cross-frame work point lies within a flange; it is placed at the flange mid-plane.'); L.d = Math.max(0, Math.min(H0, L.d)); } });
+    lv.sort((a, b) => zOf(a, H0) - zOf(b, H0));
+    const LV = []; lv.forEach(L => { const l = LV[LV.length - 1]; if (!l || zOf(L, H0) - zOf(l, H0) > 1) LV.push(L); });
+    const LVS = []; // with the fill levels: { from, d } or { a, b, t } between two defined levels
+    LV.forEach((L, k) => { if (k) { const gap = zOf(L, H0) - zOf(LV[k - 1], H0), m = Math.max(1, Math.ceil(gap / (H0 / 6) - 1e-6)); for (let j = 1; j < m; j++) LVS.push({ a: LV[k - 1], b: L, t: j / m }); } LVS.push(L); });
+    const zAt = (L, HS) => (L.a ? zOf(L.a, HS) + (zOf(L.b, HS) - zOf(L.a, HS)) * L.t : zOf(L, HS)) / 12;
+    const lvIdx = (L) => { const z = zOf(L, H0); let b = 0; LVS.forEach((q, i) => { if (Math.abs(zAt(q, H0) * 12 - z) < Math.abs(zAt(LVS[b], H0) * 12 - z)) b = i; }); return b; };
+    const TOP = LVS.length - 1;
+
+    // ---------- joints, girder shells ----------
+    const J = [], jkey = new Map();
+    const joint = (x, y, z) => { const k = x.toFixed(4) + ',' + y.toFixed(4) + ',' + z.toFixed(4); if (jkey.has(k)) return jkey.get(k); const id = J.length + 1; J.push({ id, x, y, z }); jkey.set(k, id); return id; };
+    const SH = [], FR = [], BODY = [], REST = [], shSec = new Map();
+    const sec2 = (kind, t) => { const n = kind + '_' + (Math.round(t * 1e4) / 1e4); shSec.set(n, { kind, t }); return n; };
+    const GJ = {};
+    IDS.forEach(g => {
+      const P = gird(g).P;
+      GJ[g] = ST.map((t, i) => {
+        const u = segU(g, t.s, t.f), p = P.at(u), tg = P.tan(u), n = [-tg[1], tg[0]], r = rowAt(g, i), HS = HSof(r);
+        const at = (off, z) => joint(p[0] + n[0] * off, p[1] + n[1] * off, z);
+        return { u, p, n, r, HS, web: LVS.map(L => at(0, zAt(L, HS))), bfL: at(r.bb / 24, 0), bfR: at(-r.bb / 24, 0), tfL: at(r.bt / 24, HS / 12), tfR: at(-r.bt / 24, HS / 12) };
+      });
+      for (let i = 0; i + 1 < ST.length; i++) {
+        const a = GJ[g][i], b = GJ[g][i + 1], r = a.r;
+        for (let k = 0; k < TOP; k++) SH.push({ j: [a.web[k], b.web[k], b.web[k + 1], a.web[k + 1]], sec: sec2('W', r.tw), part: 'web' });
+        SH.push({ j: [a.bfL, b.bfL, b.web[0], a.web[0]], sec: sec2('BF', r.tb), part: 'bf' }, { j: [a.web[0], b.web[0], b.bfR, a.bfR], sec: sec2('BF', r.tb), part: 'bf' });
+        SH.push({ j: [a.tfL, b.tfL, b.web[TOP], a.web[TOP]], sec: sec2('TF', r.tt), part: 'tf' }, { j: [a.web[TOP], b.web[TOP], b.tfR, a.tfR], sec: sec2('TF', r.tt), part: 'tf' });
+      }
+    });
+
+    // ---------- deck: overhang edge, half overhang, each girder with 3 points between, along every station line ----------
+    const ohL = num(deck.ohL) || 0, ohR = num(deck.ohR) || 0, nG = IDS.length, DN = [];
+    const zDeck = q => (q.r.tb / 2 + q.r.D + Math.max(num(deck.haunch) || 0, q.r.tt) + num(deck.ts) / 2) / 12;
+    if (!STEEL) {
+      ST.forEach((_, i) => {
+        const row = [], q = IDS.map(g => GJ[g][i]), put = (x, y, z, e) => row.push({ j: joint(x, y, z), ...e });
+        if (ohL > 0.1) [1, 0.5].forEach(f => put(q[0].p[0] + q[0].n[0] * ohL * f, q[0].p[1] + q[0].n[1] * ohL * f, zDeck(q[0]), { side: 'L', e: ohL * f }));
+        for (let k = 0; k < nG; k++) {
+          put(q[k].p[0], q[k].p[1], zDeck(q[k]), { g: IDS[k] });
+          if (k + 1 < nG) for (let m = 1; m < 4; m++) put(q[k].p[0] + (q[k + 1].p[0] - q[k].p[0]) * m / 4, q[k].p[1] + (q[k + 1].p[1] - q[k].p[1]) * m / 4, zDeck(q[k]) + (zDeck(q[k + 1]) - zDeck(q[k])) * m / 4, { bay: k, r: m / 4 });
+        }
+        const z = q[nG - 1];
+        if (ohR > 0.1) [0.5, 1].forEach(f => put(z.p[0] - z.n[0] * ohR * f, z.p[1] - z.n[1] * ohR * f, zDeck(z), { side: 'R', e: ohR * f }));
+        DN[i] = row;
+        row.forEach(d => { if (d.g) BODY.push({ name: 'B_' + d.g + '_' + i, joints: [d.j, GJ[d.g][i].web[TOP]] }); });
+      });
+      for (let i = 0; i + 1 < ST.length; i++) for (let k = 0; k + 1 < DN[i].length; k++)
+        SH.push({ j: [DN[i][k].j, DN[i + 1][k].j, DN[i + 1][k + 1].j, DN[i][k + 1].j], sec: sec2('DK', num(deck.ts)), part: 'deck' });
+    }
+
+    // ---------- cross-frames ----------
+    const Rf = STEEL ? (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1) : (num(cf.Rc) > 0 ? num(cf.Rc) : 1);
+    const xfA = {}, XF = [], moved = [];
+    const secName = (end, k) => { const p = end ? pE : pI, a = num((p[k] || {}).A) * Rf, n = 'XF_' + (end ? 'E' : '') + k.toUpperCase(); if (a > 0) xfA[n] = a; return a > 0 ? n : null; };
+    const pin = { TI: 'Yes', M2I: 'Yes', M3I: 'Yes', M2J: 'Yes', M3J: 'Yes' }, fr0 = { TI: 'Yes', M2I: 'Yes', M3I: 'Yes' }, fr1 = { M2J: 'Yes', M3J: 'Yes' };
+    F.crossframes.forEach(c => {
+      const end = c.tag === 'support', p = end ? pE : pI, na = nearSt(c.gA, c.uA), nb2 = nearSt(c.gB, c.uB);
+      if (Math.max(na.d, nb2.d) > 0.05) moved.push(Math.max(na.d, nb2.d));
+      const a = GJ[c.gA][na.i], b = GJ[c.gB][nb2.i], [Lb, Lt] = wp(p).map(lvIdx);
+      const add = (n, ja, jb, k, rel, idx) => { const s = secName(end, k); if (!s) return; FR.push({ id: c.id + '-' + n, ja, jb, sec: s, rel }); XF.push({ cf: c.id, member: n, frame: c.id + '-' + n, idx: XF.filter(x => x.cf === c.id).length, ia: na.i, ib: nb2.i }); };
+      const Jp = id => J[id - 1], mid = (ja, jb, f) => { const P = Jp(ja), Q = Jp(jb); return joint(P.x + (Q.x - P.x) * f, P.y + (Q.y - P.y) * f, P.z + (Q.z - P.z) * f); };
+      const at = a.web[Lt], ab = a.web[Lb], bt = b.web[Lt], bb = b.web[Lb], type = p.type || 'X', topOn = p.topChord !== false;
+      // member order as the grid's truss (so the two models' members pair up)
+      if (type === 'X') {
+        if (topOn) add('TC', at, bt, 'top', pin); add('BC', ab, bb, 'bot', pin); add('D1', at, bb, 'diag', pin); add('D2', ab, bt, 'diag', pin);
+      } else if (type === 'K') {
+        const mb = mid(ab, bb, 0.5); if (topOn) add('TC', at, bt, 'top', pin);
+        add('BC1', ab, mb, 'bot', fr0); add('BC2', mb, bb, 'bot', fr1); add('D1', at, mb, 'diag', pin); add('D2', bt, mb, 'diag', pin);
+      } else if (type === 'W') {
+        const q1 = mid(ab, bb, 0.25), mt = mid(at, bt, 0.5), q3 = mid(ab, bb, 0.75);
+        add('TC1', at, mt, 'top', fr0); add('TC2', mt, bt, 'top', fr1); add('BC1', ab, q1, 'bot', fr0); add('BC2', q1, q3, 'bot', {}); add('BC3', q3, bb, 'bot', fr1);
+        add('D1', at, q1, 'diag', pin); add('D2', q1, mt, 'diag', pin); add('D3', mt, q3, 'diag', pin); add('D4', q3, bt, 'diag', pin);
+      } else {
+        const mt = mid(at, bt, 0.5);
+        add('TC1', at, mt, 'top', fr0); add('TC2', mt, bt, 'top', fr1); add('BC', ab, bb, 'bot', pin); add('D1', ab, mt, 'diag', pin); add('D2', bb, mt, 'diag', pin);
+      }
+    });
+    if (moved.length) warns.push(`${moved.length} cross-frame end${moved.length > 1 ? 's' : ''} moved up to ${Math.max(...moved).toFixed(2)} ft to share a station line (frame ends within 0.4 ft of each other share one).`);
+    if (F.crossframes.some(c => num(G.frameProps(cf, c.tag === 'support').e) > 0)) warns.push('Cross-frame connection offsets are not modeled: the frames end at the web.');
+
+    // ---------- bearings ----------
+    const BRG = [];
+    IDS.forEach(g => gird(g).brg.forEach(b => { const n = nearSt(g, b.u); BRG.push({ g, support: b.support, joint: GJ[g][n.i].web[0], i: n.i }); }));
+    const gm = IDS[Math.floor((nG - 1) / 2)], bm = BRG.filter(b => b.g === gm), b1 = bm[0], b2 = bm[bm.length - 1];
+    const P1 = J[b1.joint - 1], P2 = J[b2.joint - 1], useY = Math.abs(P2.x - P1.x) >= Math.abs(P2.y - P1.y);
+    BRG.forEach(b => REST.push({ joint: b.joint, U1: b === b1 || (b === b2 && !useY), U2: b === b1 || (b === b2 && useY), U3: true }));
+
+    // ---------- connection plates and bearing stiffeners: both sides, full depth ----------
+    const tSt = num(o.stiffener) > 0 ? num(o.stiffener) : 0.5, stiffAt = new Set();
+    XF.forEach(x => { const c = F.crossframes.find(q => q.id === x.cf); stiffAt.add(c.gA + '|' + x.ia); stiffAt.add(c.gB + '|' + x.ib); });
+    BRG.forEach(b => stiffAt.add(b.g + '|' + b.i));
+    stiffAt.forEach(k => { const [g, si] = k.split('|'), q = GJ[g][+si], r = q.r;
+      [1, -1].forEach(sd => {
+        const out = LVS.map((L, m) => m === 0 ? (sd > 0 ? q.bfL : q.bfR) : m === TOP ? (sd > 0 ? q.tfL : q.tfR)
+          : (() => { const z = J[q.web[m] - 1].z, off = sd * (r.bb / 24 + (r.bt / 24 - r.bb / 24) * z / (q.HS / 12)); return joint(q.p[0] + q.n[0] * off, q.p[1] + q.n[1] * off, z); })());
+        for (let m = 0; m < TOP; m++) SH.push({ j: sd > 0 ? [q.web[m], out[m], out[m + 1], q.web[m + 1]] : [out[m], q.web[m], q.web[m + 1], out[m + 1]], sec: sec2('ST', tSt), part: 'st' });
+      });
+    });
+
+    // ---------- loads ----------
+    const trib = (g, i) => { const q = GJ[g]; return (i ? (q[i].u - q[i - 1].u) / 2 : 0) + (i + 1 < ST.length ? (q[i + 1].u - q[i].u) / 2 : 0); };
+    const CASES = [];
+    const girderCase = (name, w, onDeck) => { const c = { name, joints: [] }; IDS.forEach(g => GJ[g].forEach((q, i) => { const v = w(g, q.u) * trib(g, i); if (v) c.joints.push({ joint: onDeck ? DN[i].find(d => d.g === g).j : q.web[TOP], P: v }); })); return c; };
+    // a deck point: station line position (index, fraction to the next), across the row by a continuous index
+    const rowPos = (i, spec) => { const row = DN[i]; if (spec.side === 'L') { const e = spec.e; if (!(ohL > 0.1)) return 0; return Math.max(0, Math.min(2, (ohL - e) / (ohL / 2))); }
+      if (spec.side === 'R') { if (!(ohR > 0.1)) return row.length - 1; return row.length - 3 + Math.max(0, Math.min(2, spec.e / (ohR / 2))); }
+      const k0 = row.findIndex(d => d.g === IDS[spec.k]); return k0 + 4 * (spec.r || 0); };
+    const deckLoad = (i, tx, spec, P) => { const out = [];
+      [[i, 1 - tx], [i + 1, tx]].forEach(([ii, w]) => { if (w < 1e-9 || ii >= ST.length) return; const row = DN[ii], s = rowPos(ii, spec), k0 = Math.min(row.length - 2, Math.floor(s)), ty = s - k0;
+        [[k0, 1 - ty], [k0 + 1, ty]].forEach(([kk, v]) => { if (v > 1e-9) out.push({ joint: row[kk].j, P: P * w * v }); }); });
+      return out; };
+    // a line on the deck at a fixed position across it, over the full length: each station line gets its share
+    const deckLine = (spec, w) => { const out = []; ST.forEach((_, i) => { const ref = GJ[spec.side === 'R' ? IDS[nG - 1] : IDS[0]], L = (i ? (ref[i].u - ref[i - 1].u) / 2 : 0) + (i + 1 < ST.length ? (ref[i + 1].u - ref[i].u) / 2 : 0); out.push(...deckLoad(i, 0, spec, w * L)); }); return out; };
+    if (STEEL) {
+      CASES.push(girderCase('DC1_STEEL', R.line.steel));
+      const xw = num(R.loads.xfWeight) || 0;
+      if (xw) { const c = CASES[0]; F.crossframes.forEach(x => [[x.gA, x.uA], [x.gB, x.uB]].forEach(([g, u]) => c.joints.push({ joint: GJ[g][nearSt(g, u).i].web[TOP], P: xw / 2 }))); }
+      CASES.push(girderCase('DC1_DECK', R.line.deck));
+      if (R.res.fit) { // EL: each member forced from its made length (the grid's lack of fit), as equal and opposite joint forces
+        const c = { name: 'EL_FIT', joints: [] };
+        R.md.bEls.filter(e => e.kind === 'xf' && e.lf).forEach(el => { const mem = el.B.Tr.mem;
+          XF.filter(x => x.cf === el.id).forEach(x => { const fr = FR.find(r => r.id === x.frame), a = J[fr.ja - 1], b = J[fr.jb - 1], L = Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+            const P = 29000 * xfA[fr.sec] * el.lf.e[x.idx] / mem[x.idx].l, n = [(b.x - a.x) / L, (b.y - a.y) / L, (b.z - a.z) / L];
+            c.joints.push({ joint: fr.jb, F1: P * n[0], F2: P * n[1], P: -P * n[2] }, { joint: fr.ja, F1: -P * n[0], F2: -P * n[1], P: P * n[2] }); }); });
+        c.note = 'EL: member force = the CSiBridge force minus EA e / L (the joint force pair)'; CASES.push(c);
+      }
+    } else if (which === 'long') {
+      // DC2: edge items on the deck edge at their distance in; items shared equally go on the girders as in the grid
+      const dc2 = { name: 'DC2', joints: [] };
+      (R.loads.dc2 || []).forEach(it => { const w = num(it.w) || 0, t = String(it.to || 'equal').toLowerCase(); if (!w) return;
+        if (t === 'left' || t === 'right') { const oh = t === 'left' ? ohL : ohR, e = Math.max(0, oh - (num(it.at) || 0)); dc2.joints.push(...deckLine({ side: t === 'left' ? 'L' : 'R', e }, w)); }
+        else { const ids = t === 'equal' ? IDS : String(it.to).split(/[\s,;]+/).filter(Boolean); dc2.joints.push(...girderCase('x', g => (ids.includes(g) ? w / ids.length : 0), true).joints); } });
+      CASES.push(dc2);
+      // DW: the deck's area, less a strip of the edge distance along each edge
+      const dw = num(R.loads.dw) || 0, eE = num(R.loads.dwEdge) || 0;
+      if (dw) { const c = { name: 'DW', joints: [], area: dw / 1000 };
+        if (eE > 0) [['L', ohL], ['R', ohR]].forEach(([side, oh]) => { if (oh > 0.1) c.joints.push(...deckLine({ side, e: Math.max(0, oh - Math.min(eE, oh) / 2) }, -dw / 1000 * Math.min(eE, oh))); });
+        CASES.push(c); }
+    } else {
+      // live load test cases: the HL-93 design truck (8, 32, 32 kip at 14 ft), middle axle at mid-span, wheel lines 6 ft apart:
+      // centered on an interior girder; on an exterior girder, one wheel line over it and the other 6 ft inside
+      const spans = segs.filter(q => q.s >= 1 && q.s <= gird(IDS[0]).brg.length - 1);
+      spans.forEach((q, sn) => IDS.forEach((g, k) => {
+        const c = { name: 'TR_S' + (sn + 1) + '_' + g, joints: [] }, cu = cuts(g), Ls = cu[q.s + 1] - cu[q.s];
+        [[-14, 8], [0, 32], [14, 32]].forEach(([d, P]) => { const u = cu[q.s] + Ls / 2 + d; const st = nearSt(g, u); let i = st.i; const ui = GJ[g][i].u; if (ui > u && i > 0) i--; const i2 = Math.min(ST.length - 1, i + 1);
+          const tx = i2 === i ? 0 : Math.max(0, Math.min(1, (u - GJ[g][i].u) / (GJ[g][i2].u - GJ[g][i].u)));
+          const bayW = kk => { const a = GJ[IDS[kk]][i].p, b = GJ[IDS[kk + 1]][i].p; return Math.hypot(b[0] - a[0], b[1] - a[1]); };
+          const wl = k === 0 && nG > 1 ? [{ k: 0, r: 0 }, { k: 0, r: 6 / bayW(0) }] : k === nG - 1 && nG > 1 ? [{ k: nG - 2, r: 1 - 6 / bayW(nG - 2) }, { k: nG - 2, r: 1 }]
+            : [{ k: k - 1, r: 1 - 3 / bayW(k - 1) }, { k, r: 3 / bayW(k) }];
+          wl.forEach(sp => c.joints.push(...deckLoad(i, tx, sp, P / 2))); });
+        CASES.push(c); }));
+      CASES.push({ name: 'UNI_0.1KSF', joints: [], area: 0.1 });
+    }
+    const deckShells = SH.map((s, k) => (s.part === 'deck' ? k + 1 : 0)).filter(Boolean);
+    return { errs, warns, which, nMod, J, SH, FR, BODY, REST, CASES, shSec: [...shSec.entries()], deckShells, XF, BRG, xfA, Rf, ST, LVS: LVS.length, stiffened: stiffAt.size, deckE: 29000 / nMod };
+  }
+
+  // ---------- Excel import tables ----------
+  function tables(M, title) {
+    const T = {}, r6 = v => Math.round(v * 1e6) / 1e6;
+    const add = (name, rows) => { (T[name] = T[name] || []).push(...rows); };
+    const P = new Map(M.J.map(j => [j.id, j]));
+    add('Program Control', [{ ProgramName: 'CSiBridge', Version: '26.0.0', ProgLevel: 'Plus', LicenseOS: 'Yes', LicenseSC: 'Yes', LicenseBR: 'Yes', LicenseHT: 'No', CurrUnits: 'Kip, ft, F', SteelCode: 'AASHTO LRFD 2020', ConcCode: 'AASHTO LRFD 2014', BridgeCode: 'AASHTO LRFD 2020', RegenHinge: 'Yes' }]);
+    add('Project Information', [{ Item: 'Model Name', Data: title }, { Item: 'Model Description', Data: `Shell verification model from Bridge SE Steel 2D Grillage: ${M.which === 'steel' ? 'steel alone (DC1, EL)' : M.which === 'long' ? 'long-term composite, deck E = Es/' + M.nMod.toFixed(1) + ' (DC2, DW)' : 'short-term composite, deck E = Es/' + M.nMod.toFixed(1) + ' (live load test cases)'}` }, { Item: 'Frame Type', Data: 'Thin shells, pinned cross-frame members' }, { Item: 'Design Code', Data: 'AASHTO LRFD 10th edition (checked in Bridge SE)' }]);
+    add('Active Degrees of Freedom', [{ UX: 'Yes', UY: 'Yes', UZ: 'Yes', RX: 'Yes', RY: 'Yes', RZ: 'Yes' }]);
+    add('Coordinate Systems', [{ Name: 'GLOBAL', Type: 'Cartesian', X: 0, Y: 0, Z: 0, AboutZ: 0, AboutY: 0, AboutX: 0 }]);
+    add('Database Format Types', [{ UnitsCurr: 'Yes', OverrideE: 'No' }]);
+    const Es = 29000 * 144, nD = M.nMod;
+    add('MatProp 01 - General', [{ Material: 'A709Gr50', Type: 'Steel', Grade: 'Grade 50', SymType: 'Isotropic', TempDepend: 'No', Color: 'Blue', Notes: 'ASTM A709 Grade 50' }]);
+    add('MatProp 02 - Basic Mech Props', [{ Material: 'A709Gr50', UnitWeight: 0, UnitMass: 0, E1: Es, G12: Es / 2.6, U12: 0.3, A1: 6.5e-6 }]);
+    add('MatProp 03a - Steel Data', [{ Material: 'A709Gr50', Fy: 7200, Fu: 9360, EffFy: 7920, EffFu: 10296, SSCurveOpt: 'Simple', SSHysType: 'Kinematic', SHard: 0.015, SMax: 0.11, SRup: 0.17, FinalSlope: -0.1, CoupModType: 'Von Mises' }]);
+    if (M.which !== 'steel') {
+      add('MatProp 01 - General', [{ Material: 'DECKC', Type: 'Concrete', Grade: "f'c 4000 psi", SymType: 'Isotropic', TempDepend: 'No', Color: 'Gray8Dark', Notes: 'Deck, E = Es/n as in the grid' }]);
+      add('MatProp 02 - Basic Mech Props', [{ Material: 'DECKC', UnitWeight: 0, UnitMass: 0, E1: Es / nD, G12: Es / nD / 2.4, U12: 0.2, A1: 5.5e-6 }]);
+      add('MatProp 03b - Concrete Data', [{ Material: 'DECKC', Fc: 576, eFc: 576, LtWtConc: 'No', SSCurveOpt: 'Mander', SSHysType: 'Takeda', SFc: 0.00221914, SCap: 0.005, FinalSlope: -0.1, FAngle: 0, DAngle: 0, CoupModType: 'Modified Darwin-Pecknold' }]);
+    }
+    add('Joint Coordinates', M.J.map(j => ({ Joint: String(j.id), CoordSys: 'GLOBAL', CoordType: 'Cartesian', XorR: r6(j.x), Y: r6(j.y), Z: r6(j.z), SpecialJt: 'No', GlobalX: r6(j.x), GlobalY: r6(j.y), GlobalZ: r6(j.z) })));
+    add('Connectivity - Frame', M.FR.map(f => { const a = P.get(f.ja), b = P.get(f.jb); return { Frame: f.id, JointI: String(f.ja), JointJ: String(f.jb), IsCurved: 'No', Length: r6(Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z)), CentroidX: r6((a.x + b.x) / 2), CentroidY: r6((a.y + b.y) / 2), CentroidZ: r6((a.z + b.z) / 2) }; }));
+    add('Frame Section Assignments', M.FR.map(f => ({ Frame: f.id, SectionType: 'I/Wide Flange', AutoSelect: 'N.A.', AnalSect: f.sec, DesignSect: f.sec, MatProp: 'Default' })));
+    add('Frame Releases 1 - General', M.FR.filter(f => Object.keys(f.rel).length).map(f => ({ Frame: f.id, PI: 'No', V2I: 'No', V3I: 'No', TI: f.rel.TI || 'No', M2I: f.rel.M2I || 'No', M3I: f.rel.M3I || 'No', PJ: 'No', V2J: 'No', V3J: 'No', TJ: 'No', M2J: f.rel.M2J || 'No', M3J: f.rel.M3J || 'No', PartialFix: 'No' })));
+    // frame sections: small I shapes with the member's area (pinned truss members: only the area matters)
+    add('Frame Props 01 - General', Object.entries(M.xfA).map(([name, Ain]) => { const t3 = 0.5, t2 = 0.4, tf = 0.03, A = Ain / 144, hw = t3 - 2 * tf, tw = (A - 2 * t2 * tf) / hw;
+      const I33 = (t2 * t3 ** 3 - (t2 - tw) * hw ** 3) / 12, I22 = 2 * tf * t2 ** 3 / 12 + hw * tw ** 3 / 12, Jt = (2 * t2 * tf ** 3 + hw * tw ** 3) / 3;
+      return { SectionName: name, Material: 'A709Gr50', Shape: 'I/Wide Flange', t3, t2, tf, tw: r6(tw), t2b: t2, tfb: tf, FilletRadius: 0, Area: r6(A), TorsConst: Jt, I33, I22, I23: 0, AS2: t3 * tw, AS3: 5 / 3 * t2 * tf,
+        S33Top: I33 / (t3 / 2), S33Bot: I33 / (t3 / 2), S22Left: I22 / (t2 / 2), S22Right: I22 / (t2 / 2), Z33: t2 * tf * (t3 - tf) + tw * hw ** 2 / 4, Z22: tf * t2 ** 2 / 2 + hw * tw ** 2 / 4,
+        R33: Math.sqrt(I33 / A), R22: Math.sqrt(I22 / A), CGOffset3: 0, CGOffset2: 0, EccV2: 0, EccV3: 0, Cw: tf * t2 ** 3 * (t3 - tf) ** 2 / 24, ConcCol: 'No', ConcBeam: 'No', Color: 'Blue', FromFile: 'No',
+        AMod: 1, A2Mod: 1, A3Mod: 1, JMod: 1, I2Mod: 1, I3Mod: 1, MMod: 1, WMod: 1 }; }));
+    add('Connectivity - Area', M.SH.map((s, k) => { const p = s.j.map(j => P.get(j)), d = (a, b) => Math.hypot(b.x - a.x, b.y - a.y, b.z - a.z);
+      const tri = (a, b, c) => { const u = [b.x - a.x, b.y - a.y, b.z - a.z], v = [c.x - a.x, c.y - a.y, c.z - a.z]; return 0.5 * Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]); };
+      return { Area: String(k + 1), NumJoints: 4, Joint1: String(s.j[0]), Joint2: String(s.j[1]), Joint3: String(s.j[2]), Joint4: String(s.j[3]), Perimeter: r6(d(p[0], p[1]) + d(p[1], p[2]) + d(p[2], p[3]) + d(p[3], p[0])),
+        AreaArea: r6(tri(p[0], p[1], p[2]) + tri(p[0], p[2], p[3])), CentroidX: r6(p.reduce((a, q) => a + q.x, 0) / 4), CentroidY: r6(p.reduce((a, q) => a + q.y, 0) / 4), CentroidZ: r6(p.reduce((a, q) => a + q.z, 0) / 4) }; }));
+    add('Area Section Assignments', M.SH.map((s, k) => ({ Area: String(k + 1), Section: s.sec, MatProp: 'Default' })));
+    const colors = { W: 'Blue', BF: 'Red', TF: 'Green', DK: 'Gray8Dark', ST: 'Cyan' };
+    add('Area Section Properties', M.shSec.map(([n, d]) => ({ Section: n, Material: d.kind === 'DK' ? 'DECKC' : 'A709Gr50', MatAngle: 0, AreaType: 'Shell', Type: 'Shell-Thin', DrillDOF: 'Yes', Thickness: r6(d.t / 12), BendThick: r6(d.t / 12), Color: colors[d.kind], F11Mod: 1, F22Mod: 1, F12Mod: 1, M11Mod: 1, M22Mod: 1, M12Mod: 1, V13Mod: 1, V23Mod: 1, MMod: 1, WMod: 1 })));
+    const YN = b => (b ? 'Yes' : 'No');
+    add('Joint Restraint Assignments', M.REST.map(r => ({ Joint: String(r.joint), U1: YN(r.U1), U2: YN(r.U2), U3: YN(r.U3), R1: 'No', R2: 'No', R3: 'No' })));
+    if (M.BODY.length) {
+      add('Constraint Definitions - Body', M.BODY.map(b => ({ Name: b.name, CoordSys: 'GLOBAL', UX: 'Yes', UY: 'Yes', UZ: 'Yes', RX: 'Yes', RY: 'Yes', RZ: 'Yes' })));
+      add('Joint Constraint Assignments', M.BODY.flatMap(b => b.joints.map(j => ({ Joint: String(j), Constraint: b.name, Type: 'Body' }))));
+    }
+    add('Load Pattern Definitions', [{ LoadPat: 'DEAD', DesignType: 'Dead', SelfWtMult: 0 }, ...M.CASES.map(c => ({ LoadPat: c.name, DesignType: 'Other', SelfWtMult: 0 }))]);
+    add('Load Case Definitions', [{ Case: 'DEAD', Type: 'LinStatic', InitialCond: 'Zero', DesTypeOpt: 'Prog Det', DesignType: 'Dead', DesActOpt: 'Prog Det', DesignAct: 'Non-Composite', AutoType: 'None', RunCase: 'No', CaseStatus: 'Not Run' },
+      ...M.CASES.map(c => ({ Case: c.name, Type: 'LinStatic', InitialCond: 'Zero', DesTypeOpt: 'Prog Det', DesignType: 'Other', DesActOpt: 'Prog Det', DesignAct: 'Other', AutoType: 'None', RunCase: 'Yes', CaseStatus: 'Not Run' }))]);
+    add('Case - Static 1 - Load Assigns', [{ Case: 'DEAD', LoadType: 'Load pattern', LoadName: 'DEAD', LoadSF: 1 }, ...M.CASES.map(c => ({ Case: c.name, LoadType: 'Load pattern', LoadName: c.name, LoadSF: 1 }))]);
+    const jl = [];
+    M.CASES.forEach(c => { const acc = new Map(); c.joints.forEach(q => { const a = acc.get(q.joint) || [0, 0, 0]; a[0] += q.F1 || 0; a[1] += q.F2 || 0; a[2] += q.P || 0; acc.set(q.joint, a); });
+      acc.forEach((a, j) => jl.push({ Joint: String(j), LoadPat: c.name, CoordSys: 'GLOBAL', F1: r6(a[0]), F2: r6(a[1]), F3: r6(-a[2]), M1: 0, M2: 0, M3: 0 })); });
+    if (jl.length) add('Joint Loads - Force', jl);
+    const al = []; M.CASES.forEach(c => { if (c.area) M.deckShells.forEach(k => al.push({ Area: String(k), LoadPat: c.name, CoordSys: 'GLOBAL', Dir: 'Gravity', UnifLoad: c.area })); });
+    if (al.length) add('Area Loads - Uniform', al);
+    return T;
+  }
+
+  // ---------- a small .xlsx writer (stored zip, shared strings) ----------
+  const CRC = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+  const crc32 = b => { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; };
+  const enc = s => new TextEncoder().encode(s);
+  // deflate with the platform's CompressionStream where there is one (browsers, Node 18+); stored otherwise
+  async function deflate(data) {
+    if (typeof CompressionStream === 'undefined') return null;
+    const cs = new CompressionStream('deflate-raw'), w = cs.writable.getWriter(); w.write(data); w.close();
+    const r = cs.readable.getReader(), ch = []; let n = 0; for (;;) { const { done, value } = await r.read(); if (done) break; ch.push(value); n += value.length; }
+    const out = new Uint8Array(n); let p = 0; ch.forEach(c => { out.set(c, p); p += c.length; }); return out;
+  }
+  async function zip(files) { // [{ name, data: Uint8Array }]
+    const parts = [], cen = []; let off = 0;
+    const u16 = v => [v & 255, (v >>> 8) & 255], u32 = v => [v & 255, (v >>> 8) & 255, (v >>> 16) & 255, (v >>> 24) & 255];
+    for (const f of files) { const nm = enc(f.name), c = crc32(f.data), sz = f.data.length, z = await deflate(f.data), body = z && z.length < sz ? z : f.data, meth = body === f.data ? 0 : 8;
+      const h = new Uint8Array([...u32(0x04034b50), ...u16(20), ...u16(0x0800), ...u16(meth), ...u16(0), ...u16(0x21), ...u32(c), ...u32(body.length), ...u32(sz), ...u16(nm.length), ...u16(0)]);
+      parts.push(h, nm, body);
+      cen.push(new Uint8Array([...u32(0x02014b50), ...u16(20), ...u16(20), ...u16(0x0800), ...u16(meth), ...u16(0), ...u16(0x21), ...u32(c), ...u32(body.length), ...u32(sz), ...u16(nm.length), ...u16(0), ...u16(0), ...u16(0), ...u16(0), ...u32(0), ...u32(off)]), nm);
+      off += h.length + nm.length + body.length; }
+    const cl = cen.reduce((a, b) => a + b.length, 0);
+    const end = new Uint8Array([...u32(0x06054b50), ...u16(0), ...u16(0), ...u16(files.length), ...u16(files.length), ...u32(cl), ...u32(off), ...u16(0)]);
+    const all = [...parts, ...cen, end], out = new Uint8Array(all.reduce((a, b) => a + b.length, 0)); let p = 0; all.forEach(b => { out.set(b, p); p += b.length; }); return out;
+  }
+  const xesc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const colName = i => { let s = ''; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+  async function xlsx(sheets) { // [{ name, rows: [[cell]] }]
+    const ss = [], si = new Map(), sidx = v => { if (!si.has(v)) { si.set(v, ss.length); ss.push(v); } return si.get(v); };
+    const sheetXml = rows => '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>'
+      + rows.map((r, ri) => `<row r="${ri + 1}">` + r.map((v, ci) => { if (v === null || v === undefined || v === '') return ''; const ref = colName(ci) + (ri + 1);
+        return typeof v === 'number' && isFinite(v) ? `<c r="${ref}"><v>${v}</v></c>` : `<c r="${ref}" t="s"><v>${sidx(String(v))}</v></c>`; }).join('') + '</row>').join('') + '</sheetData></worksheet>';
+    const wsx = sheets.map(s => sheetXml(s.rows));
+    const files = [
+      { name: '[Content_Types].xml', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'
+        + sheets.map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('') + '<Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/></Types>') },
+      { name: '_rels/.rels', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>') },
+      { name: 'xl/workbook.xml', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>'
+        + sheets.map((s, i) => `<sheet name="${xesc(s.name.slice(0, 31))}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join('') + '</sheets></workbook>') },
+      { name: 'xl/_rels/workbook.xml.rels', data: enc('<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+        + sheets.map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join('')
+        + `<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/></Relationships>`) },
+      ...wsx.map((x, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, data: enc(x) })),
+    ];
+    files.push({ name: 'xl/sharedStrings.xml', data: enc(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="${ss.length}" uniqueCount="${ss.length}">` + ss.map(s => `<si><t xml:space="preserve">${xesc(s)}</t></si>`).join('') + '</sst>') });
+    return zip(files);
+  }
+  // the tables as sheets: row 1 TABLE: title, row 2 fields, row 3 units, then the data
+  async function workbook(T) {
+    const sheets = Object.keys(TBL).filter(n => T[n] && T[n].length).map(n => { const [title, fields, units] = TBL[n];
+      T[n].forEach(r => { const bad = Object.keys(r).filter(k => !fields.includes(k)); if (bad.length) throw new Error(`${n}: unknown fields ${bad.join(', ')}`); });
+      return { name: n, rows: [['TABLE:  ' + title], fields, units, ...T[n].map(r => fields.map(f => (r[f] === undefined ? null : r[f])))] }; });
+    return xlsx(sheets);
+  }
+  // the three models: steel, long-term and short-term composite
+  async function csiWorkbooks(F, A, R, o) {
+    const out = [], msgs = { errs: [], warns: [] };
+    for (const [w, tag] of [['steel', 'steel'], ['long', 'composite-3n'], ['short', 'composite-n']]) {
+      const M = csiModel(F, A, R, w, o); if (M.errs && M.errs.length) { M.errs.forEach(x => { if (!msgs.errs.includes(x)) msgs.errs.push(x); }); continue; }
+      M.warns.forEach(x => { if (!msgs.warns.includes(x)) msgs.warns.push(x); });
+      out.push({ which: w, name: `${(o && o.name) || 'grillage'}-${tag}.xlsx`, model: M, bytes: await workbook(tables(M, ((o && o.name) || 'Grillage') + ' ' + tag)) });
+    }
+    return { files: out, ...msgs };
+  }
+  // one download: the three workbooks and a README
+  async function csiPackage(F, A, R, o) {
+    o = o || {}; const W = await csiWorkbooks(F, A, R, o); if (!W.files.length) return W;
+    const M0 = W.files[0].model, f2 = v => (+v).toFixed(2);
+    const lines = [
+      `CSiBridge verification models for ${o.name || 'the bridge'}, from Bridge SE Steel 2D Grillage${o.date ? ' (' + o.date + ')' : ''}.`, '',
+      'Import each workbook into a new CSiBridge model (File > Import > Excel spreadsheet), run every case, and export the',
+      'Joint Reactions, Joint Displacements, Element Forces - Frames and Element Forces - Area Shells tables to compare.', '',
+      'Workbooks',
+      ...W.files.map(f => `  ${f.name}: ${f.which === 'steel' ? 'the steel alone' : 'the deck at E = Es / ' + f2(f.model.nMod)}; ${f.model.J.length} joints, ${f.model.SH.length} shells, ${f.model.FR.length} frame members; cases ${f.model.CASES.map(c => c.name).join(', ')}`), '',
+      'The model',
+      `  Units kip, ft. Webs ${M0.LVS - 1} shell elements deep (levels at the cross-frame work points), flanges one element each side of the web,`,
+      `  ${M0.ST.length} station lines across the girders (cross-frame ends and plate changes on lines; about ${f2(o.h || 2.5)} ft apart).`,
+      '  Thin shells for webs, flanges and stiffeners at their mid-planes; the deck at its mid-depth, weightless, tied to the tops of the webs',
+      '  by body constraints. Cross-frame members are frames pinned at the girders (chords continuous through interior nodes), with their',
+      `  areas times the stiffness factor R (${f2(W.files[0].model.Rf)} steel, ${W.files[1] ? f2(W.files[1].model.Rf) : '-'} composite).`,
+      `  Connection plates and bearing stiffeners ${f2(o.stiffener || 0.5)} in. thick on both sides at every cross-frame and bearing.`,
+      '  Bearings at the web bases: vertical at all; in plane, one bearing held both ways and one held one way (statically determinate).', '',
+      'Cases',
+      '  DC1_STEEL, DC1_DECK: the grid\'s own line loads on the tops of the webs (steel with its extra and the cross-frame weights; wet deck).',
+      '  EL_FIT (with SDLF or TDLF): the grid\'s lack of fit, as a pair of joint forces EA e / L along each cross-frame member. A member\'s',
+      '    locked-in force is the CSiBridge force minus that pair\'s force (the same EA e / L, a compression while the member is held).',
+      '  DC2: barriers on the deck edges at their distance in (items shared equally go on the girders, as in the grid).',
+      '  DW: the deck\'s area at the wearing surface load, less a strip of the edge distance along each edge.',
+      '  TR_Sn_Gk: the HL-93 design truck (8, 32, 32 kip at 14 ft), middle axle at mid-span of span n, wheel lines 6 ft apart, centered on an',
+      '    interior girder; over an exterior girder with the other wheel line 6 ft inside. No dynamic allowance, no lane: test cases.',
+      '  UNI_0.1KSF: 0.1 ksf over the whole deck.', '',
+      ...(W.warns.length ? ['Notes', ...W.warns.map(w => '  ' + w), ''] : []),
+      'The grid and this model share their inputs, so the comparison checks the analysis, not the inputs: check the geometry, plates and',
+      'loads in CSiBridge against the plans.',
+    ];
+    const bytes = await zip([...W.files.map(f => ({ name: f.name, data: f.bytes })), { name: 'README.txt', data: enc(lines.join('\r\n')) }]);
+    return { ...W, bytes, readme: lines.join('\n') };
+  }
+  Object.assign(G, { csiPackage, csiModel, csiTables: tables, csiWorkbook: workbook, csiWorkbooks, zipFiles: zip, xlsxSheets: xlsx });
+})();
 </script>
 <script>
 (function () {
@@ -5826,6 +6210,19 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('crossframe-forces.csv', t, 'text/csv'); done(); }); else { download('crossframe-forces.csv', t, 'text/csv'); done(); }
   };
   // stable results file for the next modules (splices, cross-frame connections): unfactored effects by stage
+  // CSiBridge verification models of this bridge (the grid's own inputs, loads and lack of fit), as a zip of three workbooks
+  $('#btnCsi').onclick = async () => {
+    const st = $('#csiStatus'), b = $('#btnCsi');
+    if (!(AR && AR.res) || anKey !== anInputKey()) { st.textContent = 'Run the analysis for these inputs first.'; return; }
+    b.disabled = true; st.textContent = 'Building the models…';
+    try {
+      const nm = 'grillage', P = await G.csiPackage(F, clone(doc.analysis), AR, { name: nm, h: +doc.analysis.options.h || 2.5, date: new Date().toISOString().slice(0, 10) });
+      if (!P.bytes) { st.textContent = P.errs.join(' '); return; }
+      download(nm + '-csibridge.zip', P.bytes, 'application/zip');
+      st.textContent = `${P.files.length} workbooks and a README${P.warns.length ? ' · ' + P.warns.join(' ') : ''}`;
+    } catch (err) { st.textContent = 'The models could not be built: ' + err.message; }
+    finally { b.disabled = false; }
+  };
   $('#btnAnJson').onclick = () => {
     if (!(AR && AR.res)) return; const r4 = v => +(+v).toFixed(3), st = ['steel', 'deck', 'dc2', 'dw'].concat(hasFit() ? ['fit'] : []);
     const out = { schema: 'opendot.g2d.deadload/1', units: 'kip, ft, in (deflection), ksi (lateral flange)', stages: st.map(s => SN[s]), modularRatio: r4(AR.n),

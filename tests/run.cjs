@@ -324,6 +324,23 @@ guard('Steel 2D Grillage cross-frames', () => {
   const ll = LLx.out.find(r => r.kind === 'X' && r.id === rD.id && r.member === rD.member), g = (x, a, b) => (x >= 0 ? a : b) * x;
   near('design forces: Strength I max of a diagonal, kip', rD.strMax, g(rD.dc1 + rD.dc2, 1.25, 0.9) + g(rD.dw, 1.5, 0.65) + rD.el + 1.75 * ll.max, 1e-9, 'Table 3.4.1-1 and -2');
   is('design forces: composite top chords carry the deck tie either way', XD.rows.filter(r => /^top chord/.test(r.member)).every(r => r.tie > 0), true);
+  // CSiBridge verification models: a closed shell mesh carrying the grid's own loads
+  const MS = G.csiModel(F, AT, RT, 'steel'), ML = G.csiModel(F, AT, RT, 'long'), MN = G.csiModel(F, AT, RT, 'short');
+  is('CSiBridge models: no errors', [MS, ML, MN].every(M => !M.errs.length), true);
+  const jids = new Set(MS.J.map(j => j.id));
+  is('CSiBridge steel model: every shell has four distinct joints that exist', MS.SH.every(s => new Set(s.j).size === 4 && s.j.every(j => jids.has(j))), true);
+  const vsum = (M, n) => M.CASES.find(c => c.name === n).joints.reduce((a, q) => a + (q.P || 0), 0), rsum = st => RT.res[st].reac.reduce((a, r) => a + r.R, 0);
+  near('CSiBridge steel model: DC1 steel total = the grid\'s, kip', vsum(MS, 'DC1_STEEL') - rsum('steel'), 0, 1e-6);
+  near('CSiBridge steel model: DC1 deck total vs the grid\'s (station tributary lengths)', vsum(MS, 'DC1_DECK') / rsum('deck'), 1, 0.005);
+  near('CSiBridge long-term model: DC2 total = the grid\'s, kip', vsum(ML, 'DC2') - rsum('dc2'), 0, 1e-6);
+  const fitC = MS.CASES.find(c => c.name === 'EL_FIT'), fsum = k => fitC.joints.reduce((a, q) => a + (q[k] || 0), 0);
+  near('CSiBridge steel model: the lack-of-fit joint forces are self-equilibrated, kip', Math.max(Math.abs(fsum('F1')), Math.abs(fsum('F2')), Math.abs(fsum('P'))), 0, 1e-6);
+  is('CSiBridge models: in-plane restraint is statically determinate (3 restraints)', MS.REST.reduce((a, r) => a + r.U1 + r.U2, 0), 3);
+  is('CSiBridge short-term model: a truck on every girder in each span, 72 kip each', MN.CASES.filter(c => /^TR_/.test(c.name)).map(c => Math.round(vsum(MN, c.name))).join(','), Array(F.order.length * 2).fill(72).join(','));
+  is('CSiBridge models: cross-frame members pair with the grid\'s, frame by frame', F.crossframes.every(c => MS.XF.filter(x => x.cf === c.id).length === RT.res.steel.bRes.find(b => b.id === c.id).members.length), true);
+  const T = G.csiTables(MS, 't');
+  is('CSiBridge tables: every row uses the table\'s own fields (CSiBridge v26)', (() => { try { G.csiWorkbook(T); return true; } catch (e) { return e.message; } })(), true);
+  globalThis.__csi = { G, MS, T };
 });
 
 // ---------- Steel 2D Grillage: composite twist about the deck, web flexibility (checked against 3D shell models) ----------
@@ -418,5 +435,17 @@ guard('Steel 2D Grillage live load', () => {
   near('checks: E4 G4-2 Strength I bottom flange ratio at the pier', neg.ratio, 0.92, 0.12, 'E4 8.2: 0.92 to 0.95');
 });
 
-console.log('\n' + pass + ' passed, ' + fail + ' failed');
-process.exit(fail ? 1 : 0);
+(async () => {
+  // the .xlsx writer (stored, as Node's VM here has no CompressionStream): a zip the platform's own reader opens
+  if (globalThis.__csi) await (async () => { try {
+    const { G, T } = globalThis.__csi, b = await G.csiWorkbook(T), dv = new DataView(b.buffer, b.byteOffset, b.byteLength);
+    let e = b.length - 22; while (e > 0 && dv.getUint32(e, true) !== 0x06054b50) e--;
+    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const names = [];
+    for (let k = 0; k < n; k++) { const L = dv.getUint16(p + 28, true), x = dv.getUint16(p + 30, true), c = dv.getUint16(p + 32, true); names.push(new TextDecoder().decode(b.subarray(p + 46, p + 46 + L))); p += 46 + L + x + c; }
+    is('CSiBridge workbook: a zip with the workbook, its sheets and shared strings', ['[Content_Types].xml', 'xl/workbook.xml', 'xl/sharedStrings.xml'].every(f => names.includes(f)) && names.filter(f => /worksheets\/sheet/.test(f)).length === Object.keys(T).length, true);
+    const wb = new TextDecoder().decode(b), i = wb.indexOf('<sheets>');
+    is('CSiBridge workbook: joint coordinates sheet present', wb.slice(i, wb.indexOf('</sheets>')).includes('name="Joint Coordinates"'), true);
+  } catch (err) { is('CSiBridge workbook', err.message, 'no error'); } })();
+  console.log('\n' + pass + ' passed, ' + fail + ' failed');
+  process.exit(fail ? 1 : 0);
+})();
