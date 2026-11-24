@@ -340,6 +340,11 @@ guard('Steel 2D Grillage cross-frames', () => {
   is('CSiBridge models: cross-frame members pair with the grid\'s, frame by frame', F.crossframes.every(c => MS.XF.filter(x => x.cf === c.id).length === RT.res.steel.bRes.find(b => b.id === c.id).members.length), true);
   const T = G.csiTables(MS, 't');
   is('CSiBridge tables: every row uses the table\'s own fields (CSiBridge v26)', (() => { try { G.csiWorkbook(T); return true; } catch (e) { return e.message; } })(), true);
+  // tributary deck: near the skewed ends each girder keeps half the spacing to its neighbor's line, so the deck's area is kept
+  const PJ = new Map(ML.J.map(j => [j.id, j])); let dA = 0;
+  ML.SH.filter(s => s.part === 'deck').forEach(s => { const p = s.j.map(j => PJ.get(j)), tri = (a, b, c) => Math.abs((b.x - a.x) * (c.y - a.y) - (c.x - a.x) * (b.y - a.y)) / 2; dA += tri(p[0], p[1], p[2]) + tri(p[0], p[2], p[3]); });
+  let tA = 0; F.order.forEach(id => { const g = F.girders.find(x => x.id === id); for (let u = 0.05; u < g.L; u += 0.1) tA += RT.trib(id, u).b * 0.1; });
+  near('tributary deck on the 60° skew: the girders\' tributary area over the deck\'s area', tA / dA, 1, 0.005, 'deck shells of the CSiBridge model');
   // frame sections: any member area gives a valid I shape (a small angle, 1.5 in2, as well as a large one)
   const small = Object.assign({}, MS, { xfA: { XF_A: 1.5, XF_B: 40 } }), TS = G.csiTables(small, 's')['Frame Props 01 - General'];
   is('CSiBridge frame sections: positive web and flange thicknesses at 1.5 and 40 in2, areas kept', TS.every(r => r.tw > 0 && r.tf > 0 && r.t3 > 2 * r.tf) && TS.map(r => Math.round(r.Area * 144 * 100) / 100).join(',') === '1.5,40', true);

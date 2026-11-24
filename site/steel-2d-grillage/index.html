@@ -4411,6 +4411,14 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       const g = F.girders.find(x => x.id === gid), p = g.P.at(u), t = g.P.tan(u), d = [-t[1], t[0]];
       let L = Infinity, R = Infinity;
       F.girders.forEach(o => { if (o === g) return; G.lineHits(p, d, o.P).forEach(h => { if (h.u <= 1e-6 || h.u >= o.L - 1e-6) return; if (h.t > 1e-6) L = Math.min(L, h.t); else if (h.t < -1e-6) R = Math.min(R, -h.t); }); });
+      // near a skewed end the normal passes beyond the neighbor's end (and may reach a girder further over): the deck
+      // there still reaches the neighbor's line, extended along its end tangent, so the girder keeps half the spacing
+      // rather than an overhang or half the distance to a farther girder (the deck's area is kept)
+      F.girders.forEach(o => { if (o === g) return; [0, o.L].forEach(ue => {
+        const E = o.P.at(ue), te = o.P.tan(ue), det = -d[0] * te[1] + d[1] * te[0]; if (Math.abs(det) < 1e-9) return;
+        const ex = E[0] - p[0], ey = E[1] - p[1], tt = (-ex * te[1] + ey * te[0]) / det, ss = (d[0] * ey - d[1] * ex) / det;
+        if ((ue === 0 && ss > 1e-6) || (ue > 0 && ss < -1e-6)) return; // a hit on the girder itself is found above
+        if (tt > 1e-6) L = Math.min(L, tt); else if (tt < -1e-6) R = Math.min(R, -tt); }); });
       const left = isFinite(L) ? L / 2 : num(deck.ohL) || 0, right = isFinite(R) ? R / 2 : num(deck.ohR) || 0;
       const o = { b: left + right, left, right, extL: !isFinite(L), extR: !isFinite(R), sL: L, sR: R };
       cache.set(key, o); return o;
