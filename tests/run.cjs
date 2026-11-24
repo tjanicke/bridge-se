@@ -350,7 +350,7 @@ guard('Steel 2D Grillage cross-frames', () => {
   // frame sections: any member area gives a valid I shape (a small angle, 1.5 in2, as well as a large one)
   const small = Object.assign({}, MS, { xfA: { XF_A: 1.5, XF_B: 40 } }), TS = G.csiTables(small, 's')['Frame Props 01 - General'];
   is('CSiBridge frame sections: positive web and flange thicknesses at 1.5 and 40 in2, areas kept', TS.every(r => r.tw > 0 && r.tf > 0 && r.t3 > 2 * r.tf) && TS.map(r => Math.round(r.Area * 144 * 100) / 100).join(',') === '1.5,40', true);
-  globalThis.__csi = { G, MS, T };
+  globalThis.__csi = { G, MS, T, RT, F, AT };
 });
 
 // ---------- Steel 2D Grillage: composite twist about the deck, web flexibility (checked against 3D shell models) ----------
@@ -453,6 +453,19 @@ guard('Steel 2D Grillage live load', () => {
     const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true); const names = [];
     for (let k = 0; k < n; k++) { const L = dv.getUint16(p + 28, true), x = dv.getUint16(p + 30, true), c = dv.getUint16(p + 32, true); names.push(new TextDecoder().decode(b.subarray(p + 46, p + 46 + L))); p += 46 + L + x + c; }
     is('CSiBridge workbook: a zip with the workbook, its sheets and shared strings', ['[Content_Types].xml', 'xl/workbook.xml', 'xl/sharedStrings.xml'].every(f => names.includes(f)) && names.filter(f => /worksheets\/sheet/.test(f)).length === Object.keys(T).length, true);
+    // reading exports back: a CSiBridge-style export holding the grid's own results compares at 1.00
+    const { MS: M0, RT: R0, F: F0, AT: A0 } = globalThis.__csi;
+    const reacRows = [], frRows = [];
+    M0.CASES.filter(c => c.name === 'DC1_STEEL' || c.name === 'DC1_DECK').forEach(c => { const r = R0.res[c.name === 'DC1_STEEL' ? 'steel' : 'deck'];
+      M0.BRG.forEach(bb => reacRows.push([String(bb.joint), c.name, 'LinStatic', 0, 0, r.reac.find(x => x.g === bb.g && x.support === bb.support).R]));
+      M0.XF.forEach(x => { const m = r.bRes.find(z => z.id === x.cf).members[x.idx]; frRows.push([x.frame, 0, c.name, 'LinStatic', m.N]); }); });
+    const exp = await G.xlsxSheets([{ name: 'Joint Reactions', rows: [['TABLE:  Joint Reactions'], ['Joint', 'OutputCase', 'CaseType', 'F1', 'F2', 'F3'], ['Text', 'Text', 'Text', 'Kip', 'Kip', 'Kip'], ...reacRows] },
+      { name: 'Element Forces - Frames', rows: [['TABLE:  Element Forces - Frames'], ['Frame', 'Station', 'OutputCase', 'CaseType', 'P'], ['Text', 'ft', 'Text', 'Text', 'Kip'], ...frRows] }]);
+    const back = await G.csiRead(exp), C = G.csiCompare(F0, A0, R0, back);
+    is('CSiBridge exports read back: the tables and their rows', [back['Joint Reactions'].length, back['Element Forces - Frames'].length].join(','), [reacRows.length, frRows.length].join(','));
+    is('CSiBridge comparison: the grid\'s own results compare at 1.00 (reactions and cross-frames, both DC1 cases)', C.which === 'steel' && C.cases.length === 2 && C.cases.every(c => Math.abs(c.reac.med - 1) < 1e-9 && Math.abs(c.xf.med - 1) < 1e-9), true);
+    const back2 = JSON.parse(JSON.stringify(back)); back2['Joint Reactions'][0].Joint = 999999;
+    is('CSiBridge comparison: an export from another model is refused', !!(G.csiCompare(F0, A0, R0, back2).errs || []).length, true);
     const wb = new TextDecoder().decode(b), i = wb.indexOf('<sheets>');
     is('CSiBridge workbook: joint coordinates sheet present', wb.slice(i, wb.indexOf('</sheets>')).includes('name="Joint Coordinates"'), true);
   } catch (err) { is('CSiBridge workbook', err.message, 'no error'); } })();
