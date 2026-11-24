@@ -44,7 +44,34 @@ function is(name, v, want) { const ok = v === want; ok ? pass++ : fail++; consol
 
 // ---------- Steel Line Girder ----------
 guard('Steel Line Girder', () => {
-  const S = load('steel-line-girder').LGCheck;
+  const SC = load('steel-line-girder'), S = SC.LGCheck;
+  // line girder input file: the plate layout, stiffener and brace stations and the DC1 deck load come back from the keywords
+  { const keys = t => { const Ls = t.split(/\r?\n/), i1 = Ls.indexOf('DATA'), i2 = Ls.indexOf('GO'), d = {}; let k = null;
+      for (let j = i1 + 1; j < i2; j++) { const tk = Ls[j].trim().split(/\s+/); if (/^[A-Z][A-Z0-9]*$/.test(tk[0])) { k = tk[0]; d[k] = tk.slice(1).map(Number); } else if (k) d[k].push(...tk.map(Number)); } return d; };
+    for (const ex of ['b7u2', 'b12u5', 'nsba1']) {
+      const m = structuredClone(SC.LG_EXAMPLES[ex]), r = S.run(structuredClone(m)), out = SC.MDXWrite.write(m, r, {}), d = keys(out.text), L = m.spans.reduce((a, b) => a + b, 0);
+      const segs = lens => { const o = []; let x = 0; lens.forEach(l => { o.push([x, x + l]); x += l; }); if (x < L - 0.01) o.push([x, L]); return o; };
+      const at = (lens, vals, x) => { const sg = segs(lens); let i = sg.findIndex(q => x >= q[0] - 1e-6 && x <= q[1] + 1e-6); return vals[Math.min(i < 0 ? sg.length - 1 : i, vals.length - 1)]; };
+      let bad = 0; m.ranges.forEach(g => { const sec = m.sections.find(q => q.id === g.sec), x = (g.from + g.to) / 2;
+        if ([at(d.TSPL, d.SPLTFW, x), at(d.TSPL, d.SPLTFT, x), at(d.SPL, d.SPLWD, x), at(d.SPL, d.SPLWT, x), at(d.BSPL, d.SPLBFW, x), at(d.BSPL, d.SPLBFT, x)].join() !== [sec.bt, sec.tt, sec.D, sec.tw, sec.bb, sec.tb].join()) bad++; });
+      is(`line girder input file (${ex}): every section range has its plates`, bad, 0);
+      const fil = d.FILLET[0] ? d.WCONC[0] / 1000 * d.FILLET[0] * (m.ranges.reduce((a, g) => a + (g.to - g.from) * m.sections.find(q => q.id === g.sec).bt, 0) / L) / 144 : 0;
+      near(`line girder input file (${ex}): DC1 deck load from TSLABW, SLABT, WCONC and FILLET, k/ft`, d.WCONC[0] / 1000 * d.SLABT[0] * d.TSLABW[0] / 144 + fil + d.WAC[0], m.loads.dc1, 2e-4);
+      const cum = a => { let x = 0; return a.map(v => +(x += v).toFixed(2)); };
+      if (m.stiffeners.length) is(`line girder input file (${ex}): every stiffener range starts on a stiffener`, m.stiffeners.slice(1).every(q => cum(d.TSSPF).some(v => Math.abs(v - q.from) < 0.02)), true);
+      const locs = String(m.bracing.locs).split(/\s+/).map(Number).filter(v => v > 0);
+      is(`line girder input file (${ex}): brace stations`, locs.every(v => cum(d.BR).some(q => Math.abs(q - v) < 0.01)), true);
+      const vary = Math.max(...r.pois.map(p => p.DFm)) - Math.min(...r.pois.map(p => p.DFm)) > 0.002;
+      is(`line girder input file (${ex}): distribution factors written only when the app's are constant`, vary ? !d.LANEM : Math.abs(d.LANEM[0] - r.pois[0].DFm) < 1e-4, true);
+      is(`line girder input file (${ex}): spans`, d.SPN.join(), m.spans.join());
+    }
+    { const m = structuredClone(SC.LG_EXAMPLES.nsba2), r = S.run(structuredClone(m)), d = keys(SC.MDXWrite.write(m, r, {}).text);
+      is('line girder input file (overrides): LANEM and LANEV are the app\'s', [d.LANEM[0], d.LANEV[0]].join(), [m.df.overrideM, m.df.overrideV].join()); }
+    { const m = structuredClone(SC.LG_EXAMPLES.b7u2); Object.assign(m.loads, { dc1: 0.1, deckAuto: true, haunchAuto: true, wc: 145 }); m.deck.haunch = 2; m.deck.btrib = 110;
+      const d = keys(SC.MDXWrite.write(m, S.run(structuredClone(m)), {}).text), L = m.spans.reduce((a, b) => a + b, 0), btA = m.ranges.reduce((a, g) => a + (g.to - g.from) * m.sections.find(q => q.id === g.sec).bt, 0) / L;
+      near('line girder input file (deck and haunch from the app): DC1 deck load, k/ft', d.WCONC[0] / 1000 * (d.SLABT[0] * d.TSLABW[0] + d.FILLET[0] * btA) / 144 + d.WAC[0], 0.1 + 7.5 * 110 / 144 * 0.145 + 2 * btA / 144 * 0.145, 1e-4); }
+    const tub = SC.MDXWrite.write(structuredClone(SC.LG_EXAMPLES.b7u2), { kind: 'tub' }, {});
+    is('line girder input file: tub girders refused', tub.errs.length > 0, true); }
   // Illinois Tollway IL-120 truck: midspan moment of a 100 ft simple span on a 0.5 ft influence-line grid
   { const IL = Float64Array.from({ length: 201 }, (_, j) => { const x = j * 0.5; return x <= 50 ? x / 2 : (100 - x) / 2; });
     const a = S.llEnvelope(IL, 0.5, 0.33, false, false), b = S.llEnvelope(IL, 0.5, 0.33, false, true);
