@@ -322,7 +322,9 @@ guard('Steel 2D Grillage cross-frames', () => {
   // design forces: Strength I is the governing direction of each term with its factor
   const LLx = G.liveLoad(RT, {}), XD = G.xfDesign(RT, LLx), rD = XD.rows.find(r => /^diagonal/.test(r.member));
   const ll = LLx.out.find(r => r.kind === 'X' && r.id === rD.id && r.member === rD.member), g = (x, a, b) => (x >= 0 ? a : b) * x;
-  near('design forces: Strength I max of a diagonal, kip', rD.strMax, g(rD.dc1 + rD.dc2, 1.25, 0.9) + g(rD.dw, 1.5, 0.65) + rD.el + 1.75 * ll.max, 1e-9, 'Table 3.4.1-1 and -2');
+  near('design forces: Strength I max of a diagonal, kip', rD.strMax, g(rD.dc1 + rD.dc2, 1.25, 0.9) + g(rD.dw, 1.5, 0.65) + rD.el + rD.elBand + 1.75 * ll.max, 1e-9, 'Table 3.4.1-1 and -2, EL with its band');
+  const fm = RT.res.fit.bRes.find(b => b.kind === 'xf' && b.members.some(m => /^diagonal/.test(m.name) && Math.abs(m.forcing) > 1)), fd = fm.members.find(m => /^diagonal/.test(m.name) && Math.abs(m.forcing) > 1);
+  near('fit: a diagonal\'s EL band is 4% of its forcing (k e), kip', fd.band, 0.04 * Math.abs(fd.forcing), 1e-9, '3D shell models of two 56–61° skew bridges: up to 4% of the forcing locked in');
   is('design forces: composite top chords carry the deck tie either way', XD.rows.filter(r => /^top chord/.test(r.member)).every(r => r.tie > 0), true);
   // CSiBridge verification models: a closed shell mesh carrying the grid's own loads
   const MS = G.csiModel(F, AT, RT, 'steel'), ML = G.csiModel(F, AT, RT, 'long'), MN = G.csiModel(F, AT, RT, 'short');
