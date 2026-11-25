@@ -1,11 +1,11 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Steel 2D Grillage lays out framing plans for curved, skewed, flared and partial-length steel I-girder bridges, with cross-frame layouts and DXF import, toward an AASHTO LRFD 10th Edition grillage analysis.">
+<meta name="description" content="Steel 2D Grillage is a browser-based grid analysis of curved, skewed, flared and partial-length steel I-girder bridges: staged dead load, HL-93 live load, AASHTO LRFD 10th Edition girder checks, cross-frame design forces and CSiBridge verification models.">
 <link rel="canonical" href="https://bridge-se.open-dot.org/steel-2d-grillage/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Bridge SE · Open DOT">
 <meta property="og:title" content="Steel 2D Grillage | Bridge SE | Open DOT">
-<meta property="og:description" content="Framing plans for curved, skewed, flared and partial-length steel I-girder bridges, with cross-frame layouts and DXF import.">
+<meta property="og:description" content="Grid analysis of curved, skewed and flared steel I-girder bridges with AASHTO LRFD 10th Edition checks, cross-frame design forces and CSiBridge verification models.">
 <meta property="og:url" content="https://bridge-se.open-dot.org/steel-2d-grillage/">
 <meta property="og:image" content="https://bridge-se.open-dot.org/assets/bridge-se-logo.png">
 <meta name="twitter:card" content="summary">
@@ -14,7 +14,6 @@
 <script defer src="/assets/track.js"></script>
 <style>.bridge-nav{max-width:1500px;margin:0 auto 12px;font:500 13px/1.5 system-ui,sans-serif}.bridge-nav a{color:var(--accent);text-decoration:underline;text-underline-offset:3px}.bridge-nav a:focus-visible{outline:2px solid currentColor;outline-offset:3px}.bridge-nav span{margin:0 8px;color:var(--muted)}</style>
 <title>Steel 2D Grillage | Bridge SE | Open DOT</title>
-<meta name="robots" content="noindex">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo+Narrow:wght@500;600;700&family=Public+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
@@ -135,13 +134,15 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
 .gbody>.row:first-of-type{border-top:0;padding-top:0}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+<style id="bridge-se-theme-style">.bridge-theme-actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}</style>
+<script id="bridge-se-theme-init">try{const t=localStorage.getItem("opendot-bridge-se-theme");if(t==="light"||t==="dark")document.documentElement.dataset.theme=t}catch(e){}</script>
 </head><body>
 <nav class="bridge-nav" aria-label="Breadcrumb"><a href="https://open-dot.org/">Open DOT</a><span>›</span><a href="/">Bridge SE</a><span>›</span>Steel 2D Grillage</nav>
 
 <header>
   <div>
-    <h1>Steel 2D Grillage <span class="badge">Preview · dead load</span></h1>
-    <p>Framing plans for steel I-girder bridges: curved, highly skewed, flared and tapered girders, girders that end on diaphragms, and cross-frame layouts. The grid analysis now covers dead load in stages (steel, deck, DC2, DW) with warping torsion and cross-frames modeled as condensed trusses; live load and the AASHTO 10th edition checks come next. Everything runs in your browser; files you open are not uploaded.</p>
+    <h1>Steel 2D Grillage <span class="badge">Preview</span></h1>
+    <p>A grid analysis of steel I-girder bridges: curved, highly skewed, flared and tapered girders, girders that end on diaphragms, and cross-frame layouts. Dead load in stages (steel, deck, DC2, DW) with warping torsion and cross-frames as condensed trusses, HL-93 live load on influence surfaces, AASHTO LRFD 10th edition girder checks, cross-frame design forces with SDLF/TDLF fit, and CSiBridge shell models to check it in 3D. Everything runs in your browser; files you open are not uploaded.</p>
   </div>
   <div class="actions">
     <div>
@@ -164,7 +165,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <option value="mixed">Curved with skewed pier, stations and offsets</option>
       </select>
     </div>
-    <div class="toolbar"><button id="btnSave">Save input</button><label class="btn" for="fileIn">Open input<input type="file" id="fileIn" accept=".json,application/json" hidden></label><button id="btnReset">Reset</button></div>
+    <div class="toolbar"><button id="btnSave">Save input</button><label class="btn" for="fileIn">Open input<input type="file" id="fileIn" accept=".json,application/json" hidden></label><button id="btnReset">Reset</button><button id="themeSwitch" type="button" aria-label="Switch to dark mode">Dark mode</button></div>
   </div>
 </header>
 
@@ -6589,6 +6590,34 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
 
   renderRail(); run();
   window.__g2d = { get doc() { return doc; }, get F() { return F; } };
+})();
+</script>
+<script id="bridge-se-theme-control">
+(() => {
+  const root = document.documentElement;
+  const button = document.getElementById('themeSwitch');
+  const media = matchMedia('(prefers-color-scheme: dark)');
+  const key = 'opendot-bridge-se-theme';
+  function dark() { return root.dataset.theme ? root.dataset.theme === 'dark' : media.matches; }
+  function label() {
+    button.textContent = dark() ? 'Light mode' : 'Dark mode';
+    button.setAttribute('aria-label', dark() ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+  button.addEventListener('click', () => {
+    const next = dark() ? 'light' : 'dark';
+    root.dataset.theme = next;
+    try { localStorage.setItem(key, next); } catch (e) { /* private storage unavailable */ }
+    label();
+  });
+  if (media.addEventListener) media.addEventListener('change', label);
+  else if (media.addListener) media.addListener(label);
+  addEventListener('storage', e => {
+    if (e.key !== key) return;
+    if (e.newValue === 'light' || e.newValue === 'dark') root.dataset.theme = e.newValue;
+    else delete root.dataset.theme;
+    label();
+  });
+  label();
 })();
 </script>
 </body></html>

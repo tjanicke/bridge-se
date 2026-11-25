@@ -7,6 +7,7 @@ Live at **[bridge-se.open-dot.org](https://bridge-se.open-dot.org/)**, part of [
 |---|---|
 | [Just Live Load](https://bridge-se.open-dot.org/just-live-load/) | Moment, shear and reaction envelopes for continuous beams: HL-93, HS loading, AASHTO routine commercial trucks, permits |
 | [Steel Line Girder](https://bridge-se.open-dot.org/steel-line-girder/) | Continuous steel I-girder and straight tub girder analysis, live-load envelopes and selected AASHTO LRFD checks |
+| [Steel 2D Grillage](https://bridge-se.open-dot.org/steel-2d-grillage/) | Grid analysis of curved, skewed and flared steel I-girder bridges, with cross-frame design forces, AASHTO LRFD 10th edition girder checks and CSiBridge verification models (preview) |
 | [Concrete Line Girder](https://bridge-se.open-dot.org/concrete-line-girder/) | IDOT precast prestressed I, bulb-T, IL and deck beams, and Iowa DOT BTB–BTE bulb tees with the Iowa BDM 5.4 policies: strength, service, shear and load rating (LRFD/LRFR, or Standard Specs 2002 LFD/LFR) |
 | [Concrete Slab Bridge](https://bridge-se.open-dot.org/concrete-slab-bridge/) | Continuous concrete slab bridges: equivalent-strip analysis, design checks and HL-93 load rating |
 | [Concrete Box Culvert](https://bridge-se.open-dot.org/concrete-box-culvert/) | Cast-in-place and precast box culverts, single and multi-cell, with HL-93 load rating |
