@@ -209,7 +209,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <div><h3>Bearing reactions, kip</h3><div class="tbl-wrap"><table class="res" id="anReac"></table></div></div>
       </div>
       <h3 style="margin-top:14px">Cross-frame member forces, kip <span class="status">(tension +)</span></h3>
-      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button><button id="btnCsi" title="Three CSiBridge v26 Excel import models (steel, long-term and short-term composite) of thin shells, to check the grid in 3D">CSiBridge models</button><span class="status" id="csiStatus"></span></div>
+      <div class="toolbar" style="margin-bottom:6px"><button id="btnXfCsv">Copy CSV</button><button id="btnAnJson">Results as JSON</button></div>
       <div class="tbl-wrap"><table class="res" id="anXf"></table></div>
       <p class="hint" id="anCheck" style="margin-top:8px"></p>
       <h3 style="margin-top:16px">What each refinement does to the cross-frame forces</h3>
@@ -251,12 +251,16 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <div class="tbl-wrap"><table class="res" id="ckProp"></table></div>
     </section>
     <section class="card" id="csiCard">
-      <div class="card-h"><h2>3D check in CSiBridge</h2><div class="toolbar"><span class="status" id="csiCmpStatus"></span><label class="btn" for="csiFiles">Compare CSiBridge results</label><input type="file" id="csiFiles" accept=".xlsx" multiple hidden></div></div>
-      <p class="hint">Build the models with <b>CSiBridge models</b> (dead-load results), import and run them in CSiBridge, then export Joint Reactions, Joint Displacements and Element Forces - Frames to Excel and choose those files here (any of the three models, one or more files each). The comparison uses the models built from the current inputs, so keep the inputs the models were made from. High-skew acute corners, composite top chords and locked-in fit forces are where the grid is least able to settle the answer on its own: confirm them in 3D.</p>
-      <div id="csiCmpMsgs"></div>
-      <div class="tbl-wrap"><table class="res" id="csiCmp"></table></div>
-      <p class="hint" id="csiCmpNote"></p>
-      <div id="csiCmpDet"></div>
+      <div class="card-h"><h2>Export to CSiBridge</h2><div class="toolbar"><button id="btnCsi" class="primary">CSiBridge models</button></div></div>
+      <p class="hint">Excel import files (CSiBridge v26) that build the same bridge from these inputs, for a 3D check: one zip with three models and a README. Run the dead-load analysis first.</p>
+      <ul class="hint" style="margin:6px 0 0;padding-left:20px">
+        <li><b>Geometry and members:</b> the girders' layout, webs, flanges and plate changes as thin shells; the deck as shells tied to the webs; the cross-frames (intermediate and end types, work points and member areas times R) as pinned frame members; connection plates and bearing stiffeners; bearings, held vertically, with in-plane restraint that is statically determinate.</li>
+        <li><b>Steel model</b> (no deck): DC1 steel and DC1 deck as the grid applies them, and EL, the locked-in fit forces, with SDLF or TDLF.</li>
+        <li><b>Long-term composite</b> (deck at 3n): DC2, barriers on the deck edges, and DW over the roadway.</li>
+        <li><b>Short-term composite</b> (deck at n): an HL-93 truck at mid-span over each girder in each span, and a uniform deck load, as test cases. The HL-93 envelopes (lanes and moving loads) are set up in CSiBridge.</li>
+      </ul>
+      <p class="hint">High-skew acute corners, composite top chords and locked-in fit forces are where the grid is least able to settle the answer on its own: confirm them in 3D.</p>
+      <p class="status" id="csiStatus" style="margin-top:8px"></p>
     </section>
     <section class="card">
       <div class="card-h"><h2>Girders</h2><span class="status" id="gStatus"></span></div>
@@ -5330,7 +5334,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       CASES.push({ name: 'UNI_0.1KSF', joints: [], area: 0.1 });
     }
     const deckShells = SH.map((s, k) => (s.part === 'deck' ? k + 1 : 0)).filter(Boolean);
-    return { errs, warns, which, nMod, J, SH, FR, BODY, REST, CASES, DN, GJ, shSec: [...shSec.entries()], deckShells, XF, BRG, xfA, Rf, ST, LVS: LVS.length, stiffened: stiffAt.size, deckE: 29000 / nMod };
+    return { errs, warns, which, nMod, J, SH, FR, BODY, REST, CASES, shSec: [...shSec.entries()], deckShells, XF, BRG, xfA, Rf, ST, LVS: LVS.length, stiffened: stiffAt.size, deckE: 29000 / nMod };
   }
 
   // ---------- Excel import tables ----------
@@ -5457,9 +5461,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const M0 = W.files[0].model, f2 = v => (+v).toFixed(2);
     const lines = [
       `CSiBridge verification models for ${o.name || 'the bridge'}, from Bridge SE Steel 2D Grillage${o.date ? ' (' + o.date + ')' : ''}.`, '',
-      'Import each workbook into a new CSiBridge model (File > Import > Excel spreadsheet), run every case, and export the',
-      'Joint Reactions, Joint Displacements and Element Forces - Frames tables to Excel. Choose those files under "3D check in',
-      'CSiBridge" > Compare CSiBridge results in the grillage, with the same inputs, for the grid-versus-3D comparison.', '',
+      'Import each workbook into a new CSiBridge model (File > Import > Excel spreadsheet) and run the cases.', '',
       'Workbooks',
       ...W.files.map(f => `  ${f.name}: ${f.which === 'steel' ? 'the steel alone' : 'the deck at E = Es / ' + f2(f.model.nMod)}; ${f.model.J.length} joints, ${f.model.SH.length} shells, ${f.model.FR.length} frame members; cases ${f.model.CASES.map(c => c.name).join(', ')}`), '',
       'The model',
@@ -5486,106 +5488,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const bytes = await zip([...W.files.map(f => ({ name: f.name, data: f.bytes })), { name: 'README.txt', data: enc(lines.join('\r\n')) }]);
     return { ...W, bytes, readme: lines.join('\n') };
   }
-  // ---------- reading CSiBridge's exported tables back (.xlsx: TABLE: name / fields / units / rows) ----------
-  async function inflate(data) {
-    if (typeof DecompressionStream === 'undefined') throw new Error('This browser cannot read compressed workbooks.');
-    const ds = new DecompressionStream('deflate-raw'), w = ds.writable.getWriter(); w.write(data); w.close();
-    const r = ds.readable.getReader(), ch = []; let n = 0; for (;;) { const { done, value } = await r.read(); if (done) break; ch.push(value); n += value.length; }
-    const out = new Uint8Array(n); let p = 0; ch.forEach(c => { out.set(c, p); p += c.length; }); return out;
-  }
-  async function unzip(b) { // { name: Uint8Array }
-    const dv = new DataView(b.buffer, b.byteOffset, b.byteLength), out = {}, dec = new TextDecoder();
-    let e = b.length - 22; while (e >= 0 && dv.getUint32(e, true) !== 0x06054b50) e--; if (e < 0) throw new Error('Not an .xlsx file.');
-    const n = dv.getUint16(e + 10, true); let p = dv.getUint32(e + 16, true);
-    for (let k = 0; k < n; k++) {
-      const meth = dv.getUint16(p + 10, true), csz = dv.getUint32(p + 20, true), L = dv.getUint16(p + 28, true), x = dv.getUint16(p + 30, true), c = dv.getUint16(p + 32, true), off = dv.getUint32(p + 42, true);
-      const name = dec.decode(b.subarray(p + 46, p + 46 + L)), lo = off + 30 + dv.getUint16(off + 26, true) + dv.getUint16(off + 28, true), raw = b.subarray(lo, lo + csz);
-      if (/^xl\/(sharedStrings\.xml|workbook\.xml|worksheets\/sheet\d+\.xml)$/.test(name)) out[name] = meth === 8 ? await inflate(raw) : raw;
-      p += 46 + L + x + c;
-    }
-    return out;
-  }
-  const unx = s => s.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(+d)).replace(/&amp;/g, '&');
-  async function csiRead(bytes) {
-    const z = await unzip(bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes)), dec = new TextDecoder(), T = {};
-    const ss = []; if (z['xl/sharedStrings.xml']) dec.decode(z['xl/sharedStrings.xml']).replace(/<si>([\s\S]*?)<\/si>/g, (_, x) => { let t = ''; x.replace(/<t[^>]*>([\s\S]*?)<\/t>/g, (__, y) => { t += y; }); ss.push(unx(t)); });
-    const col = r => { let n = 0; for (const ch of r.replace(/\d+$/, '')) n = n * 26 + ch.charCodeAt(0) - 64; return n - 1; };
-    Object.keys(z).filter(k => /worksheets/.test(k)).forEach(k => {
-      const x = dec.decode(z[k]), rows = [];
-      x.replace(/<row[^>]*>([\s\S]*?)<\/row>/g, (_, rx) => { const r = []; rx.replace(/<c ([^>]*?)(\/>|>([\s\S]*?)<\/c>)/g, (__, at, ___, inner) => {
-        const ref = /r="([A-Z]+\d+)"/.exec(at), t = /t="(\w+)"/.exec(at), v = inner && /<v>([\s\S]*?)<\/v>/.exec(inner), is = inner && /<is>[\s\S]*?<t[^>]*>([\s\S]*?)<\/t>/.exec(inner);
-        const val = t && t[1] === 's' ? ss[+v[1]] : t && t[1] === 'inlineStr' ? unx(is ? is[1] : '') : t && t[1] === 'str' ? unx(v ? v[1] : '') : v ? +v[1] : null;
-        r[ref ? col(ref[1]) : r.length] = val; }); rows.push(r); });
-      if (rows.length < 3 || typeof rows[0][0] !== 'string' || !/^TABLE:/.test(rows[0][0])) return;
-      const name = rows[0][0].replace(/^TABLE:\s*/, '').trim(), f = rows[1];
-      (T[name] = T[name] || []).push(...rows.slice(3).map(r => { const o = {}; f.forEach((h, i) => { if (h != null) o[h] = r[i]; }); return o; }));
-    });
-    return T;
-  }
-
-  // ---------- the grid against CSiBridge, case by case ----------
-  // T: tables merged from the exports of one model (which: steel | long | short; found from its case names)
-  function csiCompare(F, A, R, T) {
-    const cases = new Set((T['Joint Reactions'] || []).map(r => String(r.OutputCase)));
-    const which = cases.has('DC1_STEEL') ? 'steel' : cases.has('DC2') || cases.has('DW') ? 'long' : [...cases].some(c => /^TR_/.test(c)) ? 'short' : null;
-    if (!which) return { errs: ['These exports have none of the verification cases (DC1_STEEL, DC2, DW, TR_...): export Joint Reactions with the cases selected.'] };
-    const M = csiModel(F, A, R, which); if (M.errs.length) return { errs: M.errs };
-    const md = R.md, IDS = F.order, nodesOf = {}; IDS.forEach(g => { nodesOf[g] = md.nodes.filter(n => n.g === g).sort((a, b) => a.u - b.u); });
-    const errs = [];
-    if ((T['Joint Reactions'] || []).some(r => !M.BRG.some(b => b.joint === +r.Joint))) errs.push(`These exports are from a different model: their reactions are at joints that are not bearings of the ${which} model for these inputs. Rebuild the CSiBridge models, or restore the inputs they were made from.`);
-    const frameIds = new Set(M.FR.map(f => f.id));
-    if ((T['Element Forces - Frames'] || []).some(r => !frameIds.has(String(r.Frame)))) errs.push('These exports have frame members that are not in the model for these inputs.');
-    if (errs.length) return { errs };
-    // the grid's result for each case: the stages, or the case's own loads (deck joint loads by the lever rule along their
-    // station line, as the grid's live load is applied) on the stage's stiffness
-    const STAGE = { DC1_STEEL: 'steel', DC1_DECK: 'deck', EL_FIT: 'fit', DC2: 'dc2', DW: 'dw' };
-    const deckMeta = new Map(); (M.DN || []).forEach((row, i) => row && row.forEach((q, k) => deckMeta.set(q.j, { i, k, q })));
-    const gridOf = c => {
-      if (STAGE[c.name]) return R.res[STAGE[c.name]];
-      const pts = [], at = (g, i, P) => { const u = M.GJ[g][i].u, L = nodesOf[g]; let a = 0; while (a + 2 < L.length && L[a + 1].u < u) a++; const n0 = L[a], n1 = L[a + 1], t = Math.min(1, Math.max(0, (u - n0.u) / (n1.u - n0.u))); pts.push({ node: n0, P: P * (1 - t) }, { node: n1, P: P * t }); };
-      const sp = (k, i) => { const a = M.GJ[IDS[k]][i].p, b = M.GJ[IDS[k + 1]][i].p; return Math.hypot(b[0] - a[0], b[1] - a[1]); }, nG = IDS.length;
-      const lever = (j, P) => { const m = deckMeta.get(j); if (!m) return; const { i, q } = m;
-        if (q.g) return at(q.g, i, P);
-        if (q.side === 'L') { const s = sp(0, i); at(IDS[0], i, P * (1 + q.e / s)); at(IDS[1], i, -P * q.e / s); return; }
-        if (q.side === 'R') { const s = sp(nG - 2, i); at(IDS[nG - 1], i, P * (1 + q.e / s)); at(IDS[nG - 2], i, -P * q.e / s); return; }
-        at(IDS[q.bay], i, P * (1 - q.r)); at(IDS[q.bay + 1], i, P * q.r); };
-      const acc = new Map(); c.joints.forEach(q => acc.set(q.joint, (acc.get(q.joint) || 0) + (q.P || 0))); acc.forEach((P, j) => lever(j, P));
-      if (c.area) { const PJ = new Map(M.J.map(j => [j.id, j])); M.deckShells.forEach(k => { const s = M.SH[k - 1], p = s.j.map(j => PJ.get(j));
-        const ar = 0.5 * Math.abs((p[2].x - p[0].x) * (p[3].y - p[1].y) - (p[3].x - p[1].x) * (p[2].y - p[0].y)); s.j.forEach(j => lever(j, ar * c.area / 4)); }); }
-      return G.solve(md, which === 'steel' ? 'steel' : which === 'long' ? 'dc2' : 'll', { points: pts });
-    };
-    const RE = {}; (T['Joint Reactions'] || []).forEach(r => { (RE[r.OutputCase] = RE[r.OutputCase] || {})[+r.Joint] = (RE[r.OutputCase][+r.Joint] || 0) + +r.F3; });
-    const NF = {}; (T['Element Forces - Frames'] || []).forEach(r => { const k = r.OutputCase + '|' + r.Frame; if (!(k in NF)) NF[k] = +r.P; });
-    const UD = {}; (T['Joint Displacements'] || []).forEach(r => { (UD[r.OutputCase] = UD[r.OutputCase] || {})[+r.Joint] = +r.U3; });
-    const els = new Map(md.bEls.filter(e => e.kind === 'xf').map(e => [e.id, e]));
-    const q = (a, t) => { if (!a.length) return NaN; const s = [...a].sort((x, y) => x - y); return s[Math.floor(t * (s.length - 1))]; };
-    const stat = a => ({ n: a.length, med: q(a, 0.5), lo: q(a, 0.1), hi: q(a, 0.9) });
-    const out = { which, nMod: M.nMod, cases: [] };
-    M.CASES.forEach(c => {
-      if (!RE[c.name]) return;
-      const r = gridOf(c); if (!r) return;
-      const reac = M.BRG.map(b => { const g = r.reac.find(x => x.g === b.g && x.support === b.support); return { g: b.g, support: b.support, shell: RE[c.name][b.joint] || 0, grid: g ? g.R : 0 }; });
-      const rmax = Math.max(...reac.map(x => Math.abs(x.shell)));
-      // deflection: the web base at each station, against the grid at the same point
-      const defl = []; if (UD[c.name]) IDS.forEach(g => M.GJ[g].forEach(st => { const s = UD[c.name][st.web[0]]; if (s == null) return; defl.push({ g, u: st.u, shell: s * 12, grid: G.at(r, g, st.u).w * 12 }); }));
-      const dmax = Math.max(0, ...defl.map(x => Math.abs(x.shell)));
-      const mem = []; M.XF.forEach(x => { let s = NF[c.name + '|' + x.frame]; if (s == null) return; const b = r.bRes.find(z => z.id === x.cf); if (!b || !b.members || !b.members[x.idx]) return;
-        if (c.name === 'EL_FIT') { const el = els.get(x.cf), fr = M.FR.find(f => f.id === x.frame); if (!el || !el.lf) return; s -= 29000 * M.xfA[fr.sec] * el.lf.e[x.idx] / el.B.Tr.mem[x.idx].l; }
-        const cf = F.crossframes.find(z => z.id === x.cf);
-        mem.push({ id: x.cf, gA: cf.gA, gB: cf.gB, end: cf.tag === 'support', member: b.members[x.idx].name, shell: s, grid: b.members[x.idx].N }); });
-      const nmax = Math.max(0, ...mem.map(x => Math.abs(x.shell)));
-      const ratio = (a, cut) => a.filter(x => Math.abs(x.shell) >= cut && Math.abs(x.shell) > 1e-9).map(x => x.grid / x.shell);
-      const kinds = {}; mem.filter(x => Math.abs(x.shell) >= 0.3 * nmax).forEach(x => { const k = (x.end ? 'end ' : '') + x.member.replace(/ (A|B|middle|\d)$/, '').replace(/^diagonal.*/, 'diagonal'); (kinds[k] = kinds[k] || []).push(x.grid / x.shell); });
-      out.cases.push({ name: c.name, total: { shell: reac.reduce((a, x) => a + x.shell, 0), grid: reac.reduce((a, x) => a + x.grid, 0) },
-        reac: stat(ratio(reac, 0.1 * rmax)), reacRows: reac,
-        defl: defl.length ? { shell: dmax, grid: Math.max(...defl.map(x => Math.abs(x.grid))), ...stat(ratio(defl, 0.3 * dmax)) } : null,
-        xf: mem.length ? { shell: nmax, grid: Math.max(...mem.map(x => Math.abs(x.grid))), ...stat(ratio(mem, 0.3 * nmax)), kinds: Object.fromEntries(Object.entries(kinds).map(([k, a]) => [k, stat(a)])),
-          top: mem.slice().sort((a, b) => Math.abs(b.shell) - Math.abs(a.shell)).slice(0, 8) } : null });
-    });
-    if (!out.cases.length) return { errs: ['No case in these exports matches the model\'s cases.'] };
-    return out;
-  }
-  Object.assign(G, { csiRead, csiCompare, csiPackage, csiModel, csiTables: tables, csiWorkbook: workbook, csiWorkbooks, zipFiles: zip, xlsxSheets: xlsx });
+  Object.assign(G, { csiPackage, csiModel, csiTables: tables, csiWorkbook: workbook, csiWorkbooks, zipFiles: zip, xlsxSheets: xlsx });
 })();
 </script>
 <script>
@@ -6348,41 +6251,6 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     } catch (err) { st.textContent = 'The models could not be built: ' + err.message; }
     finally { b.disabled = false; }
   };
-  // CSiBridge exports back in: the grid against the 3D model, case by case
-  const CSI_MODEL = { steel: 'steel', long: 'composite 3n', short: 'composite n' };
-  $('#csiFiles').addEventListener('change', async e => {
-    const files = [...e.target.files]; e.target.value = ''; if (!files.length) return;
-    const st = $('#csiCmpStatus'), msgs = $('#csiCmpMsgs');
-    msgs.innerHTML = ''; $('#csiCmp').innerHTML = ''; $('#csiCmpDet').innerHTML = ''; $('#csiCmpNote').textContent = '';
-    if (!(AR && AR.res) || anKey !== anInputKey()) { st.textContent = 'Run the analysis for the inputs the models were made from first.'; return; }
-    st.textContent = `Reading ${files.length} file${files.length > 1 ? 's' : ''}…`;
-    try {
-      // group the files' tables by model (from their case names), then compare each model
-      const groups = {}, bad = [];
-      for (const f of files) {
-        const T = await G.csiRead(new Uint8Array(await f.arrayBuffer())), cs = new Set([...(T['Joint Reactions'] || []), ...(T['Element Forces - Frames'] || []), ...(T['Joint Displacements'] || [])].map(r => String(r.OutputCase)));
-        const w = cs.has('DC1_STEEL') || cs.has('DC1_DECK') ? 'steel' : cs.has('DC2') || cs.has('DW') ? 'long' : [...cs].some(c => /^TR_/.test(c)) || cs.has('UNI_0.1KSF') ? 'short' : null;
-        if (!w) { bad.push(f.name); continue; }
-        const g = groups[w] = groups[w] || {}; Object.entries(T).forEach(([k, v]) => { (g[k] = g[k] || []).push(...v); });
-      }
-      const out = [], errs = bad.map(n => `${n}: no verification cases or results tables found.`);
-      Object.entries(groups).forEach(([w, T]) => { if (!T['Joint Reactions']) { errs.push(`The ${CSI_MODEL[w]} model: export Joint Reactions too (it ties the export to the model).`); return; }
-        const C = G.csiCompare(F, clone(doc.analysis), AR, T); if (C.errs) errs.push(...C.errs.map(x => `The ${CSI_MODEL[w]} model: ${x}`)); else out.push(C); });
-      msgs.innerHTML = errs.map(x => `<div class="msg err">${esc(x)}</div>`).join('');
-      showCsiCmp(out); st.textContent = out.length ? `${out.reduce((a, c) => a + c.cases.length, 0)} cases compared` : '';
-    } catch (err) { st.textContent = ''; msgs.innerHTML = `<div class="msg err">${esc('The files could not be read: ' + err.message)}</div>`; }
-  });
-  function showCsiCmp(list) {
-    if (!list.length) return;
-    const r2 = v => (isFinite(v) ? v.toFixed(2) : '–'), rng = s => (s && s.n ? `${r2(s.med)} <span class="status">${r2(s.lo)}–${r2(s.hi)}</span>` : '–');
-    const rows = []; list.sort((a, b) => ['steel', 'long', 'short'].indexOf(a.which) - ['steel', 'long', 'short'].indexOf(b.which)).forEach(C => C.cases.forEach(c => rows.push({ C, c })));
-    $('#csiCmp').innerHTML = '<thead><tr><th class="l">Case</th><th class="l">Model</th><th>Total reaction, kip<br><span class="status">3D / grid</span></th><th>Reactions<br><span class="status">grid ÷ 3D</span></th><th>Largest deflection, in.<br><span class="status">3D / grid</span></th><th>Deflections<br><span class="status">grid ÷ 3D</span></th><th>Largest cross-frame force, kip<br><span class="status">3D / grid</span></th><th>Cross-frame members<br><span class="status">grid ÷ 3D</span></th></tr></thead><tbody>'
-      + rows.map(({ C, c }) => `<tr><td class="l">${esc(c.name)}</td><td class="l">${CSI_MODEL[C.which]}</td><td>${fx(c.total.shell, 1)} / ${fx(c.total.grid, 1)}</td><td>${rng(c.reac)}</td><td>${c.defl ? fx(c.defl.shell, 2) + ' / ' + fx(c.defl.grid, 2) : '–'}</td><td>${rng(c.defl)}</td><td>${c.xf ? fx(c.xf.shell, 1) + ' / ' + fx(c.xf.grid, 1) : '–'}</td><td>${rng(c.xf)}</td></tr>`).join('') + '</tbody>';
-    $('#csiCmpNote').textContent = 'Medians with the 10–90% range of the ratios. Reactions above 10% of the largest, deflections at the web bases above 30% of the largest, cross-frame members above 30% of the largest force in the case. Above 1, the grid is the larger. EL_FIT: the 3D locked-in force is its member force less the EA e / L of the joint-force pair. Live load test cases are applied to the grid by the lever rule along each station line, as the grid\'s live load is.';
-    $('#csiCmpDet').innerHTML = rows.filter(({ c }) => c.xf).map(({ C, c }) => `<details class="grp" style="margin-top:8px"><summary>${esc(c.name)} · cross-frames by member <span class="status">${CSI_MODEL[C.which]}</span></summary><div style="padding:0 14px 12px">`
-      + '<div class="tbl-wrap"><table class="res"><thead><tr><th class="l">Member</th><th>n</th><th>grid ÷ 3D</th></tr></thead><tbody>' + Object.entries(c.xf.kinds).sort().map(([k, s]) => `<tr><td class="l">${esc(k)}</td><td>${s.n}</td><td>${rng(s)}</td></tr>`).join('') + '</tbody></table></div>'
-      + '<div class="tbl-wrap" style="margin-top:8px"><table class="res"><thead><tr><th class="l">Largest in 3D</th><th class="l">Member</th><th>3D, kip</th><th>grid, kip</th><th>grid ÷ 3D</th></tr></thead><tbody>' + c.xf.top.map(m => `<tr><td class="l">${esc(m.id)} <span class="status">${esc(m.gA)}–${esc(m.gB)}${m.end ? ', support' : ''}</span></td><td class="l">${esc(m.member)}</td><td>${fx(m.shell, 1)}</td><td>${fx(m.grid, 1)}</td><td>${Math.abs(m.shell) > 1e-6 ? r2(m.grid / m.shell) : '–'}</td></tr>`).join('') + '</tbody></table></div></div></details>').join('');
-  }
   $('#btnAnJson').onclick = () => {
     if (!(AR && AR.res)) return; const r4 = v => +(+v).toFixed(3), st = ['steel', 'deck', 'dc2', 'dw'].concat(hasFit() ? ['fit'] : []);
     const out = { schema: 'opendot.g2d.deadload/1', units: 'kip, ft, in (deflection), ksi (lateral flange)', stages: st.map(s => SN[s]), modularRatio: r4(AR.n),
