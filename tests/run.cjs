@@ -322,7 +322,33 @@ guard('Steel 2D Grillage cross-frames', () => {
     const sup = R4.md.bEls.find(e => e.kind === 'xf' && e.src && e.src.tag === 'support'), int = R4.md.bEls.find(e => e.kind === 'xf' && !(e.src && e.src.tag === 'support'));
     const kOf = (el, nm) => el.B.Tr.mem.find(m => m.name.startsWith(nm)).k * el.B.Tr.mem.find(m => m.name.startsWith(nm)).l;
     near('end frames: an area typed in overrides (top chord EA ratio end / intermediate)', kOf(sup, 'top') / kOf(int, 'top'), 9 / 4, 1e-9);
-    near('end frames: "same as intermediate" keeps the intermediate diagonal (EA ratio)', kOf(sup, 'diag') / kOf(int, 'diag'), 1, 1e-9); }
+    near('end frames: "same as intermediate" keeps the intermediate diagonal (EA ratio)', kOf(sup, 'diag') / kOf(int, 'diag'), 1, 1e-9);
+    // stiffness factor R by member type (AASHTO 4.6.3.3.4c), and Rnc / Rc entered as an override for all members
+    is('R by member type: angle, tee, channel, double angle, area (noncomposite / composite)', ['L5X5X1/2', 'WT6X20', 'C8X11.5'].map(x => G.memR({ shape: x }, false) + '/' + G.memR({ shape: x }, true)).concat([G.memR({ shape: 'L5X5X1/2', double: true }, false), G.memR({ A: 5 }, false)]).join(' '), '0.65/0.75 0.65/0.75 1/1 1 1');
+    is('R override: Rnc entered applies to every member', G.memRf({ shape: 'C8X11.5' }, false, { Rnc: 0.8, Rc: '' }) + ' ' + G.memRf({ shape: 'L5X5X1/2' }, true, { Rnc: 0.8, Rc: '' }), '0.8 0.75');
+    { const B1 = JSON.parse(JSON.stringify(A1)); B1.crossframe.Rnc = ''; B1.crossframe.Rc = ''; const B2 = JSON.parse(JSON.stringify(A1)); B2.crossframe.Rnc = 0.65; B2.crossframe.Rc = 0.75;
+      const r1 = G.analyze(F, B1), r2 = G.analyze(F, B2), d = st => Math.max(...r1.res[st].bRes.filter(b => b.kind === 'xf').flatMap((b, k) => b.members.map((m, j) => Math.abs(m.N - r2.res[st].bRes.filter(x => x.kind === 'xf')[k].members[j].N))));
+      near('R by member type: an all-angle frame left blank = 0.65 / 0.75 entered (largest difference, steel and DC2, kip)', Math.max(d('steel'), d('dc2')), 0, 1e-9); }
+    // member resistance, AASHTO LRFD 10th edition
+    { const s = G.memSection({ shape: 'L5X5X1/2' }), c = G.memCompression(s, 120, 50), KLr = 72 + 0.75 * 120 / 1.53, Fe = Math.PI ** 2 * 29000 / KLr ** 2;
+      near('single angle compression (6.9.4.4): L5X5X1/2, 10 ft, connected by one leg: Pn, kip', c.Pn, 0.877 * Fe * 4.79, 1e-6, 'KL/r = 72 + 0.75 (120 / 1.53) = 130.8; Fe = 16.7 ksi; Pn = 0.877 Fe Ag = 70.3');
+      near('single angle tension (6.8.2): L5X5X1/2, 3 bolts 7/8 in.: Pr, kip', G.memTension(s, { Fy: 50, Fu: 65, db: 0.875, n: 3 }).Pr, 0.8 * 65 * (4.79 - 1 * 0.5) * 0.6, 1e-9, 'fracture: 0.80 Fu An U, An = 4.79 - 1.0 (0.5), U = 0.60');
+      near('single angle tension: 4 bolts in a line, U', G.memTension(s, { Fy: 50, Fu: 65, db: 0.875, n: 4 }).U, 0.8, 1e-12, 'Table 6.8.2.2-1 case 8');
+      const d2 = G.memSection({ shape: 'L5X5X1/2', double: true, gap: 0.375 });
+      near('double angle 2L5X5X1/2, 3/8 in. apart: ry, in.', d2.ry, 2.22, 0.01, 'AISC Manual double-angle properties');
+      near('double angle: area = two angles, in²', d2.A, 9.58, 1e-9);
+      const w = G.memSection({ shape: 'WT6X20' }), cw = G.memCompression(w, 120, 50), Fey = Math.PI ** 2 * 29000 / (120 / w.ry) ** 2, Fex = Math.PI ** 2 * 29000 / (120 / w.rx) ** 2;
+      is('tee compression: flexural-torsional buckling never above flexural buckling about the axis of symmetry', cw.Fcr <= (50 / Math.min(Fex, Fey) <= 2.25 ? Math.pow(0.658, 50 / Math.min(Fex, Fey)) * 50 : 0.877 * Math.min(Fex, Fey)) + 1e-9, true);
+      const thin = G.memCompression(G.memSection({ shape: 'L8X8X1/2' }), 60, 50);
+      is('slender legs (b/t 16 > 0.45 sqrt(E/Fy)): effective area below the gross area', thin.Ae < 7.75 && thin.Ae > 6, true); }
+    { const XD = G.xfDesign(G.analyze(F, A1), null), r = XD.rows.find(x => /^diagonal/.test(x.member));
+      is('design table: each member row carries its check (section, L/r, ratio)', !!(r.check && r.check.kind === 'L' && r.check.Lr > 0 && r.check.ratio > 0 && r.check.Prc > 0), true);
+      is('design table: straight bridge, limits for bracing members unless set (L/r 240 tension, 140 compression)', r.check.limT + ' ' + r.check.limC, '240 140');
+      const XM = G.xfDesign(G.analyze(F, A1), null, { primary: 'yes', xMid: true }), rm = XM.rows.find(x => x.id === r.id && x.member === r.member);
+      near('design table: X diagonals connected where they cross take half their length', rm.check.L / r.check.L, 0.5, 1e-12);
+      is('design table: main members, compression limit 120', rm.check.limC, 120);
+      is('design table: area-only members are not checked', G.xfDesign(R, null).rows[0].check.kind, 'A'); }
+  }
   near('consistency: member forces reproduce the frame end forces (relative)', c.res / c.ref, 0, 1e-9, 'truss forces back onto the girders');
   const tot = st => R.res[st].reac.reduce((s, x) => s + x.R, 0);
   near('equilibrium: DC2 reactions = parapet load, kip', tot('dc2'), 0.8 * F.girders[0].L * 0 + 0.8 * (F.girders[0].L + F.girders[3].L) / 2, 0.5, '0.4 k/ft on each edge girder line');
