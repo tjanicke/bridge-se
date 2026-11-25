@@ -4798,9 +4798,11 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     const P = res && res.pois ? res.pois : [], mx = k => (P.length ? Math.max(...P.map(p => +p[k] || 0)) : 0);
     // one value each in the file: written when the app's factors are the same along the girder (overrides, one span);
     // when they vary (positive and negative regions), the program computes its own from the girder spacing and spans
+    let dfOwn = true; // the program computes its own factors (no LANEM / LANEV written)
     if (P.length) {
       const mn = k => Math.min(...P.map(p => +p[k] || 0)), vary = k => mx(k) - mn(k) > 0.002;
       if (!vary('DFm') && !vary('DFv')) {
+        dfOwn = false;
         D.push(['LANEM', [r(mx('DFm'), 4)]], ['LANEV', [r(mx('DFv'), 4)]]);
         if (mx('DFmF') > 0 && !vary('DFmF')) D.push(['LANEMF', [r(mx('DFmF'), 4)]]); if (mx('DFvF') > 0 && !vary('DFvF')) D.push(['LANEVF', [r(mx('DFvF'), 4)]]);
       } else notes.push(`The app's distribution factors vary along the girder (moment ${mn('DFm').toFixed(3)} to ${mx('DFm').toFixed(3)}, shear ${mn('DFv').toFixed(3)} to ${mx('DFv').toFixed(3)}); the file takes one value, so they are left for the program to compute. Compare its factors with these.`);
@@ -4809,6 +4811,13 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     if (+df.roadway > 0) D.push(['ROADWIDTH', [r(+df.roadway)]], ['LANEW', [r(12)]], ['NL', [int(Math.max(1, Math.floor(+df.roadway / 12)))]]);
     else D.push(['NL', [int(+dfl.NL > 0 ? dfl.NL : 2)]]);
     if (ext && +df.de) D.push(['GDREXT', [r(+df.de, 3)]]);
+    // SKEW: framing angle at each support, from the girder axis (90 square), for the program's own skew corrections to
+    // its lane fractions. Written only when it computes them: the factors written as LANEM / LANEV already carry the app's
+    // corrections, so SKEW stays at its default there and nothing is corrected twice
+    if (+df.skew) {
+      if (dfOwn) { D.push(['SKEW', Array(m.spans.length + 1).fill(r(90 - +df.skew))]); notes.push(`SKEW ${r(90 - +df.skew)} at every support: the program applies its own skew corrections (moment reduction${df.skewShear ? ' and obtuse-corner shear increase' : '; it also increases shear at the obtuse corner, which the app has turned off'}).`); }
+      else notes.push('Skew: the distribution factors written already include the app\'s skew corrections, so SKEW is left at 90 (square) to avoid correcting twice.');
+    }
     // bracing, stiffeners, supports
     const locs = String((m.bracing || {}).locs || '').split(/[\s,]+/).filter(Boolean).map(Number).filter(v => v >= 0 && v <= L + 1e-6).sort((a, b) => a - b);
     const pts = [...new Set([0, ...locs, L].map(v => +v.toFixed(4)))].sort((a, b) => a - b);
@@ -4829,7 +4838,6 @@ if (typeof module !== 'undefined') module.exports = PDF_METRICS;
     D.push(['NSUPBR', Array(nSup).fill('1')], ['SUPBST', [r(o.brgT || 1)]], ['SUPBSW', [r(o.brgW || 8)]]);
     notes.push(`Bearing stiffeners one pair per support, ${o.brgT || 1} × ${o.brgW || 8} in. (the app does not hold them): check them against the plans.`);
     D.push(['BNGSKEW', Array(nSup).fill(r(90 - (+df.skew || 0)))]);
-    if (+df.skew) notes.push('Bearing skew written as BNGSKEW = 90 − skew; check the program\'s convention.');
     // fatigue, deflection, load modifiers
     if (+fat.adtt > 0) D.push(['ADTT', [int(fat.adtt)]]); if (+fat.life > 0) D.push(['LIFE', [int(fat.life)]]);
     if (dfl.on && +dfl.ratio > 0) D.push(['LLDLIM', [int(dfl.ratio)]]);

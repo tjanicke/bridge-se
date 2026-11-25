@@ -70,6 +70,10 @@ guard('Steel Line Girder', () => {
     { const m = structuredClone(SC.LG_EXAMPLES.b7u2); Object.assign(m.loads, { dc1: 0.1, deckAuto: true, haunchAuto: true, wc: 145 }); m.deck.haunch = 2; m.deck.btrib = 110;
       const d = keys(SC.MDXWrite.write(m, S.run(structuredClone(m)), {}).text), L = m.spans.reduce((a, b) => a + b, 0), btA = m.ranges.reduce((a, g) => a + (g.to - g.from) * m.sections.find(q => q.id === g.sec).bt, 0) / L;
       near('line girder input file (deck and haunch from the app): DC1 deck load, k/ft', d.WCONC[0] / 1000 * (d.SLABT[0] * d.TSLABW[0] + d.FILLET[0] * btA) / 144 + d.WAC[0], 0.1 + 7.5 * 110 / 144 * 0.145 + 2 * btA / 144 * 0.145, 1e-4); }
+    // skew: BNGSKEW and SKEW are angles from the girder axis (90 square); SKEW only where the program computes its own factors
+    for (const ex of ['b7u2', 'nsba2']) { const m = structuredClone(SC.LG_EXAMPLES[ex]); m.df.skew = 30; const r = S.run(structuredClone(m)), d = keys(SC.MDXWrite.write(m, r, {}).text);
+      is(`line girder input file (${ex}, 30° skew): BNGSKEW 60 at every support`, d.BNGSKEW.join(), Array(m.spans.length + 1).fill(60).join());
+      is(`line girder input file (${ex}, 30° skew): SKEW 60 only without LANEM, never both`, d.LANEM ? !d.SKEW : d.SKEW.join() === Array(m.spans.length + 1).fill(60).join(), true); }
     const tub = SC.MDXWrite.write(structuredClone(SC.LG_EXAMPLES.b7u2), { kind: 'tub' }, {});
     is('line girder input file: tub girders refused', tub.errs.length > 0, true); }
   // Illinois Tollway IL-120 truck: midspan moment of a 100 ft simple span on a 0.5 ft influence-line grid
