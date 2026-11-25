@@ -309,6 +309,20 @@ guard('Steel 2D Grillage cross-frames', () => {
     crossframe: { model: 'truss', type: 'X', endType: 'X', h: 40, e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true }, options: { warping: true, h: 2.5 } };
   const R = G.analyze(F, A), c = G.consistency(R);
   is('60° skew analysis: no errors', R.errs.length, 0);
+  // cross-frame members as rolled shapes, and work points measured from the girder's flanges
+  { const A1 = JSON.parse(JSON.stringify(A)); Object.assign(A1.crossframe, { top: { shape: 'L5X5X1/2' }, bot: { shape: 'L5X5X1/2' }, diag: { shape: 'L5X5X1/2' } });
+    const A2 = JSON.parse(JSON.stringify(A)); Object.assign(A2.crossframe, { top: { A: 4.79 }, bot: { A: 4.79 }, diag: { A: 4.79 } });
+    near('cross-frame shapes: L5X5X1/2 area, in²', G.memArea({ shape: 'L5X5X1/2' }), 4.79, 1e-9, 'AISC Shapes Database v16.0');
+    near('cross-frame shapes: an angle\'s least radius of gyration rz, in.', G.memRmin({ shape: 'L5X5X1/2' }), 0.98, 1e-9, 'AISC Shapes Database v16.0');
+    const m1 = G.analyze(F, A1).res.steel.bRes.find(b => b.kind === 'xf').members, m2 = G.analyze(F, A2).res.steel.bRes.find(b => b.kind === 'xf').members;
+    near('cross-frame shapes: a frame of L5X5X1/2 = a frame of 4.79 in² members (largest difference, kip)', Math.max(...m1.map((m, j) => Math.abs(m.N - m2[j].N))), 0, 1e-9);
+    const A3 = JSON.parse(JSON.stringify(A)); Object.assign(A3.crossframe, { h: '', zb: 4, zt: 5 }); const R3 = G.analyze(F, A3), T3 = R3.md.bEls.find(e => e.kind === 'xf').B.Tr;
+    near('work points: depth between them = girder depth less the two distances (56.5 - 4 - 5), in.', Math.max(...T3.nodes.map(n => n[1])) * (Math.max(...T3.nodes.map(n => n[1])) < 10 ? 12 : 1), 47.5, 1e-6);
+    const A4 = JSON.parse(JSON.stringify(A3)); A4.crossframe.end = { diag: { shape: '' }, top: { shape: '_A', A: 9 } }; const R4 = G.analyze(F, A4);
+    const sup = R4.md.bEls.find(e => e.kind === 'xf' && e.src && e.src.tag === 'support'), int = R4.md.bEls.find(e => e.kind === 'xf' && !(e.src && e.src.tag === 'support'));
+    const kOf = (el, nm) => el.B.Tr.mem.find(m => m.name.startsWith(nm)).k * el.B.Tr.mem.find(m => m.name.startsWith(nm)).l;
+    near('end frames: an area typed in overrides (top chord EA ratio end / intermediate)', kOf(sup, 'top') / kOf(int, 'top'), 9 / 4, 1e-9);
+    near('end frames: "same as intermediate" keeps the intermediate diagonal (EA ratio)', kOf(sup, 'diag') / kOf(int, 'diag'), 1, 1e-9); }
   near('consistency: member forces reproduce the frame end forces (relative)', c.res / c.ref, 0, 1e-9, 'truss forces back onto the girders');
   const tot = st => R.res[st].reac.reduce((s, x) => s + x.R, 0);
   near('equilibrium: DC2 reactions = parapet load, kip', tot('dc2'), 0.8 * F.girders[0].L * 0 + 0.8 * (F.girders[0].L + F.girders[3].L) / 2, 0.5, '0.4 k/ft on each edge girder line');

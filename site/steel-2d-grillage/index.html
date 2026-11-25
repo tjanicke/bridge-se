@@ -4452,13 +4452,18 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // the properties of one cross-frame: intermediate frames use the cross-frame input; frames on support lines use
   // cf.end where it gives a value (its own type, depth, bottom work point, offset and members) and the intermediate
   // values where it is blank. cf.endType is the older way to give only the end type
+  // A member is { shape } (a rolled shape, G.SHAPES) or { A } (an area); an end member with neither takes the intermediate one.
+  // Work points: zb above the bottom of the girder and zt below its top (the depth between them follows the girders);
+  // h, a fixed depth between work points, is the older input and is used when zt is blank
+  const memArea = q => (G.memArea ? G.memArea(q) : num(q && q.A) || 0);
   function frameProps(cf, onSupport) {
     if (!onSupport) return cf;
     const e = cf.end || {}, has = v => v !== '' && v != null && !(typeof v === 'number' && isNaN(v));
-    const memb = k => (e[k] && has(e[k].A) ? { A: num(e[k].A) } : cf[k]);
+    const memb = k => (e[k] && ((e[k].shape && e[k].shape !== '_A') || (e[k].shape === '_A' && has(e[k].A)) || (!e[k].shape && has(e[k].A))) ? e[k] : cf[k]);
+    const ztE = has(e.zt), hE = has(e.h) && num(e.h) > 0;
     return Object.assign({}, cf, {
       type: e.type || cf.endType || cf.type,
-      h: has(e.h) && num(e.h) > 0 ? num(e.h) : cf.h, zb: has(e.zb) ? num(e.zb) : cf.zb, e: has(e.e) ? num(e.e) : cf.e,
+      zt: ztE ? num(e.zt) : hE ? '' : cf.zt, h: hE ? num(e.h) : cf.h, zb: has(e.zb) ? num(e.zb) : cf.zb, e: has(e.e) ? num(e.e) : cf.e,
       top: memb('top'), bot: memb('bot'), diag: memb('diag'),
       topChord: e.topChord != null ? e.topChord : cf.topChord,
     });
@@ -4471,11 +4476,17 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const S = sectionFn(F, A.sections || DEF.sections); errs.push(...S.errs);
     if (!(num(deck.ts) > 0)) errs.push('Deck thickness must be positive.');
     const n = num(deck.n) > 0 ? num(deck.n) : modular(num(deck.fc) || 4), n3 = 3 * n;
-    if (cf.model === 'truss' && !(num(cf.h) > 0)) {
-      // default work-point depth: 75% of the shallowest web, a common detail
-      const D = Math.min(...F.order.map(id => { const g = F.girders.find(x => x.id === id); return S.rowAt ? (S.rowAt(id, g.L / 2) || {}).D || 60 : 60; }));
-      cf.h = Math.round(0.75 * D);
-      warns.push(`Cross-frame depth between work points not given; ${cf.h} in (75% of the web) used.`);
+    const hasZt = v => v !== '' && v != null && isFinite(+v);
+    if (cf.model === 'truss') {
+      const dMid = Math.min(...F.order.map(id => { const g = F.girders.find(x => x.id === id), r = S.rowAt ? S.rowAt(id, g.L / 2) || {} : {}; return (r.D || 60) + (r.tt || 1) + (r.tb || 1); }));
+      if (hasZt(cf.zt)) cf.h = Math.max(1, dMid - (num(cf.zb) || 0) - num(cf.zt)); // a representative depth (refinement studies); each frame uses its girders' depth
+      else if (!(num(cf.h) > 0)) {
+        // default work-point depth: 75% of the shallowest web, a common detail
+        const D = Math.min(...F.order.map(id => { const g = F.girders.find(x => x.id === id); return S.rowAt ? (S.rowAt(id, g.L / 2) || {}).D || 60 : 60; }));
+        cf.h = Math.round(0.75 * D);
+        warns.push(`Cross-frame top work point not given; frames ${cf.h} in deep between work points (75% of the web) used.`);
+      }
+      if ([cf.top, cf.bot, cf.diag].some(q => q && q.shape && q.shape !== '_A' && G.shapeOf && !G.shapeOf(q.shape))) errs.push('A cross-frame member names a shape that is not in the list.');
     }
     if (errs.length) return { errs, warns };
     const trib = tribFn(F, deck);
@@ -4508,9 +4519,11 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       if (cf.model !== 'truss') return { I: num(cf.beam.I), J: num(cf.beam.J), e: num(cf.e) || 0 };
       const comp = stage === 'll' || (STAGES.find(x => x.id === stage) || {}).comp, R = comp ? (num(cf.Rc) > 0 ? num(cf.Rc) : 1) : (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1);
       const sA = S.at(el.a.g, el.a.u), sB = S.at(el.b.g, el.b.u), d = Math.max(sA.d, sB.d);
-      const mem = q => ({ A: num(q && q.A) || 0, R });
+      const mem = q => ({ A: memArea(q), R });
       const c = frameProps(cf, el.src && el.src.tag === 'support');
-      const tr = { type: c.type, h: num(c.h), e: num(c.e) || 0, top: mem(c.top), bot: mem(c.bot), diag: mem(c.diag), topChord: c.topChord !== false };
+      // depth between work points: the shallower girder at the frame's ends less the two work point distances
+      const hF = hasZt(c.zt) ? Math.max(1, Math.min(sA.d, sB.d) - (num(c.zb) || 0) - num(c.zt)) : num(c.h);
+      const tr = { type: c.type, h: hF, e: num(c.e) || 0, top: mem(c.top), bot: mem(c.bot), diag: mem(c.diag), topChord: c.topChord !== false };
       if (comp && cf.deckTie) tr.deckZ = d + Math.max(thOf(el.a.g, el.a.u), thOf(el.b.g, el.b.u)) + num(deck.ts) / 2 - (num(c.zb) || 0);
       return { truss: tr, J: 1 };
     };
@@ -4611,7 +4624,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   // The one-number equivalent beam: a single I matching the truss's cantilever tip deflection, with member forces
   // recovered the common way (each diagonal V/2 along its slope, chords the average end moment over the depth)
   function eqBeamI(L, cf, R) {
-    const a = q => ({ A: num(q && q.A) || 0, R });
+    const a = q => ({ A: memArea(q), R });
     const T = G.truss(L, { type: cf.type || 'X', h: num(cf.h), e: num(cf.e) || 0, top: a(cf.top), bot: a(cf.bot), diag: a(cf.diag), topChord: cf.topChord !== false });
     const k = T.K4, d = k[2][2] * k[3][3] - k[2][3] ** 2;
     return d > 0 ? L ** 3 / (3 * 29000 * 144 * (k[3][3] / d)) * 20736 : 0;
@@ -5108,6 +5121,19 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   Object.assign(G, { girderModel, runChecks, deflectionChecks, xfDesign, CHECK_DEF: DEF });
 })(typeof window !== 'undefined' ? window : globalThis);
 
+/* Steel 2D Grillage — rolled shapes for cross-frame members: angles, WTs, channels and MC channels, with their area and
+   radii of gyration (in., in.²), from the AISC Shapes Database v16.0. Rows: [label, A, rx, ry] and, for angles, rz. */
+(function () {
+  const G = globalThis.G2D;
+  G.SHAPES = {"L":[["L12X12X1-3/8",31.1,3.64,3.64,2.3],["L12X12X1-1/4",28.4,3.66,3.66,2.31],["L12X12X1-1/8",25.8,3.68,3.68,2.33],["L12X12X1",23.0,3.7,3.7,2.34],["L10X10X1-3/8",25.6,3.0,3.0,1.91],["L10X10X1-1/4",23.4,3.02,3.02,1.91],["L10X10X1-1/8",21.3,3.03,3.03,1.92],["L10X10X1",19.0,3.05,3.05,1.92],["L10X10X7/8",16.8,3.07,3.07,1.93],["L10X10X3/4",14.5,3.1,3.1,1.96],["L8X8X1-1/8",16.8,2.41,2.41,1.56],["L8X8X1",15.1,2.43,2.43,1.56],["L8X8X7/8",13.3,2.45,2.45,1.57],["L8X8X3/4",11.5,2.46,2.46,1.57],["L8X8X5/8",9.69,2.48,2.48,1.58],["L8X8X9/16",8.77,2.49,2.49,1.58],["L8X8X1/2",7.84,2.49,2.49,1.59],["L8X6X1",13.1,2.49,1.72,1.28],["L8X6X7/8",11.5,2.5,1.74,1.28],["L8X6X3/4",9.99,2.52,1.75,1.29],["L8X6X5/8",8.41,2.54,1.77,1.29],["L8X6X9/16",7.61,2.55,1.78,1.3],["L8X6X1/2",6.8,2.55,1.79,1.3],["L8X6X7/16",5.99,2.56,1.8,1.31],["L8X4X1",11.1,2.51,1.03,0.844],["L8X4X7/8",9.79,2.53,1.04,0.846],["L8X4X3/4",8.49,2.55,1.05,0.85],["L8X4X5/8",7.16,2.56,1.06,0.856],["L8X4X9/16",6.49,2.57,1.07,0.859],["L8X4X1/2",5.8,2.58,1.08,0.863],["L8X4X7/16",5.11,2.59,1.09,0.867],["L7X4X3/4",7.74,2.21,1.08,0.855],["L7X4X5/8",6.5,2.23,1.1,0.86],["L7X4X1/2",5.26,2.25,1.11,0.866],["L7X4X7/16",4.63,2.26,1.12,0.869],["L7X4X3/8",4.0,2.27,1.12,0.873],["L6X6X1",11.0,1.79,1.79,1.17],["L6X6X7/8",9.75,1.81,1.81,1.17],["L6X6X3/4",8.46,1.82,1.82,1.17],["L6X6X5/8",7.13,1.84,1.84,1.17],["L6X6X9/16",6.45,1.85,1.85,1.18],["L6X6X1/2",5.77,1.86,1.86,1.18],["L6X6X7/16",5.08,1.86,1.86,1.18],["L6X6X3/8",4.38,1.87,1.87,1.19],["L6X6X5/16",3.67,1.88,1.88,1.19],["L6X4X7/8",8.0,1.86,1.1,0.854],["L6X4X3/4",6.94,1.88,1.12,0.856],["L6X4X5/8",5.86,1.89,1.13,0.859],["L6X4X9/16",5.31,1.9,1.14,0.861],["L6X4X1/2",4.75,1.91,1.14,0.864],["L6X4X7/16",4.18,1.92,1.15,0.867],["L6X4X3/8",3.61,1.93,1.16,0.87],["L6X4X5/16",3.03,1.94,1.17,0.874],["L6X3-1/2X1/2",4.5,1.92,0.968,0.756],["L6X3-1/2X3/8",3.44,1.93,0.984,0.763],["L6X3-1/2X5/16",2.89,1.94,0.991,0.767],["L5X5X7/8",8.0,1.49,1.49,0.971],["L5X5X3/4",6.98,1.5,1.5,0.972],["L5X5X5/8",5.9,1.52,1.52,0.975],["L5X5X1/2",4.79,1.53,1.53,0.98],["L5X5X7/16",4.22,1.54,1.54,0.983],["L5X5X3/8",3.65,1.55,1.55,0.986],["L5X5X5/16",3.07,1.56,1.56,0.99],["L5X3-1/2X3/4",5.85,1.55,0.974,0.744],["L5X3-1/2X5/8",4.93,1.56,0.987,0.746],["L5X3-1/2X1/2",4.0,1.58,1.0,0.75],["L5X3-1/2X3/8",3.05,1.59,1.02,0.755],["L5X3-1/2X5/16",2.56,1.6,1.02,0.758],["L5X3-1/2X1/4",2.07,1.61,1.03,0.761],["L5X3X1/2",3.75,1.58,0.824,0.642],["L5X3X7/16",3.31,1.59,0.831,0.644],["L5X3X3/8",2.86,1.6,0.838,0.646],["L5X3X5/16",2.41,1.61,0.846,0.649],["L5X3X1/4",1.94,1.62,0.853,0.652],["L4X4X3/4",5.44,1.18,1.18,0.774],["L4X4X5/8",4.61,1.2,1.2,0.774],["L4X4X1/2",3.75,1.21,1.21,0.776],["L4X4X7/16",3.3,1.22,1.22,0.777],["L4X4X3/8",2.86,1.23,1.23,0.779],["L4X4X5/16",2.4,1.24,1.24,0.781],["L4X4X1/4",1.93,1.25,1.25,0.783],["L4X3-1/2X1/2",3.5,1.23,1.04,0.716],["L4X3-1/2X3/8",2.68,1.25,1.05,0.719],["L4X3-1/2X5/16",2.25,1.25,1.06,0.721],["L4X3-1/2X1/4",1.82,1.26,1.07,0.723],["L4X3X5/8",3.99,1.23,0.845,0.631],["L4X3X1/2",3.25,1.24,0.858,0.633],["L4X3X3/8",2.49,1.26,0.873,0.636],["L4X3X5/16",2.09,1.27,0.88,0.638],["L4X3X1/4",1.69,1.27,0.887,0.639],["L3-1/2X3-1/2X1/2",3.25,1.05,1.05,0.679],["L3-1/2X3-1/2X7/16",2.89,1.06,1.06,0.681],["L3-1/2X3-1/2X3/8",2.5,1.07,1.07,0.683],["L3-1/2X3-1/2X5/16",2.1,1.08,1.08,0.685],["L3-1/2X3-1/2X1/4",1.7,1.09,1.09,0.688],["L3-1/2X3X1/2",3.02,1.07,0.877,0.618],["L3-1/2X3X7/16",2.67,1.08,0.885,0.62],["L3-1/2X3X3/8",2.32,1.09,0.892,0.622],["L3-1/2X3X5/16",1.95,1.09,0.9,0.624],["L3-1/2X3X1/4",1.58,1.1,0.908,0.628],["L3-1/2X2-1/2X1/2",2.77,1.08,0.701,0.532],["L3-1/2X2-1/2X3/8",2.12,1.1,0.716,0.535],["L3-1/2X2-1/2X5/16",1.79,1.11,0.723,0.538],["L3-1/2X2-1/2X1/4",1.45,1.12,0.731,0.541],["L3X3X1/2",2.76,0.895,0.895,0.58],["L3X3X7/16",2.43,0.903,0.903,0.58],["L3X3X3/8",2.11,0.91,0.91,0.581],["L3X3X5/16",1.78,0.918,0.918,0.583],["L3X3X1/4",1.44,0.926,0.926,0.585],["L3X3X3/16",1.09,0.933,0.933,0.586],["L3X2-1/2X1/2",2.5,0.91,0.718,0.516],["L3X2-1/2X7/16",2.22,0.917,0.724,0.516],["L3X2-1/2X3/8",1.93,0.924,0.731,0.517],["L3X2-1/2X5/16",1.63,0.932,0.739,0.518],["L3X2-1/2X1/4",1.32,0.94,0.746,0.52],["L3X2-1/2X3/16",1.0,0.947,0.753,0.521],["L3X2X1/2",2.26,0.922,0.543,0.425],["L3X2X3/8",1.75,0.937,0.555,0.426],["L3X2X5/16",1.48,0.945,0.562,0.428],["L3X2X1/4",1.2,0.953,0.569,0.431],["L3X2X3/16",0.917,0.961,0.577,0.435],["L2-1/2X2-1/2X1/2",2.26,0.735,0.735,0.481],["L2-1/2X2-1/2X3/8",1.73,0.749,0.749,0.481],["L2-1/2X2-1/2X5/16",1.46,0.756,0.756,0.481],["L2-1/2X2-1/2X1/4",1.19,0.764,0.764,0.482],["L2-1/2X2-1/2X3/16",0.901,0.771,0.771,0.482],["L2-1/2X2X3/8",1.55,0.766,0.574,0.419],["L2-1/2X2X5/16",1.32,0.774,0.581,0.42],["L2-1/2X2X1/4",1.07,0.782,0.589,0.423],["L2-1/2X2X3/16",0.818,0.79,0.597,0.426],["L2-1/2X1-1/2X1/4",0.947,0.792,0.411,0.321],["L2-1/2X1-1/2X3/16",0.724,0.801,0.418,0.324],["L2X2X3/8",1.37,0.591,0.591,0.386],["L2X2X5/16",1.16,0.598,0.598,0.386],["L2X2X1/4",0.944,0.605,0.605,0.387],["L2X2X3/16",0.722,0.612,0.612,0.389],["L2X2X1/8",0.491,0.62,0.62,0.391]],"WT":[["WT22X204",59.9,6.68,3.56],["WT22X184",54.0,6.64,3.54],["WT22X167.5",49.2,6.63,3.49],["WT22X145",42.6,6.54,3.49],["WT22X131",38.5,6.53,3.47],["WT22X115",33.9,6.53,3.43],["WT20X327.5",96.4,6.22,3.86],["WT20X296.5",87.2,6.16,3.8],["WT20X251.5",74.0,6.07,3.72],["WT20X215.5",63.3,6.01,3.65],["WT20X198.5",58.3,5.96,3.63],["WT20X186",54.7,5.95,3.6],["WT20X181",53.2,5.92,3.6],["WT20X162",47.7,5.88,3.57],["WT20X148.5",43.6,5.87,3.54],["WT20X138.5",40.7,5.78,3.58],["WT20X124.5",36.7,5.75,3.55],["WT20X107.5",31.8,5.71,3.54],["WT20X99.5",29.2,5.81,3.45],["WT20X196",57.8,6.27,2.64],["WT20X165.5",48.8,6.21,2.57],["WT20X163.5",47.9,6.19,2.58],["WT20X147",43.1,6.14,2.55],["WT20X139",41.0,6.14,2.52],["WT20X132",38.7,6.11,2.52],["WT20X117.5",34.6,6.04,2.54],["WT20X105.5",31.1,6.01,2.51],["WT20X91.5",26.7,5.98,2.49],["WT20X83.5",24.5,6.05,2.4],["WT20X74.5",21.9,6.1,2.29],["WT18X462.5",136.0,6.14,4.26],["WT18X426.5",126.0,5.96,4.27],["WT18X401",118.0,5.9,4.22],["WT18X361.5",107.0,5.81,4.16],["WT18X326",96.2,5.74,4.1],["WT18X264.5",77.8,5.6,4.0],["WT18X243.5",71.7,5.57,3.96],["WT18X220.5",64.9,5.52,3.92],["WT18X197.5",58.1,5.47,3.88],["WT18X180.5",53.0,5.43,3.85],["WT18X165",48.4,5.39,3.83],["WT18X151",44.5,5.37,3.82],["WT18X141",41.5,5.36,3.8],["WT18X131",38.5,5.36,3.76],["WT18X123.5",36.3,5.36,3.74],["WT18X115.5",34.1,5.36,3.71],["WT18X193.5",56.8,5.8,2.79],["WT18X175",51.5,5.78,2.75],["WT18X159",46.7,5.72,2.7],["WT18X143",42.0,5.69,2.68],["WT18X128",37.6,5.66,2.65],["WT18X116",34.0,5.63,2.62],["WT18X105",30.9,5.65,2.58],["WT18X97",28.5,5.62,2.56],["WT18X91",26.8,5.62,2.55],["WT18X85",25.0,5.61,2.53],["WT18X80",23.5,5.61,2.5],["WT18X75",22.1,5.62,2.47],["WT18X67.5",19.9,5.66,2.38],["WT16.5X193.5",57.0,5.07,3.77],["WT16.5X177",52.1,5.03,3.74],["WT16.5X159",46.8,4.99,3.71],["WT16.5X145.5",42.8,4.96,3.68],["WT16.5X131.5",38.7,4.93,3.65],["WT16.5X120.5",35.6,4.96,3.62],["WT16.5X110.5",32.6,4.95,3.59],["WT16.5X100.5",29.7,4.95,3.56],["WT16.5X84.5",24.7,5.12,2.5],["WT16.5X76",22.5,5.14,2.47],["WT16.5X70.5",20.7,5.15,2.43],["WT16.5X65",19.1,5.18,2.38],["WT16.5X59",17.4,5.2,2.32],["WT15X195.5",57.6,4.61,3.67],["WT15X178.5",52.5,4.56,3.64],["WT15X163",48.0,4.52,3.6],["WT15X146",43.0,4.48,3.58],["WT15X130.5",38.5,4.46,3.53],["WT15X117.5",34.7,4.41,3.51],["WT15X105.5",31.1,4.43,3.49],["WT15X95.5",28.0,4.42,3.46],["WT15X86.5",25.4,4.42,3.42],["WT15X74",21.8,4.63,2.28],["WT15X66",19.5,4.66,2.25],["WT15X62",18.2,4.66,2.23],["WT15X58",17.1,4.67,2.19],["WT15X54",15.9,4.69,2.15],["WT15X49.5",14.5,4.71,2.1],["WT15X45",13.2,4.69,2.09],["WT13.5X269.5",79.3,4.39,3.65],["WT13.5X184",54.2,4.16,3.48],["WT13.5X168",49.5,4.12,3.45],["WT13.5X153.5",45.2,4.08,3.41],["WT13.5X140.5",41.5,4.04,3.39],["WT13.5X129",38.1,4.02,3.36],["WT13.5X117.5",34.7,4.0,3.33],["WT13.5X108.5",32.0,3.96,3.32],["WT13.5X97",28.6,3.94,3.29],["WT13.5X89",26.3,3.97,3.25],["WT13.5X80.5",23.8,3.95,3.23],["WT13.5X73",21.6,3.95,3.2],["WT13.5X64.5",18.9,4.13,2.21],["WT13.5X57",16.8,4.15,2.18],["WT13.5X51",15.0,4.14,2.15],["WT13.5X47",13.8,4.16,2.12],["WT13.5X42",12.4,4.18,2.07],["WT12X185",54.5,3.78,3.27],["WT12X167.5",49.1,3.73,3.23],["WT12X153",44.9,3.69,3.2],["WT12X139.5",41.0,3.65,3.17],["WT12X125",36.8,3.61,3.14],["WT12X114.5",33.6,3.58,3.11],["WT12X103.5",30.3,3.55,3.08],["WT12X96",28.2,3.53,3.07],["WT12X88",25.8,3.51,3.04],["WT12X81",23.9,3.5,3.05],["WT12X73",21.5,3.5,3.01],["WT12X65.5",19.3,3.52,2.97],["WT12X58.5",17.2,3.51,2.94],["WT12X52",15.3,3.51,2.91],["WT12X51.5",15.1,3.67,1.99],["WT12X47",13.8,3.67,1.98],["WT12X42",12.4,3.67,1.95],["WT12X38",11.2,3.68,1.92],["WT12X34",10.0,3.7,1.87],["WT12X31",9.11,3.79,1.38],["WT12X27.5",8.1,3.8,1.34],["WT10.5X137.5",40.9,3.2,3.1],["WT10.5X124",37.0,3.15,3.07],["WT10.5X111.5",33.2,3.12,3.04],["WT10.5X100.5",29.6,3.1,3.02],["WT10.5X91",26.8,3.07,3.0],["WT10.5X83",24.4,3.04,2.99],["WT10.5X73.5",21.6,3.08,2.95],["WT10.5X66",19.4,3.06,2.93],["WT10.5X61",17.9,3.04,2.91],["WT10.5X55.5",16.3,3.03,2.9],["WT10.5X50.5",14.9,3.01,2.89],["WT10.5X46.5",13.7,3.25,1.84],["WT10.5X41.5",12.2,3.22,1.83],["WT10.5X36.5",10.7,3.21,1.81],["WT10.5X34",10.0,3.2,1.8],["WT10.5X31",9.13,3.21,1.77],["WT10.5X27.5",8.1,3.23,1.73],["WT10.5X24",7.07,3.26,1.66],["WT10.5X28.5",8.37,3.29,1.35],["WT10.5X25",7.36,3.3,1.3],["WT10.5X22",6.49,3.31,1.26],["WT9X155.5",45.8,2.89,2.95],["WT9X141.5",41.7,2.85,2.91],["WT9X129",38.0,2.8,2.88],["WT9X117",34.3,2.75,2.85],["WT9X105.5",31.2,2.72,2.82],["WT9X96",28.1,2.68,2.79],["WT9X87.5",25.7,2.66,2.76],["WT9X79",23.2,2.63,2.74],["WT9X71.5",21.0,2.6,2.72],["WT9X65",19.2,2.58,2.7],["WT9X59.5",17.6,2.6,2.69],["WT9X53",15.6,2.59,2.66],["WT9X48.5",14.2,2.56,2.65],["WT9X43",12.7,2.55,2.63],["WT9X38",11.1,2.54,2.61],["WT9X35.5",10.4,2.74,1.7],["WT9X32.5",9.55,2.72,1.69],["WT9X30",8.82,2.71,1.68],["WT9X27.5",8.1,2.71,1.67],["WT9X25",7.34,2.7,1.65],["WT9X23",6.77,2.77,1.29],["WT9X20",5.88,2.76,1.27],["WT9X17.5",5.15,2.79,1.22],["WT8X50",14.7,2.28,2.51],["WT8X44.5",13.1,2.27,2.49],["WT8X38.5",11.3,2.24,2.47],["WT8X33.5",9.81,2.22,2.46],["WT8X28.5",8.39,2.41,1.6],["WT8X25",7.37,2.4,1.59],["WT8X22.5",6.63,2.39,1.57],["WT8X20",5.89,2.37,1.56],["WT8X18",5.29,2.41,1.52],["WT8X15.5",4.56,2.45,1.17],["WT8X13",3.84,2.47,1.12],["WT7X436.5",129.0,2.84,4.89],["WT7X404",119.0,2.75,4.82],["WT7X365",107.0,2.62,4.69],["WT7X332.5",97.8,2.52,4.62],["WT7X302.5",89.0,2.43,4.55],["WT7X275",80.9,2.34,4.49],["WT7X250",73.5,2.26,4.43],["WT7X227.5",66.9,2.19,4.38],["WT7X213",62.7,2.14,4.34],["WT7X199",58.4,2.1,4.31],["WT7X185",54.4,2.05,4.27],["WT7X171",50.3,2.01,4.24],["WT7X155.5",45.7,1.96,4.2],["WT7X141.5",41.6,1.92,4.17],["WT7X128.5",37.8,1.88,4.13],["WT7X116.5",34.2,1.84,4.1],["WT7X105.5",31.0,1.81,4.07],["WT7X96.5",28.4,1.78,4.05],["WT7X88",25.9,1.76,4.02],["WT7X79.5",23.4,1.73,4.0],["WT7X72.5",21.3,1.71,3.98],["WT7X66",19.4,1.73,3.76],["WT7X60",17.7,1.71,3.74],["WT7X54.5",16.0,1.68,3.73],["WT7X49.5",14.6,1.67,3.71],["WT7X45",13.2,1.66,3.7],["WT7X41",12.0,1.85,2.48],["WT7X37",10.9,1.82,2.48],["WT7X34",10.0,1.81,2.46],["WT7X30.5",8.96,1.8,2.45],["WT7X26.5",7.8,1.88,1.92],["WT7X24",7.07,1.88,1.91],["WT7X21.5",6.31,1.86,1.89],["WT7X19",5.58,2.04,1.55],["WT7X17",5.0,2.04,1.53],["WT7X15",4.42,2.07,1.49],["WT7X13",3.85,2.12,1.08],["WT7X11",3.25,2.14,1.04],["WT6X168",49.5,1.96,3.47],["WT6X152.5",44.7,1.9,3.42],["WT6X139.5",41.0,1.86,3.38],["WT6X126",37.1,1.81,3.34],["WT6X115",33.8,1.77,3.31],["WT6X105",30.9,1.73,3.28],["WT6X95",28.0,1.68,3.25],["WT6X85",25.0,1.65,3.22],["WT6X76",22.4,1.62,3.19],["WT6X68",20.0,1.59,3.16],["WT6X60",17.6,1.57,3.13],["WT6X53",15.6,1.53,3.11],["WT6X48",14.1,1.51,3.09],["WT6X43.5",12.8,1.5,3.07],["WT6X39.5",11.6,1.49,3.05],["WT6X36",10.6,1.48,3.04],["WT6X32.5",9.54,1.47,3.02],["WT6X29",8.52,1.5,2.51],["WT6X26.5",7.78,1.51,2.48],["WT6X25",7.3,1.6,1.96],["WT6X22.5",6.56,1.59,1.95],["WT6X20",5.84,1.57,1.94],["WT6X17.5",5.17,1.76,1.54],["WT6X15",4.4,1.75,1.52],["WT6X13",3.82,1.75,1.51],["WT6X11",3.24,1.9,0.847],["WT6X9.5",2.79,1.9,0.821],["WT6X8",2.36,1.92,0.773],["WT6X7",2.08,1.92,0.753],["WT5X56",16.5,1.32,2.67],["WT5X50",14.7,1.29,2.65],["WT5X44",13.0,1.27,2.63],["WT5X38.5",11.3,1.24,2.6],["WT5X34",10.0,1.22,2.58],["WT5X30",8.84,1.21,2.57],["WT5X27",7.9,1.19,2.56],["WT5X24.5",7.21,1.18,2.54],["WT5X22.5",6.63,1.24,2.01],["WT5X19.5",5.73,1.24,1.98],["WT5X16.5",4.85,1.26,1.94],["WT5X15",4.42,1.45,1.37],["WT5X13",3.81,1.44,1.36],["WT5X11",3.24,1.46,1.33],["WT5X9.5",2.81,1.54,0.874],["WT5X8.5",2.5,1.56,0.844],["WT5X7.5",2.21,1.57,0.81],["WT5X6",1.77,1.57,0.785],["WT4X33.5",9.84,1.05,2.12],["WT4X29",8.54,1.03,2.1],["WT4X24",7.05,0.986,2.08],["WT4X20",5.87,0.988,2.04],["WT4X17.5",5.14,0.968,2.03],["WT4X15.5",4.56,0.969,2.02],["WT4X14",4.12,1.01,1.62],["WT4X12",3.54,0.999,1.61],["WT4X10.5",3.08,1.12,1.26],["WT4X9",2.63,1.14,1.23],["WT4X7.5",2.22,1.22,0.876],["WT4X6.5",1.92,1.23,0.843],["WT4X5",1.48,1.2,0.84],["WT3X12.5",3.67,0.789,1.52],["WT3X10",2.94,0.774,1.5],["WT3X7.5",2.21,0.797,1.45],["WT3X8",2.37,0.844,0.966],["WT3X6",1.78,0.862,0.918],["WT3X4.5",1.34,0.842,0.905],["WT3X4.25",1.26,0.848,0.89],["WT2.5X9.5",2.78,0.604,1.28],["WT2.5X8",2.35,0.599,1.26],["WT2X6.5",1.91,0.524,1.0]],"C":[["C15X50",14.7,5.24,0.865],["C15X40",11.8,5.43,0.883],["C15X33.9",10.0,5.61,0.901],["C12X30",8.81,4.29,0.762],["C12X25",7.34,4.43,0.779],["C12X20.7",6.08,4.61,0.797],["C10X30",8.81,3.43,0.668],["C10X25",7.35,3.52,0.675],["C10X20",5.87,3.67,0.69],["C10X15.3",4.48,3.88,0.711],["C9X20",5.87,3.22,0.64],["C9X15",4.4,3.4,0.659],["C9X13.4",3.94,3.48,0.666],["C8X18.75",5.51,2.82,0.598],["C8X13.75",4.03,2.99,0.613],["C8X11.5",3.37,3.11,0.623],["C7X14.75",4.33,2.51,0.561],["C7X12.25",3.59,2.59,0.568],["C7X9.8",2.87,2.72,0.578],["C6X13",3.82,2.13,0.524],["C6X10.5",3.07,2.22,0.529],["C6X8.2",2.39,2.34,0.536],["C5X9",2.64,1.84,0.486],["C5X6.7",1.97,1.95,0.489],["C4X7.25",2.13,1.47,0.447],["C4X6.25",1.84,1.51,0.451],["C4X5.4",1.58,1.56,0.444],["C4X4.5",1.34,1.62,0.445],["C3X6",1.76,1.09,0.413],["C3X5",1.47,1.12,0.405],["C3X4.1",1.2,1.18,0.398],["C3X3.5",1.09,1.2,0.394]],"MC":[["MC18X58",17.1,6.29,1.02],["MC18X51.9",15.3,6.41,1.03],["MC18X45.8",13.5,6.55,1.05],["MC18X42.7",12.6,6.64,1.07],["MC13X50",14.7,4.62,1.06],["MC13X40",11.7,4.82,1.08],["MC13X35",10.3,4.95,1.09],["MC13X31.8",9.35,5.05,1.1],["MC12X50",14.7,4.28,1.09],["MC12X45",13.2,4.36,1.09],["MC12X40",11.8,4.46,1.1],["MC12X35",10.3,4.59,1.11],["MC12X31",9.12,4.71,1.11],["MC12X14.3",4.18,4.27,0.489],["MC12X10.6",3.1,4.22,0.349],["MC10X41.1",12.1,3.61,1.14],["MC10X33.6",9.87,3.75,1.15],["MC10X28.5",8.37,3.89,1.16],["MC10X25",7.34,3.87,0.993],["MC10X22",6.45,3.99,0.997],["MC10X8.4",2.46,3.61,0.364],["MC10X6.5",1.95,3.43,0.262],["MC9X25.4",7.47,3.43,1.01],["MC9X23.9",7.02,3.48,1.01],["MC8X22.8",6.7,3.09,1.02],["MC8X21.4",6.28,3.13,1.02],["MC8X20",5.87,3.04,0.867],["MC8X18.7",5.5,3.09,0.868],["MC8X8.5",2.5,3.05,0.5],["MC7X22.7",6.67,2.67,1.04],["MC7X19.1",5.61,2.77,1.04],["MC6X18",5.29,2.37,1.05],["MC6X15.3",4.49,2.38,1.05],["MC6X16.3",4.79,2.33,0.887],["MC6X15.1",4.44,2.37,0.883],["MC6X12",3.53,2.3,0.724],["MC6X7",2.09,2.34,0.537],["MC6X6.5",1.95,2.38,0.539],["MC4X13.8",4.03,1.48,0.727],["MC3X7.1",2.11,1.14,0.562]]};
+  const IDX = new Map(); Object.entries(G.SHAPES).forEach(([t, list]) => list.forEach(r => IDX.set(r[0], { type: t, label: r[0], A: r[1], rx: r[2], ry: r[3], rz: r[4] == null ? null : r[4] })));
+  // a member's section: its shape, or the area typed in
+  G.shapeOf = label => IDX.get(String(label || '').toUpperCase().replace(/\s+/g, '')) || null;
+  G.memArea = q => { if (!q) return 0; const s = q.shape && G.shapeOf(q.shape); return s ? s.A : (+q.A || 0); };
+  // the least radius of gyration: rz for an angle, else the smaller of rx and ry
+  G.memRmin = q => { const s = q && q.shape && G.shapeOf(q.shape); return s ? (s.rz != null ? s.rz : Math.min(s.rx, s.ry)) : null; };
+})();
+
 /* Steel 2D Grillage — CSiBridge verification models.
    A thin-shell model of the same bridge, written as CSiBridge (v26) Excel import tables, so a 3D model can check the grid:
    webs (6 or more elements deep) and flanges (one element each side of the web) as thin shells, the deck as shells at E/n
@@ -5176,7 +5202,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     const HSof = r => r.D + (r.tt + r.tb) / 2; // in, flange mid-plane to mid-plane
     const ref = (() => { let r = null; IDS.forEach(g => ST.forEach((_, i) => { const q = rowAt(g, i); if (!r || HSof(q) > HSof(r)) r = q; })); return r; })();
     const pI = G.frameProps(cf, false), pE = G.frameProps(cf, true);
-    const wp = p => { const r = ref, zb = (num(p.zb) || 0) - r.tb / 2, zt = zb + num(p.h); return [{ from: 'bot', d: zb }, { from: 'top', d: HSof(r) - zt }]; };
+    const hasV = v => v !== '' && v != null && isFinite(+v);
+    const wp = p => { const r = ref, zb = (num(p.zb) || 0) - r.tb / 2; if (hasV(p.zt)) return [{ from: 'bot', d: zb }, { from: 'top', d: num(p.zt) - r.tt / 2 }]; const zt = zb + num(p.h); return [{ from: 'bot', d: zb }, { from: 'top', d: HSof(r) - zt }]; };
     const lv = [{ from: 'bot', d: 0 }, ...wp(pI), ...wp(pE), { from: 'top', d: 0 }];
     const zOf = (L, HS) => (L.from === 'bot' ? L.d : HS - L.d);
     const H0 = HSof(ref);
@@ -5233,7 +5260,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     // ---------- cross-frames ----------
     const Rf = STEEL ? (num(cf.Rnc) > 0 ? num(cf.Rnc) : 1) : (num(cf.Rc) > 0 ? num(cf.Rc) : 1);
     const xfA = {}, XF = [], moved = [];
-    const secName = (end, k) => { const p = end ? pE : pI, a = num((p[k] || {}).A) * Rf, n = 'XF_' + (end ? 'E' : '') + k.toUpperCase(); if (a > 0) xfA[n] = a; return a > 0 ? n : null; };
+    const secName = (end, k) => { const p = end ? pE : pI, a = (G.memArea ? G.memArea(p[k]) : num((p[k] || {}).A)) * Rf, n = 'XF_' + (end ? 'E' : '') + k.toUpperCase(); if (a > 0) xfA[n] = a; return a > 0 ? n : null; };
     const pin = { TI: 'Yes', M2I: 'Yes', M3I: 'Yes', M2J: 'Yes', M3J: 'Yes' }, fr0 = { TI: 'Yes', M2I: 'Yes', M3I: 'Yes' }, fr1 = { M2J: 'Yes', M3J: 'Yes' };
     F.crossframes.forEach(c => {
       const end = c.tag === 'support', p = end ? pE : pI, na = nearSt(c.gA, c.uA), nb2 = nearSt(c.gB, c.uB);
@@ -5532,7 +5559,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     sections: [{ girders: '', on: '', rows: [{ L: 0, D: 60, tw: 0.5625, bt: 16, tt: 1, bb: 18, tb: 1.25 }] }],
     deck: { ts: 8, wear: 0.5, haunch: 3.5, hw: 16, fc: 4, wc: 0.150, ohL: 3.5, ohR: 3.5, sip: 15, n: '', strips: true },
     loads: { steelExtra: 5, xfWeight: 0.8, dc2: [{ name: 'Left barrier', w: 0.4, to: 'left', at: 0.75 }, { name: 'Right barrier', w: 0.4, to: 'right', at: 0.75 }], dw: 25, dwEdge: 1.5 },
-    crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', e: 0, zb: 1, top: { A: 4 }, bot: { A: 4 }, diag: { A: 4 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', zt: 4, e: 0, zb: 4, top: { shape: 'L5X5X1/2' }, bot: { shape: 'L5X5X1/2' }, diag: { shape: 'L5X5X1/2' }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8000, J: 5 }, end: {} },
     diaphragm: { I: 1500, J: 5 },
     options: { warping: true, twistAtBearings: false, h: 2.5, deckHoldsTop: true, webFlex: true, shear: true },
     ll: { fL: 1, fR: 1 },
@@ -5546,14 +5573,14 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     ll: { fL: 0.788, fR: 1.212 },
     // Example 4: stiffeners at three equal spaces between cross-frames, (ADTT)SL 1,000 used directly
     checks: Object.assign(CK0(), { do: 82, adtt: 1000, lanes: 1 }),
-    crossframe: { model: 'truss', type: 'X', endType: 'Kinv', h: 85, e: 0, zb: 0.75, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true, beam: { I: 8000, J: 5 } },
+    crossframe: { model: 'truss', type: 'X', endType: 'Kinv', h: '', zt: 0.25, e: 0, zb: 0.75, top: { A: 5 }, bot: { A: 5 }, diag: { A: 5 }, Rnc: 1, Rc: 1, topChord: true, deckTie: true, beam: { I: 8000, J: 5 }, end: {} },
   });
   // the MDX system run's plates (one table on G1, scaled to the other girders), deck and loads
   EX.mdx4.analysis = Object.assign(AN0(), {
     sections: [{ girders: '', on: 'G1', rows: [{"L": 123.623, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}, {"L": 19.82, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.25}, {"L": 44.467, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.75, "bb": 24, "tb": 2}, {"L": 28.949, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.25}, {"L": 104.723, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}, {"L": 24.712, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.5, "bb": 24, "tb": 1.5}, {"L": 49.408, "D": 80, "tw": 0.6875, "bt": 22, "tt": 2, "bb": 24, "tb": 2.75}, {"L": 33.215, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.5, "bb": 24, "tb": 1.5}, {"L": 109.947, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.5}, {"L": 25.587, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.5}, {"L": 44.467, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.75, "bb": 24, "tb": 2.5}, {"L": 26.661, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1.25, "bb": 24, "tb": 1.5}, {"L": 0, "D": 80, "tw": 0.6875, "bt": 22, "tt": 1, "bb": 24, "tb": 1.25}] }],
     deck: { ts: 8, wear: 0.5, haunch: 5, hw: 22, fc: 4, wc: 0.150, ohL: 3.75, ohR: 3.75, sip: 0, n: 8, strips: true },
     loads: { steelExtra: 8, xfWeight: 1.4, dc2: [{ name: 'Exterior girders', w: 0.6, to: 'G1, G4' }, { name: 'Interior girders', w: 0.5, to: 'G2, G3' }], dw: 35, dwEdge: 1.5 },
-    crossframe: { model: 'truss', type: 'X', endType: 'X', h: 68, e: 6, zb: 6, top: { A: 8.44 }, bot: { A: 8.44 }, diag: { A: 8.44 }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8103, J: 4.8 } },
+    crossframe: { model: 'truss', type: 'X', endType: 'X', h: '', zt: 8.25, e: 6, zb: 6, top: { shape: 'L6X6X3/4' }, bot: { shape: 'L6X6X3/4' }, diag: { shape: 'L6X6X3/4' }, Rnc: 0.65, Rc: 0.75, topChord: true, deckTie: true, beam: { I: 8103, J: 4.8 }, end: {} },
   });
   const XY0 = { ext: 1, girders: [{ id: 'G1', pts: [[0, 10], [200, 14]], trim: true }, { id: 'G2', pts: [[0, 0], [200, 0]], trim: true }, { id: 'G3', pts: [[0, -10], [200, -14]], trim: true }],
     supports: [{ id: 'Abut 1', a: [10, 20], b: [10, -20], kind: 'abutment' }, { id: 'Abut 2', a: [190, 25], b: [190, -25], kind: 'abutment' }], diaphragms: [], crossframes: CF({ spacing: 20 }) };
@@ -5588,6 +5615,17 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   const fTxt = (lbl, path, ph, list) => `<label class="f">${lbl}<input class="t" data-k="${path}" data-t="txt" value="${esc(getP(doc, path) || '')}" placeholder="${esc(ph || '')}"${list ? ` list="${list}"` : ''}></label>`;
   const fSel = (lbl, path, opts) => `<label class="f">${lbl}<select data-k="${path}" data-t="sel">${opts.map(([v, t]) => `<option value="${v}"${String(getP(doc, path)) === String(v) ? ' selected' : ''}>${t}</option>`).join('')}</select></label>`;
   const fList = (lbl, unit, path, hint) => `<label class="f">${lbl}${unit ? ` <span class="u">${unit}</span>` : ''}<input class="n" data-k="${path}" data-t="list" value="${esc(listTxt(getP(doc, path)))}">${hint ? `<span class="hint">${hint}</span>` : ''}</label>`;
+  // a cross-frame member: a rolled shape (AISC Shapes Database v16.0: angles, WTs, channels), or an area typed in
+  const SHAPE_GROUPS = [['L', 'Angles'], ['WT', 'WT tees'], ['C', 'Channels'], ['MC', 'MC channels']];
+  const fShape = (lbl, path, end) => {
+    const q = getP(doc, path) || {}, sh = q.shape || '', areaOnly = end ? sh === '_A' : !sh, info = sh && sh !== '_A' && G.shapeOf ? G.shapeOf(sh) : null;
+    const opts = (end ? '<option value="">Same as intermediate</option><option value="_A"' + (sh === '_A' ? ' selected' : '') + '>Area only</option>' : '<option value="">Area only</option>')
+      + SHAPE_GROUPS.map(([t, nm]) => `<optgroup label="${nm}">` + (G.SHAPES[t] || []).map(r => `<option value="${r[0]}"${r[0] === sh ? ' selected' : ''}>${r[0].replace(/X/g, '×')}</option>`).join('') + '</optgroup>').join('');
+    return `<label class="f">${lbl}<select data-k="${path}.shape" data-t="sel">${opts}</select>${info ? `<span class="hint">A ${info.A} in² · r min ${(info.rz != null ? info.rz : Math.min(info.rx, info.ry)).toFixed(3)} in.</span>` : ''}</label>`
+      + (areaOnly ? fNum(lbl + ' area', 'in²', path + '.A') : '');
+  };
+  // an input saved with a fixed depth between work points (before the top work point existed)
+  const legacyH = path => { const c = getP(doc, path) || {}; return +c.h > 0 && (c.zt === '' || c.zt == null) ? `<div class="fields">${fNum('Depth between work points', 'in', path + '.h', 'From an older input: used while the top chord work point is blank')}</div>` : ''; };
   const grp = (title, body, open) => `<details class="grp"${open ? ' open' : ''}><summary>${title}</summary><div class="gbody">${body}</div></details>`;
   const kinds = [['abutment', 'Abutment'], ['pier', 'Pier']];
 
@@ -5752,14 +5790,16 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         <h3>DW</h3><div class="fields">${fNum('Future wearing surface', 'psf', b + '.loads.dw')}${fNum('Not on the outer', 'ft', b + '.loads.dwEdge', 'At each deck edge (barriers)')}</div>`, false)
       + grp('Cross-frame members', `${fSel('Model', b + '.crossframe.model', [['truss', 'Truss, condensed exactly'], ['beam', 'Equivalent beam (I, J)']])}
         ${truss ? `<div class="fields">${fSel('Intermediate', b + '.crossframe.type', types)}${fSel('On support lines', b + '.crossframe.endType', types)}
-        ${fNum('Depth, work points', 'in', b + '.crossframe.h', 'Blank: 75% of the web')}${fNum('Bottom work point', 'in', b + '.crossframe.zb', 'Above the bottom of the girder')}
-        ${fNum('Top chord area', 'in²', b + '.crossframe.top.A')}${fNum('Bottom chord area', 'in²', b + '.crossframe.bot.A')}
-        ${fNum('Diagonal area', 'in²', b + '.crossframe.diag.A')}${fNum('Connection offset', 'in', b + '.crossframe.e', 'From the web')}
+        ${fNum('Bottom chord work point', 'in', b + '.crossframe.zb', 'Above the bottom of the girder')}${fNum('Top chord work point', 'in', b + '.crossframe.zt', 'Below the top of the girder')}</div>
+        ${legacyH(b + '.crossframe')}
+        <div class="fields">${fShape('Top chord', b + '.crossframe.top')}${fShape('Bottom chord', b + '.crossframe.bot')}${fShape('Diagonals', b + '.crossframe.diag')}</div>
+        <div class="fields">${fNum('Connection offset', 'in', b + '.crossframe.e', 'From the web to the work point')}<span></span>
         ${fNum('Stiffness factor, noncomposite', '', b + '.crossframe.Rnc', 'AASHTO 4.6.3.3.4c: 0.65')}${fNum('Stiffness factor, composite', '', b + '.crossframe.Rc', 'AASHTO 4.6.3.3.4c: 0.75')}</div>
         <h3>End and support frames</h3><p class="hint">Frames on bearing lines, often deeper channels or a W. Blank: the intermediate value.</p>
-        <div class="fields">${fNum('Depth, work points', 'in', b + '.crossframe.end.h')}${fNum('Bottom work point', 'in', b + '.crossframe.end.zb')}
-        ${fNum('Top chord area', 'in²', b + '.crossframe.end.top.A')}${fNum('Bottom chord area', 'in²', b + '.crossframe.end.bot.A')}
-        ${fNum('Diagonal area', 'in²', b + '.crossframe.end.diag.A')}${fNum('Connection offset', 'in', b + '.crossframe.end.e')}</div>
+        <div class="fields">${fNum('Bottom chord work point', 'in', b + '.crossframe.end.zb', 'Above the bottom of the girder')}${fNum('Top chord work point', 'in', b + '.crossframe.end.zt', 'Below the top of the girder')}</div>
+        ${legacyH(b + '.crossframe.end')}
+        <div class="fields">${fShape('Top chord', b + '.crossframe.end.top', true)}${fShape('Bottom chord', b + '.crossframe.end.bot', true)}${fShape('Diagonals', b + '.crossframe.end.diag', true)}
+        ${fNum('Connection offset', 'in', b + '.crossframe.end.e')}</div>
         ${fChk('Top chord (X and V types)', b + '.crossframe.topChord')}
         <h3>Fit condition</h3><div class="fields">${fSel('Detailed to fit', b + '.options.fit', [['', 'No-load (no locked-in forces)'], ['SDLF', 'SDLF, steel dead load'], ['TDLF', 'TDLF, total dead load']])}</div>
         <p class="hint">SDLF and TDLF frames are made to fit the girders cambered and plumb under the steel, or the steel and wet deck, and forced in on the steel. Their locked-in effects (EL, load factor 1.0) are the grid's exact linear response to that lack of fit: cross-frame forces, flange lateral bending, girder moments and reactions (AASHTO 6.7.2, NCHRP Report 924).</p>
@@ -5834,7 +5874,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     t.setAttribute('aria-invalid', String(bad));
     if (bad) return;
     setP(doc, k, v);
-    if (t.tagName === 'SELECT' && /crossframe\.model$/.test(k)) renderRail();
+    if (t.tagName === 'SELECT' && (/crossframe\.model$/.test(k) || /crossframe\.(end\.)?(top|bot|diag)\.shape$/.test(k))) renderRail();
     if (t.tagName === 'SELECT' && /elements\.\d+\.type$/.test(k)) { const el = getP(doc, k.replace(/\.type$/, '')); if (v === 'arc' && !(el.R > 0)) { el.R = 1000; el.turn = el.turn || 'L'; } renderRail(); }
     later();
   });
