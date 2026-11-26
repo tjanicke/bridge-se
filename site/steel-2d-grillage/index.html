@@ -4603,7 +4603,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     }
     // tributary sanity
     if (F.members.length && cf.model === 'truss') warns.push('Diaphragms are modeled as beams (I, J given under Diaphragms).');
-    return { md, res, stages: STAGES, fit, n, n3, S, trib, stripLines, line, errs, warns, cf, deck, loads, opt };
+    return { md, res, stages: STAGES, fit, n, n3, S, trib, compAt, stripLines, line, errs, warns, cf, deck, loads, opt };
   }
 
   // tenth points of each span of a girder (u along it)
@@ -5125,6 +5125,29 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return { kind: s.kind, label: s.label, L, Lr, limT, limC, prim, Tu, Cu, Prt: Pt.Pr, tMode: Pt.yield <= Pt.fracture ? 'yielding' : 'fracture', U: Pt.U, An: Pt.An,
       Prc, cMode: Pc.mode, KLr: Pc.KLr, Fcr: Pc.Fcr, rt, rc, ratio: Math.max(rt, rc), slOk: !(Tu > 0 && Lr > limT) && !(Cu > 0 && Lr > limC), notes };
   }
+  // ---------- top chords on frames skewed to the girders: the deck's longitudinal strain ----------
+  // A top chord tied to the composite deck stretches with it. Along a chord at angle a to the girders the deck's
+  // longitudinal strain e (from the girder moment, at the chord's level on the composite section) gives e cos^2 a, so the
+  // chord takes R E A e cos^2 a. A 2D grid has no longitudinal strain, so this is added to the composite stages. Frames normal to the girders take none. Verified against 3D shell models (60 deg skew: the
+  // pier-line top chords took about 7 to 8 kip each from DC2 and from DW that the grid alone did not show; this gives 9 to 10).
+  function deckStrain(R, b, m, LL) {
+    const F = R.md.F, c = F.crossframes.find(x => x.id === b.id); if (!c || !R.compAt || !c.pA || !c.pB) return null;
+    const g0 = F.girders.find(x => x.id === c.gA), t = g0.P.tan(c.uA), dx = c.pB[0] - c.pA[0], dy = c.pB[1] - c.pA[1], L = Math.hypot(dx, dy);
+    const c2 = ((dx * t[0] + dy * t[1]) / L) ** 2; if (!(c2 > 0.03)) return null;
+    const sup = c.tag === 'support', cf = G.frameProps ? G.frameProps(R.cf, sup) : R.cf, q = cf.top, nm = v => (v === '' || v == null || !isFinite(+v) ? null : +v);
+    const A = G.memArea ? G.memArea(q) : +q.A || 0, Rf = G.memRf ? G.memRf(q, true, cf) : 1, k = Rf * 29000 * A * c2; if (!(k > 0)) return null;
+    const pts = sup && c.support ? R.md.bearings.filter(x => x.support === c.support).map(x => [x.g, x.node.u]) : [[c.gA, c.uA], [c.gB, c.uB]];
+    const eps = (g, u, M, n) => { const s = R.compAt(g, u, n), yc = nm(cf.zt) != null ? s.d - nm(cf.zt) : (nm(cf.zb) || 0) + (nm(cf.h) || 0.75 * s.d); return -M * 12 * (yc - s.ybar) / (29000 * s.I); };
+    // on a support line the average over its girders (the deck evens the strain out along the line), else the larger end
+    const big = a => (sup ? a.reduce((x, y) => x + y, 0) / a.length : a.reduce((x, y) => (Math.abs(y) > Math.abs(x) ? y : x), 0));
+    const stg = s => (R.res[s] ? big(pts.map(([g, u]) => eps(g, u, G.at(R.res[s], g, u).M, R.n3))) * k : 0);
+    const o = { c2, k, dc2: stg('dc2'), dw: stg('dw'), llMax: 0, llMin: 0, fat: 0 };
+    // live load: each girder's moment envelope there (the largest girder: trucks load one part of the line at a time)
+    if (LL && LL.out) pts.forEach(([g, u]) => { const ms = LL.out.filter(r => r.kind === 'M' && r.g === g); if (!ms.length) return;
+      const r = ms.reduce((x, y) => (Math.abs(y.u - u) < Math.abs(x.u - u) ? y : x)), e = M => eps(g, u, M, R.n) * k;
+      o.llMax = Math.max(o.llMax, e(r.max), e(r.min)); o.llMin = Math.min(o.llMin, e(r.max), e(r.min)); o.fat = Math.max(o.fat, Math.abs(e(r.fatMax) - e(r.fatMin))); });
+    return Math.max(Math.abs(o.dc2), Math.abs(o.dw), o.llMax, -o.llMin) > 0.25 ? o : null; // below a quarter kip: not worth the mark
+  }
   function xfDesign(R, LL, ckIn) {
     const ck = Object.assign({}, CK_DEF, (R.cf && R.cf.check) || {}, ckIn || {});
     ['Fy', 'Fu', 'db', 'nb'].forEach(k => { if (!(+ck[k] > 0)) ck[k] = CK_DEF[k]; else ck[k] = +ck[k]; });
@@ -5139,16 +5162,16 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
         const N = L => (L ? L[k].members[j].N : 0), dc1 = N(S1) + N(D), el = N(EL), top = /^top chord/.test(m.name), elb = EL ? EL[k].members[j].band || 0 : 0;
         const lls = (LL ? LL.out : []).filter(r => r.kind === 'X' && r.id === b.id && (r.member === m.name || (top && r.tie && r.member.indexOf(m.name + ' ') === 0)));
         // variants: the member alone, and for a top chord with the deck tie added (t = +1) and taken away (t = -1)
-        const vars = top ? [0, 1, -1] : [0];
+        const vars = top ? [0, 1, -1] : [0], ds = top ? deckStrain(R, b, m, LL) : null, z = ds || { dc2: 0, dw: 0, llMax: 0, llMin: 0, fat: 0 };
         let smax = -Infinity, smin = Infinity, fat = 0, llmax = -Infinity, llmin = Infinity;
         vars.forEach(t => {
-          const dc2 = N(C2) + t * tieOf(C2), dw = N(W) + t * tieOf(W), r = lls.find(q => (q.tie || 0) === t);
-          const lmax = r ? r.max : 0, lmin = r ? r.min : 0;
+          const dc2 = N(C2) + t * tieOf(C2) + z.dc2, dw = N(W) + t * tieOf(W) + z.dw, r = lls.find(q => (q.tie || 0) === t);
+          const lmax = (r ? r.max : 0) + z.llMax, lmin = (r ? r.min : 0) + z.llMin;
           const terms = [[dc1 + dc2, 1.25, 0.9], [dw, 1.5, 0.65], [el, 1, 1]];
           smax = Math.max(smax, comb(terms, lmax, 1) + elb); smin = Math.min(smin, comb(terms, lmin, -1) - elb);
-          llmax = Math.max(llmax, lmax); llmin = Math.min(llmin, lmin); if (r) fat = Math.max(fat, 1.75 * (r.fatMax - r.fatMin));
+          llmax = Math.max(llmax, lmax); llmin = Math.min(llmin, lmin); if (r) fat = Math.max(fat, 1.75 * (r.fatMax - r.fatMin + z.fat));
         });
-        const row = { id: b.id, gA: b.gA, gB: b.gB, member: m.name, dc1, el, dc2: N(C2), dw: N(W), tie: top ? Math.abs(tieOf(C2)) + Math.abs(tieOf(W)) : 0,
+        const row = { id: b.id, gA: b.gA, gB: b.gB, member: m.name, dc1, el, dc2: N(C2), dw: N(W), tie: top ? Math.abs(tieOf(C2)) + Math.abs(tieOf(W)) : 0, deckStrain: ds,
           llMax: isFinite(llmax) ? llmax : 0, llMin: isFinite(llmin) ? llmin : 0, strMax: smax, strMin: smin, con: 1.4 * dc1 + el, conMax: 1.4 * dc1 + el + elb, conMin: 1.4 * dc1 + el - elb, elBand: elb, fatigue: fat };
         row.check = memberCheck(R, b, m, row, ck);
         rows.push(row);
@@ -6604,8 +6627,8 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     catch (err) { T.innerHTML = ''; $('#xfDesNote').textContent = 'The design forces could not be found: ' + err.message; return; }
     const c = v => `<td${v < 0 ? ' class="neg"' : ''}>${fx(v, 1)}</td>`, fit = !!XD.fit;
     T.innerHTML = `<thead><tr><th class="l">Cross-frame</th><th class="l">Member</th><th>DC1</th>${fit ? '<th>EL</th>' : ''}<th>DC2</th><th>DW</th><th>LL+I max</th><th>LL+I min</th><th>Strength I max</th><th>Strength I min</th><th>Construction</th><th>Fatigue I range</th><th class="l">Section</th><th>L/r</th><th>φPn tension</th><th>φPn compr.</th><th>Ratio</th></tr></thead><tbody>`
-      + XD.rows.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)} <span class="status">${esc(r.gA)}–${esc(r.gB)}</span></td><td class="l">${esc(r.member)}${r.tie ? ' <span class="status">± deck tie</span>' : ''}</td>${c(r.dc1)}${fit ? `<td${r.el < 0 ? ' class="neg"' : ''}>${fx(r.el, 1)}${r.elBand >= 0.05 ? ` <span class="status">± ${fx(r.elBand, 1)}</span>` : ''}</td>` : ''}${c(r.dc2)}${c(r.dw)}${c(r.llMax)}${c(r.llMin)}${c(r.strMax)}${c(r.strMin)}${fit && r.elBand >= 0.05 ? `<td>${fx(r.conMin, 1)} to ${fx(r.conMax, 1)}</td>` : c(r.con)}<td>${fx(r.fatigue, 1)}</td>${ckCells(r.check)}</tr>`).join('') + '</tbody>';
-    $('#xfDesNote').textContent = `Strength I: 1.25 (0.90) DC, 1.50 (0.65) DW, ${fit ? '1.0 EL (' + XD.fit + '), ' : ''}1.75 LL+I, the factors that make each extreme larger. Construction: 1.4 DC1${fit ? ' + EL' : ''}.${fit ? ' EL carries a band (±): the locked-in force is a small remainder of the force needed to push the member into place, so a few percent difference in girder stiffness moves it a lot; 3D shell models of two 56–61° skew bridges left up to 4% of that forcing locked in, so diagonals take ±4% of their forcing and chords ±4% of the frame\'s largest diagonal forcing times its cosine, added to each Strength I and construction extreme.' : ''} Fatigue I: 1.75 × the fatigue truck's range. Top chords in the composite stages carry the deck tie's force added either way (marked ± deck tie): a 3D model shares the deck's horizontal force at the frame with the top chord, so the grid's near-zero composite top chord force is not used alone. Unfactored columns are the member alone.`;
+      + XD.rows.map(r => `<tr data-x="${esc(r.id)}"><td class="l">${esc(r.id)} <span class="status">${esc(r.gA)}–${esc(r.gB)}</span></td><td class="l">${esc(r.member)}${r.tie ? ' <span class="status">± deck tie</span>' : ''}${r.deckStrain ? ' <span class="status">+ deck strain</span>' : ''}</td>${c(r.dc1)}${fit ? `<td${r.el < 0 ? ' class="neg"' : ''}>${fx(r.el, 1)}${r.elBand >= 0.05 ? ` <span class="status">± ${fx(r.elBand, 1)}</span>` : ''}</td>` : ''}${c(r.dc2)}${c(r.dw)}${c(r.llMax)}${c(r.llMin)}${c(r.strMax)}${c(r.strMin)}${fit && r.elBand >= 0.05 ? `<td>${fx(r.conMin, 1)} to ${fx(r.conMax, 1)}</td>` : c(r.con)}<td>${fx(r.fatigue, 1)}</td>${ckCells(r.check)}</tr>`).join('') + '</tbody>';
+    $('#xfDesNote').textContent = `Strength I: 1.25 (0.90) DC, 1.50 (0.65) DW, ${fit ? '1.0 EL (' + XD.fit + '), ' : ''}1.75 LL+I, the factors that make each extreme larger. Construction: 1.4 DC1${fit ? ' + EL' : ''}.${fit ? ' EL carries a band (±): the locked-in force is a small remainder of the force needed to push the member into place, so a few percent difference in girder stiffness moves it a lot; 3D shell models of two 56–61° skew bridges left up to 4% of that forcing locked in, so diagonals take ±4% of their forcing and chords ±4% of the frame\'s largest diagonal forcing times its cosine, added to each Strength I and construction extreme.' : ''} Fatigue I: 1.75 × the fatigue truck's range. Top chords in the composite stages carry the deck tie's force added either way (marked ± deck tie): a 3D model shares the deck's horizontal force at the frame with the top chord, so the grid's near-zero composite top chord force is not used alone. Top chords on frames skewed to the girders (support lines on a skewed bridge) also take the deck\'s longitudinal strain from the girder moments, R E A e cos²a along the chord (marked + deck strain), added in DC2, DW, LL+I and fatigue: the grid has no longitudinal strain, and 3D shell models show these chords stretching with the deck over a pier. Unfactored columns are the member alone.`;
   }
   // member check cells: section, L/r (flagged over its limit), factored resistances, governing demand / capacity
   function ckCells(k) {
@@ -6618,7 +6641,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
   $('#btnXfDesCsv') && ($('#btnXfDesCsv').onclick = () => {
     if (!XD) return; const f3 = v => (+v).toFixed(3);
     const ck = k => (k && k.kind !== 'A' ? ['"' + k.label + '"', f3(k.L), f3(k.Lr), f3(k.Prt), f3(k.Prc), f3(k.ratio), k.slOk ? 'ok' : 'over'] : [k ? '"' + k.label + '"' : '', '', '', '', '', '', '']);
-    const t = ['crossframe,girder_a,girder_b,member,dc1,el,el_band,dc2,dw,llim_max,llim_min,strength1_max,strength1_min,construction_max,construction_min,fatigue1_range,deck_tie_added,section,length_in,l_over_r,phi_pn_tension,phi_pn_compression,ratio,slenderness'].concat(XD.rows.map(r => [r.id, r.gA, r.gB, r.member, f3(r.dc1), f3(r.el), f3(r.elBand), f3(r.dc2), f3(r.dw), f3(r.llMax), f3(r.llMin), f3(r.strMax), f3(r.strMin), f3(r.conMax), f3(r.conMin), f3(r.fatigue), r.tie ? 'yes' : 'no'].concat(ck(r.check)).join(','))).join('\n');
+    const t = ['crossframe,girder_a,girder_b,member,dc1,el,el_band,dc2,dw,llim_max,llim_min,strength1_max,strength1_min,construction_max,construction_min,fatigue1_range,deck_tie_added,deck_strain_dc2,deck_strain_dw,deck_strain_ll_max,deck_strain_ll_min,section,length_in,l_over_r,phi_pn_tension,phi_pn_compression,ratio,slenderness'].concat(XD.rows.map(r => [r.id, r.gA, r.gB, r.member, f3(r.dc1), f3(r.el), f3(r.elBand), f3(r.dc2), f3(r.dw), f3(r.llMax), f3(r.llMin), f3(r.strMax), f3(r.strMin), f3(r.conMax), f3(r.conMin), f3(r.fatigue), r.tie ? 'yes' : 'no'].concat(r.deckStrain ? [f3(r.deckStrain.dc2), f3(r.deckStrain.dw), f3(r.deckStrain.llMax), f3(r.deckStrain.llMin)] : ['', '', '', '']).concat(ck(r.check)).join(','))).join('\n');
     const b = $('#btnXfDesCsv'); const done = () => { b.textContent = 'Copied'; setTimeout(() => { b.textContent = 'Copy CSV'; }, 1500); };
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('crossframe-design-forces.csv', t, 'text/csv'); done(); }); else { download('crossframe-design-forces.csv', t, 'text/csv'); done(); }
   });

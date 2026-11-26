@@ -352,6 +352,13 @@ guard('Steel 2D Grillage cross-frames', () => {
       near('design table: X diagonals connected where they cross take half their length', rm.check.L / r.check.L, 0.5, 1e-12);
       is('design table: main members, compression limit 120', rm.check.limC, 120);
       is('design table: area-only members are not checked', G.xfDesign(R, null).rows[0].check.kind, 'A'); }
+    { const RX = G.analyze(F, A1), XD = G.xfDesign(RX, null), pier = F.supports.find(q => q.kind !== 'abutment');
+      const onPier = XD.rows.filter(r => /^top chord/.test(r.member) && (F.crossframes.find(c => c.id === r.id) || {}).support === pier.id), mid = XD.rows.filter(r => /^top chord/.test(r.member) && (F.crossframes.find(c => c.id === r.id) || {}).tag !== 'support');
+      is('top chords on the skewed pier line take the deck\'s strain over the pier: tension in DC2 and DW', onPier.length > 0 && onPier.every(r => r.deckStrain && r.deckStrain.dc2 > 0 && r.deckStrain.dw > 0), true);
+      is('top chords of frames normal to the girders take none', mid.every(r => !r.deckStrain), true);
+      const r0 = onPier[0], c = F.crossframes.find(x => x.id === r0.id), cf = G.frameProps(RX.cf, true), pts = RX.md.bearings.filter(x => x.support === c.support);
+      const e = pts.map(x => { const s = RX.compAt(x.g, x.node.u, RX.n3); return -G.at(RX.res.dc2, x.g, x.node.u).M * 12 * (1 + 40 - s.ybar) / (29000 * s.I); }).reduce((p, q) => p + q, 0) / pts.length;
+      near('deck strain on a pier-line top chord, DC2: R E A e cos²(30°), chord 41 in. above the bottom, kip', r0.deckStrain.dc2, G.memRf(cf.top, true, cf) * 29000 * G.memArea(cf.top) * e * 0.75, 1e-6); }
   }
   near('consistency: member forces reproduce the frame end forces (relative)', c.res / c.ref, 0, 1e-9, 'truss forces back onto the girders');
   const tot = st => R.res[st].reac.reduce((s, x) => s + x.R, 0);
