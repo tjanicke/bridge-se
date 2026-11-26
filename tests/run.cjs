@@ -359,6 +359,9 @@ guard('Steel 2D Grillage cross-frames', () => {
       const r0 = onPier[0], c = F.crossframes.find(x => x.id === r0.id), cf = G.frameProps(RX.cf, true), pts = RX.md.bearings.filter(x => x.support === c.support);
       const e = pts.map(x => { const s = RX.compAt(x.g, x.node.u, RX.n3); return -G.at(RX.res.dc2, x.g, x.node.u).M * 12 * (1 + 40 - s.ybar) / (29000 * s.I); }).reduce((p, q) => p + q, 0) / pts.length;
       near('deck strain on a pier-line top chord, DC2: R E A e cos²(30°), chord 41 in. above the bottom, kip', r0.deckStrain.dc2, G.memRf(cf.top, true, cf) * 29000 * G.memArea(cf.top) * e * 0.75, 1e-6); }
+    // calculation book: the context the page hands it (analysis, live load, girder checks, cross-frame design)
+    { const C = load('steel-2d-grillage'), RX = C.G2D.analyze(F, A1), LLx = C.G2D.liveLoad(RX, { ds: 2 }), CKx = C.G2D.runChecks(RX, LLx, C.LGCheck, {}), XDx = C.G2D.xfDesign(RX, LLx);
+      globalThis.__book = { G: C.G2D, ctx: { F, R: RX, LL: LLx, CK: CKx, XD: XDx, doc: { analysis: A1 }, meta: { structure: 'TEST' }, notes: C.G2D.CALC_NOTES, root: C } }; }
   }
   near('consistency: member forces reproduce the frame end forces (relative)', c.res / c.ref, 0, 1e-9, 'truss forces back onto the girders');
   const tot = st => R.res[st].reac.reduce((s, x) => s + x.R, 0);
@@ -534,6 +537,13 @@ guard('Steel 2D Grillage live load', () => {
     const wb = new TextDecoder().decode(b), i = wb.indexOf('<sheets>');
     is('CSiBridge workbook: joint coordinates sheet present', wb.slice(i, wb.indexOf('</sheets>')).includes('name="Joint Coordinates"'), true);
   } catch (err) { is('CSiBridge workbook', err.message, 'no error'); } })();
+  if (globalThis.__book) await (async () => { try {
+    const { G, ctx } = globalThis.__book, txt = u => Buffer.from(u).toString('latin1');
+    const sm = txt(await G.calcBook(Object.assign({}, ctx, { mode: 'summary' }))), fb = txt(await G.calcBook(Object.assign({}, ctx, { mode: 'full' })));
+    const pages = t => (t.match(/\/Type\s*\/Page[^s]/g) || []).length;
+    is('calculation book: summary and full book are PDFs', /^%PDF-1\.4/.test(sm) && /%%EOF\s*$/.test(sm) && /^%PDF-1\.4/.test(fb), true);
+    is('calculation book: the full book is longer than the summary (pages)', pages(fb) > pages(sm) && pages(sm) >= 2, true);
+  } catch (err) { is('calculation book', err.message, 'no error'); } })();
   console.log('\n' + pass + ' passed, ' + fail + ' failed');
   process.exit(fail ? 1 : 0);
 })();

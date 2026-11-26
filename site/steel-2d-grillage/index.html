@@ -113,6 +113,8 @@ table.res tr[data-x],table.res tr[data-g]{cursor:pointer}
 table.res td.note{white-space:normal;min-width:260px;color:var(--muted);font-size:11.5px}
 table.res tr:hover td{background:var(--sunk)}
 table.res tr.sel td{background:color-mix(in srgb,var(--accent) 16%,transparent)}
+.repf{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:8px 12px;margin-bottom:12px}.repf label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--muted)}
+.repb{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}.repb button{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;padding:10px 12px;height:auto}.repb button small{font-size:11.5px;line-height:1.35;opacity:.85;font-weight:400}.repb button[aria-busy="true"]{opacity:.6;cursor:progress}
 .xelev{display:flex;flex-wrap:wrap;gap:12px}.xe{margin:0;min-width:0;overflow-x:auto}.xe figcaption{font-size:13px;margin-bottom:4px}.xe svg{display:block;max-width:none}
 .xe-g{fill:var(--sunk);stroke:var(--girder);stroke-width:1}.xe-m{fill:var(--xf);fill-opacity:.18;stroke:var(--xf);stroke-width:1}.xe-o{stroke:var(--xf);stroke-width:2.5}
 .xe-a{stroke:var(--xf);stroke-width:3;stroke-linecap:round}.xe-w{stroke:var(--ink);stroke-width:1;stroke-dasharray:5 3;opacity:.7}.xe-wp{fill:var(--accent);stroke:var(--surface);stroke-width:1.5}
@@ -258,6 +260,21 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
       <div class="tbl-wrap"><table class="res" id="ckDet"></table></div>
       <h3 style="margin-top:14px">Cross-section proportions (6.10.2)</h3>
       <div class="tbl-wrap"><table class="res" id="ckProp"></table></div>
+    </section>
+    <section class="card" id="repCard">
+      <div class="card-h"><h2>Calculation book</h2><span class="status" id="repStatus">PDF, letter size</span></div>
+      <div class="repf">
+        <label>Structure number<input data-rep="structure" autocomplete="off"></label>
+        <label>Bridge / feature<input data-rep="bridge" autocomplete="off"></label>
+        <label>Location<input data-rep="location" autocomplete="off"></label>
+        <label>Designed by (initials)<input data-rep="designedBy" autocomplete="off" maxlength="12"></label>
+        <label>Date<input data-rep="date" type="date"></label>
+      </div>
+      <div class="repb">
+        <button data-mode="summary" class="primary"><b>Calculation summary</b><small>Framing plan, governing ratios for every girder and cross-frame member group, and worksheets of the controlling checks</small></button>
+        <button data-mode="full"><b>Calculation book</b><small>The summary plus input, framing tables, reactions by stage, girder moments and shears, every cross-frame member's design forces and checks, and each girder's governing checks</small></button>
+      </div>
+      <p class="hint" style="margin-top:10px">Uses what has been run for the current inputs: the dead-load analysis, then the live load, cross-frame design forces and girder checks if they are current. The PDF carries a blank “Checked by” field for independent review; the title-block entries are saved with the input JSON.</p>
     </section>
     <section class="card" id="csiCard">
       <div class="card-h"><h2>Export to CSiBridge</h2><div class="toolbar"><button id="btnCsi" class="primary">CSiBridge models</button></div></div>
@@ -3413,6 +3430,875 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 
 </script>
+<script id="lg-report">
+/* Standard 14 font metrics (Adobe AFM via ReportLab): widths per 1000 em, WinAnsi codes; Symbol map unicode -> [code, width] */
+var PDF_METRICS = {"w":{"Helvetica":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Helvetica-Bold":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,333,474,556,556,889,722,238,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,333,333,584,584,584,611,975,722,722,722,722,667,611,778,722,278,556,722,611,833,722,778,667,778,722,667,611,722,667,944,667,667,611,333,278,333,584,556,333,556,611,556,611,556,333,611,611,278,278,556,278,889,611,611,611,611,389,556,333,611,556,778,556,556,500,389,280,389,584,350,556,350,278,556,500,1000,556,556,333,1000,667,333,1000,350,611,350,350,278,278,500,500,350,556,1000,333,1000,556,333,944,350,500,667,278,333,556,556,556,556,280,556,333,737,370,556,584,333,737,333,400,584,333,333,333,611,556,278,333,333,365,556,834,834,834,611,722,722,722,722,722,722,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,556,556,556,556,556,278,278,278,278,611,611,611,611,611,611,611,584,611,611,611,611,611,556,611,556],"Helvetica-Oblique":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584,350,556,350,222,556,333,1000,556,556,333,1000,667,333,1000,350,611,350,350,222,222,333,333,350,556,1000,333,1000,500,333,944,350,500,667,278,333,556,556,556,556,260,556,333,737,370,556,584,333,737,333,400,584,333,333,333,556,537,278,333,333,365,556,834,834,834,611,667,667,667,667,667,667,1000,722,667,667,667,667,278,278,278,278,722,722,778,778,778,778,778,584,778,722,722,722,722,667,667,611,556,556,556,556,556,556,889,500,556,556,556,556,278,278,278,278,556,556,556,556,556,556,556,584,611,556,556,556,556,500,556,500],"Courier":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600,600]},"win":{"32":32,"33":33,"34":34,"35":35,"36":36,"37":37,"38":38,"39":39,"40":40,"41":41,"42":42,"43":43,"44":44,"45":45,"46":46,"47":47,"48":48,"49":49,"50":50,"51":51,"52":52,"53":53,"54":54,"55":55,"56":56,"57":57,"58":58,"59":59,"60":60,"61":61,"62":62,"63":63,"64":64,"65":65,"66":66,"67":67,"68":68,"69":69,"70":70,"71":71,"72":72,"73":73,"74":74,"75":75,"76":76,"77":77,"78":78,"79":79,"80":80,"81":81,"82":82,"83":83,"84":84,"85":85,"86":86,"87":87,"88":88,"89":89,"90":90,"91":91,"92":92,"93":93,"94":94,"95":95,"96":96,"97":97,"98":98,"99":99,"100":100,"101":101,"102":102,"103":103,"104":104,"105":105,"106":106,"107":107,"108":108,"109":109,"110":110,"111":111,"112":112,"113":113,"114":114,"115":115,"116":116,"117":117,"118":118,"119":119,"120":120,"121":121,"122":122,"123":123,"124":124,"125":125,"126":126,"127":127,"8364":128,"8218":130,"402":131,"8222":132,"8230":133,"8224":134,"8225":135,"710":136,"8240":137,"352":138,"8249":139,"338":140,"381":142,"8216":145,"8217":146,"8220":147,"8221":148,"8226":149,"8211":150,"8212":151,"732":152,"8482":153,"353":154,"8250":155,"339":156,"382":158,"376":159,"160":160,"161":161,"162":162,"163":163,"164":164,"165":165,"166":166,"167":167,"168":168,"169":169,"170":170,"171":171,"172":172,"173":173,"174":174,"175":175,"176":176,"177":177,"178":178,"179":179,"180":180,"181":181,"182":182,"183":183,"184":184,"185":185,"186":186,"187":187,"188":188,"189":189,"190":190,"191":191,"192":192,"193":193,"194":194,"195":195,"196":196,"197":197,"198":198,"199":199,"200":200,"201":201,"202":202,"203":203,"204":204,"205":205,"206":206,"207":207,"208":208,"209":209,"210":210,"211":211,"212":212,"213":213,"214":214,"215":215,"216":216,"217":217,"218":218,"219":219,"220":220,"221":221,"222":222,"223":223,"224":224,"225":225,"226":226,"227":227,"228":228,"229":229,"230":230,"231":231,"232":232,"233":233,"234":234,"235":235,"236":236,"237":237,"238":238,"239":239,"240":240,"241":241,"242":242,"243":243,"244":244,"245":245,"246":246,"247":247,"248":248,"249":249,"250":250,"251":251,"252":252,"253":253,"254":254,"255":255},"sym":{"8704":[34,713],"8707":[36,549],"8715":[39,439],"8727":[42,500],"8722":[45,549],"8773":[64,549],"913":[65,722],"914":[66,667],"935":[67,722],"8710":[68,612],"917":[69,611],"934":[70,763],"915":[71,603],"919":[72,722],"921":[73,333],"977":[74,631],"922":[75,722],"923":[76,686],"924":[77,889],"925":[78,722],"927":[79,722],"928":[80,768],"920":[81,741],"929":[82,556],"931":[83,592],"932":[84,611],"933":[85,690],"962":[86,439],"8486":[87,768],"926":[88,645],"936":[89,795],"918":[90,611],"8756":[92,863],"8869":[94,658],"63717":[96,500],"945":[97,631],"946":[98,549],"967":[99,549],"948":[100,494],"949":[101,439],"966":[102,521],"947":[103,411],"951":[104,603],"953":[105,329],"981":[106,603],"954":[107,549],"955":[108,549],"957":[110,521],"959":[111,549],"960":[112,549],"952":[113,521],"961":[114,549],"963":[115,603],"964":[116,439],"965":[117,576],"982":[118,713],"969":[119,686],"958":[120,493],"968":[121,686],"950":[122,494],"8764":[126,549],"8364":[160,750],"978":[161,620],"8242":[162,247],"8804":[163,549],"8260":[164,167],"8734":[165,713],"9827":[167,753],"9830":[168,753],"9829":[169,753],"9824":[170,753],"8596":[171,1042],"8592":[172,987],"8593":[173,603],"8594":[174,987],"8595":[175,603],"8243":[178,411],"8805":[179,549],"8733":[181,713],"8706":[182,494],"8226":[183,460],"8800":[185,549],"8801":[186,549],"8776":[187,549],"8230":[188,1000],"63718":[189,603],"63719":[190,1000],"8629":[191,658],"8501":[192,823],"8465":[193,686],"8476":[194,795],"8472":[195,987],"8855":[196,768],"8853":[197,768],"8709":[198,823],"8745":[199,768],"8746":[200,768],"8835":[201,713],"8839":[202,713],"8836":[203,713],"8834":[204,713],"8838":[205,713],"8712":[206,713],"8713":[207,713],"8736":[208,768],"8711":[209,713],"63194":[210,790],"63193":[211,790],"63195":[212,890],"8719":[213,823],"8730":[214,549],"8901":[215,250],"8743":[217,603],"8744":[218,603],"8660":[219,1042],"8656":[220,987],"8657":[221,603],"8658":[222,987],"8659":[223,603],"9674":[224,494],"9001":[225,329],"63720":[226,790],"63721":[227,790],"63722":[228,786],"8721":[229,713],"63723":[230,384],"63724":[231,384],"63725":[232,384],"63726":[233,384],"63727":[234,384],"63728":[235,384],"63729":[236,494],"63730":[237,494],"63731":[238,494],"63732":[239,494],"9002":[241,329],"8747":[242,274],"8992":[243,686],"63733":[244,686],"8993":[245,686],"63734":[246,384],"63735":[247,384],"63736":[248,384],"63737":[249,384],"63738":[250,384],"63739":[251,384],"63740":[252,494],"63741":[253,494],"63742":[254,494]}};
+if (typeof module !== 'undefined') module.exports = PDF_METRICS;
+
+/* Minimal dependency-free PDF writer and flow layout for calculation reports.
+ * Standard-14 fonts (Helvetica family, Courier, Symbol for Greek and math signs) — nothing embedded.
+ * Coordinates: points, origin top-left, y downward (converted on output).
+ */
+(function (root) {
+  'use strict';
+  const MET = (typeof module !== 'undefined') ? require('./metrics.js') : root.PDF_METRICS;
+  const FONTS = { R: 'Helvetica', B: 'Helvetica-Bold', I: 'Helvetica-Oblique', M: 'Courier', S: 'Symbol' };
+  const FKEY = { R: 'F1', B: 'F2', I: 'F3', M: 'F4', S: 'F5' };
+  const ALIAS = { 0x394: 0x2206, 0x3A9: 0x2126, 0x2032: 0x27, 0x2033: 0x22, 0x2264: 0x2264, 0x2265: 0x2265, 0x2009: 0x20, 0x202F: 0x20, 0xA0: 0x20, 0x2011: 0x2D, 0x2010: 0x2D, 0x2212: 0x2212, 0x2113: 0x6C, 0x2074: 0x34, 0x2075: 0x35, 0x2076: 0x36, 0x2192: 0x2192, 0x2713: 0x221A, 0x2248: 0x2248 };
+  if (MET.sym[0x3BC] == null) MET.sym[0x3BC] = [109, 576];
+  // split a string into font segments: Latin in the requested font, Greek/math from Symbol
+  function segs(str, f) {
+    const out = []; let cur = null;
+    for (const ch of String(str)) {
+      let u = ch.codePointAt(0); if (ALIAS[u] != null) u = ALIAS[u];
+      let font = f, code;
+      if (u === 0x2212) { code = 0x2D; } // minus sign drawn as hyphen-minus in the text font
+      else if (u === 0x2206) { font = 'D'; code = 0; } // capital delta drawn as a vector triangle: viewers' Symbol substitutes often lack it
+      else if (MET.win[u] != null) code = MET.win[u];
+      else if (MET.sym[u] != null) { font = 'S'; code = MET.sym[u][0]; }
+      else code = 0x3F;
+      if (!cur || cur.f !== font) { cur = { f: font, codes: [] }; out.push(cur); }
+      cur.codes.push(code);
+    }
+    return out;
+  }
+  function segWidth(sg, size) {
+    let w = 0;
+    if (sg.f === 'D') w += 612 * sg.codes.length;
+    else if (sg.f === 'S') { sg.codes.forEach(c => { const e = Object.values(MET.sym).find(v => v[0] === c); w += e ? e[1] : 500; }); }
+    else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); }
+    return w * size / 1000;
+  }
+  const symW = {}; Object.values(MET.sym).forEach(v => { symW[v[0]] = v[1]; });
+  function textWidth(str, f, size) {
+    let w = 0;
+    segs(str, f).forEach(sg => { if (sg.f === 'D') w += 612 * sg.codes.length; else if (sg.f === 'S') sg.codes.forEach(c => { w += symW[c] || 500; }); else { const tb = MET.w[FONTS[sg.f]]; sg.codes.forEach(c => { w += tb[c] || 556; }); } });
+    return w * size / 1000;
+  }
+  const esc = codes => codes.map(c => (c === 0x28 || c === 0x29 || c === 0x5C ? '\\' + String.fromCharCode(c) : c < 32 || c > 126 ? '\\' + c.toString(8).padStart(3, '0') : String.fromCharCode(c))).join('');
+  const n2 = v => (Math.round(v * 100) / 100).toString();
+  const col = c => (c || [0, 0, 0]).map(v => n2(v)).join(' ');
+
+  class Doc {
+    constructor(o = {}) {
+      this.W = o.W || 612; this.H = o.H || 792; this.pages = []; this.info = o.info || {};
+      this.page = null;
+    }
+    addPage() { this.page = { ops: [] }; this.pages.push(this.page); return this.page; }
+    Y(y) { return this.H - y; }
+    text(x, y, str, o = {}) { // y = baseline
+      const f = o.font || 'R', size = o.size || 9, color = o.color;
+      const ops = this.page.ops; let cx = x;
+      ops.push('BT ' + col(color) + ' rg');
+      segs(str, f).forEach(sg => {
+        if (sg.f === 'D') {
+          const by = this.Y(y) + (o.rise || 0), lw = size * (f === 'B' ? 0.085 : 0.065), wd = 0.612 * size;
+          sg.codes.forEach(() => { const a = cx + 0.06 * size, b = cx + wd - 0.06 * size, h = 0.674 * size;
+            ops.push('ET q ' + col(color) + ' RG ' + n2(lw) + ' w [] 0 d 0 j ' + n2(a + lw / 2) + ' ' + n2(by + lw / 2) + ' m ' + n2(b - lw / 2) + ' ' + n2(by + lw / 2) + ' l ' + n2((a + b) / 2) + ' ' + n2(by + h - lw / 2) + ' l h S Q BT ' + col(color) + ' rg');
+            cx += wd; });
+          return;
+        }
+        ops.push('/' + FKEY[sg.f] + ' ' + n2(size) + ' Tf 1 0 0 1 ' + n2(cx) + ' ' + n2(this.Y(y) + (o.rise || 0)) + ' Tm (' + esc(sg.codes) + ') Tj');
+        cx += sg.f === 'S' ? sg.codes.reduce((a, c) => a + (symW[c] || 500), 0) * size / 1000 : sg.codes.reduce((a, c) => a + (MET.w[FONTS[sg.f]][c] || 556), 0) * size / 1000;
+      });
+      ops.push('ET');
+      return cx - x;
+    }
+    line(x1, y1, x2, y2, o = {}) { this.page.ops.push((o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ' + col(o.color) + ' RG ' + n2(x1) + ' ' + n2(this.Y(y1)) + ' m ' + n2(x2) + ' ' + n2(this.Y(y2)) + ' l S'); }
+    rect(x, y, w, h, o = {}) {
+      const p = n2(x) + ' ' + n2(this.Y(y + h)) + ' ' + n2(w) + ' ' + n2(h) + ' re ';
+      const dsh = o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ';
+      if (o.fill && o.stroke) this.page.ops.push(col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' + dsh + p + 'B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + p + 'f');
+      else this.page.ops.push(col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w [] 0 d ' + p + 'S');
+    }
+    poly(pts, o = {}) {
+      if (pts.length < 2) return;
+      let s = n2(pts[0][0]) + ' ' + n2(this.Y(pts[0][1])) + ' m ' + pts.slice(1).map(p => n2(p[0]) + ' ' + n2(this.Y(p[1])) + ' l').join(' ');
+      if (o.close) s += ' h';
+      const st = (o.dash ? '[' + o.dash.join(' ') + '] 0 d ' : '[] 0 d ') + n2(o.w || 0.5) + ' w ';
+      if (o.fill && o.stroke) this.page.ops.push(st + col(o.fill) + ' rg ' + col(o.stroke) + ' RG ' + s + ' B');
+      else if (o.fill) this.page.ops.push(col(o.fill) + ' rg ' + s + ' f');
+      else this.page.ops.push(st + col(o.stroke || o.color) + ' RG ' + s + ' S');
+    }
+    circle(cx, cy, r, o = {}) {
+      const k = 0.5523 * r, Y = this.Y(cy);
+      const s = n2(cx + r) + ' ' + n2(Y) + ' m ' + [[cx + r, Y + k, cx + k, Y + r, cx, Y + r], [cx - k, Y + r, cx - r, Y + k, cx - r, Y], [cx - r, Y - k, cx - k, Y - r, cx, Y - r], [cx + k, Y - r, cx + r, Y - k, cx + r, Y]].map(a => a.map(n2).join(' ') + ' c').join(' ');
+      this.page.ops.push((o.fill ? col(o.fill) + ' rg ' : '') + (o.stroke ? col(o.stroke) + ' RG ' + n2(o.w || 0.5) + ' w ' : '') + s + (o.fill && o.stroke ? ' B' : o.fill ? ' f' : ' S'));
+    }
+    async save() {
+      const enc = s => { const a = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) a[i] = s.charCodeAt(i) & 255; return a; };
+      const deflate = async bytes => {
+        if (typeof CompressionStream === 'undefined') return null;
+        try { const cs = new CompressionStream('deflate'); const w = cs.writable.getWriter(); w.write(bytes); w.close(); const buf = await new Response(cs.readable).arrayBuffer(); return new Uint8Array(buf); } catch (e) { return null; }
+      };
+      const objs = []; // [string or Uint8Array parts]
+      const add = parts => { objs.push(parts); return objs.length; };
+      const fontIds = {};
+      Object.keys(FONTS).forEach(k => {
+        fontIds[k] = add(['<< /Type /Font /Subtype /Type1 /BaseFont /' + FONTS[k] + (k === 'S' ? '' : ' /Encoding /WinAnsiEncoding') + ' >>']);
+      });
+      const fontRes = '<< ' + Object.keys(FONTS).map(k => '/' + FKEY[k] + ' ' + fontIds[k] + ' 0 R').join(' ') + ' >>';
+      const pagesId = add(null); // placeholder
+      const kids = [];
+      for (const pg of this.pages) {
+        const raw = enc(pg.ops.join('\n'));
+        const z = await deflate(raw);
+        const cid = add(z ? ['<< /Length ' + z.length + ' /Filter /FlateDecode >>\nstream\n', z, '\nendstream'] : ['<< /Length ' + raw.length + ' >>\nstream\n', raw, '\nendstream']);
+        kids.push(add(['<< /Type /Page /Parent ' + pagesId + ' 0 R /MediaBox [0 0 ' + this.W + ' ' + this.H + '] /Resources << /Font ' + fontRes + ' >> /Contents ' + cid + ' 0 R >>']));
+      }
+      objs[pagesId - 1] = ['<< /Type /Pages /Kids [' + kids.map(k => k + ' 0 R').join(' ') + '] /Count ' + kids.length + ' >>'];
+      const pdfStr = s => '(' + esc([...String(s)].map(ch => { const u = ch.codePointAt(0); return MET.win[u] != null ? MET.win[u] : 0x3F; })) + ')';
+      const d = new Date(), pad = v => String(v).padStart(2, '0');
+      const date = 'D:' + d.getFullYear() + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
+      const infoId = add(['<< /Title ' + pdfStr(this.info.title || '') + ' /Subject ' + pdfStr(this.info.subject || '') + ' /Creator ' + pdfStr(this.info.creator || '') + ' /Producer (Bridge SE report writer) /CreationDate (' + date + ') >>']);
+      const catId = add(['<< /Type /Catalog /Pages ' + pagesId + ' 0 R >>']);
+      // assemble
+      const chunks = []; let len = 0; const offs = [];
+      const push = x => { const b = typeof x === 'string' ? enc(x) : x; chunks.push(b); len += b.length; };
+      push('%PDF-1.4\n%\xE2\xE3\xCF\xD3\n');
+      objs.forEach((parts, i) => { offs.push(len); push((i + 1) + ' 0 obj\n'); parts.forEach(push); push('\nendobj\n'); });
+      const xref = len;
+      push('xref\n0 ' + (objs.length + 1) + '\n0000000000 65535 f \n' + offs.map(o => String(o).padStart(10, '0') + ' 00000 n \n').join(''));
+      push('trailer\n<< /Size ' + (objs.length + 1) + ' /Root ' + catId + ' 0 R /Info ' + infoId + ' 0 R >>\nstartxref\n' + xref + '\n%%EOF\n');
+      const out = new Uint8Array(len); let o = 0; chunks.forEach(c => { out.set(c, o); o += c.length; });
+      return out;
+    }
+  }
+
+  // ---------- inline rich text: markup _x or _{xy} subscript, ^x or ^{xy} superscript, *bold* not supported (use runs) ----------
+  function parseRich(s, font) {
+    const runs = []; let i = 0, buf = '';
+    const flush = () => { if (buf) { runs.push({ t: buf, f: font, v: 0 }); buf = ''; } };
+    while (i < s.length) {
+      const ch = s[i];
+      if ((ch === '_' || ch === '^') && i + 1 < s.length) {
+        flush();
+        let t;
+        if (s[i + 1] === '{') { const j = s.indexOf('}', i + 2); t = s.slice(i + 2, j < 0 ? s.length : j); i = j < 0 ? s.length : j + 1; }
+        else { t = [...s.slice(i + 1)][0]; i += 1 + t.length; }
+        runs.push({ t, f: font, v: ch === '_' ? -1 : 1 });
+      } else { buf += ch; i++; }
+    }
+    flush();
+    return runs;
+  }
+  function richWidth(runs, size) { return runs.reduce((a, r) => a + textWidth(r.t, r.f, r.v ? size * 0.72 : size), 0); }
+  function drawRich(doc, x, y, runs, size, color) {
+    let cx = x;
+    runs.forEach(r => { const sz = r.v ? size * 0.72 : size; cx += doc.text(cx, y, r.t, { font: r.f, size: sz, color, rise: r.v < 0 ? -size * 0.22 : r.v > 0 ? size * 0.38 : 0 }); });
+    return cx - x;
+  }
+  // math expression with \f{num}{den} stacked fractions (and rich markup inside)
+  function parseMath(s, font) {
+    const out = []; let i = 0, buf = '';
+    while (i < s.length) {
+      if (s.startsWith('\\f{', i)) {
+        if (buf) { out.push({ k: 'r', runs: parseRich(buf, font) }); buf = ''; }
+        const grab = st => { let depth = 0, j = st; for (; j < s.length; j++) { if (s[j] === '{') depth++; else if (s[j] === '}') { depth--; if (depth === 0) break; } } return [s.slice(st + 1, j), j + 1]; };
+        const [num, a] = grab(i + 2), [den, b] = grab(a);
+        out.push({ k: 'f', num: parseRich(num, font), den: parseRich(den, font) }); i = b;
+      } else { buf += s[i]; i++; }
+    }
+    if (buf) out.push({ k: 'r', runs: parseRich(buf, font) });
+    return out;
+  }
+  function mathMetrics(parts, size) {
+    let w = 0, frac = false;
+    parts.forEach(p => { if (p.k === 'r') w += richWidth(p.runs, size); else { frac = true; w += Math.max(richWidth(p.num, size * 0.9), richWidth(p.den, size * 0.9)) + size * 0.3; } });
+    return { w, up: frac ? size * 1.15 : size * 0.85, down: frac ? size * 0.95 : size * 0.3 };
+  }
+  function drawMath(doc, x, y, parts, size, color) {
+    let cx = x;
+    parts.forEach(p => {
+      if (p.k === 'r') cx += drawRich(doc, cx, y, p.runs, size, color);
+      else {
+        const s2 = size * 0.9, wn = richWidth(p.num, s2), wd = richWidth(p.den, s2), w = Math.max(wn, wd) + size * 0.3;
+        const mid = y - size * 0.3;
+        drawRich(doc, cx + (w - wn) / 2, mid - size * 0.25, p.num, s2, color);
+        doc.line(cx + size * 0.08, mid, cx + w - size * 0.08, mid, { w: 0.5, color });
+        drawRich(doc, cx + (w - wd) / 2, mid + size * 0.85, p.den, s2, color);
+        cx += w;
+      }
+    });
+    return cx - x;
+  }
+  function wrapWords(str, f, size, width) {
+    const words = String(str).split(/(\s+)/); const lines = []; let cur = '';
+    words.forEach(w => {
+      if (/^\s+$/.test(w)) { cur += ' '; return; }
+      const t = cur + w;
+      if (textWidth(t.trim(), f, size) > width && cur.trim()) { lines.push(cur.trim()); cur = w; } else cur = t;
+    });
+    if (cur.trim()) lines.push(cur.trim());
+    return lines.length ? lines : [''];
+  }
+
+  // ---------- flow layout ----------
+  class Flow {
+    constructor(o) {
+      this.doc = new Doc({ info: o.info });
+      this.m = Object.assign({ l: 54, r: 54, t: 64, b: 56 }, o.margins || {});
+      this.header = o.header; this.footer = o.footer;
+      this.pal = Object.assign({ ink: [0.09, 0.11, 0.13], mute: [0.36, 0.40, 0.44], rule: [0.75, 0.78, 0.80], head: [0.92, 0.94, 0.95], accent: [0.12, 0.37, 0.55], bad: [0.70, 0.14, 0.09], ok: [0.12, 0.48, 0.27], zebra: [0.97, 0.975, 0.98] }, o.palette || {});
+      this.newPage();
+    }
+    get W() { return this.doc.W - this.m.l - this.m.r; }
+    newPage() { this.doc.addPage(); this.y = this.m.t; }
+    need(h) { if (this.y + h > this.doc.H - this.m.b) { this.newPage(); return true; } return false; }
+    space(h) { this.y += h; }
+    h1(t) { this.need(40); this.y += 6; this.doc.text(this.m.l, this.y + 14, t, { font: 'B', size: 15, color: this.pal.ink }); this.y += 22; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 1.2, color: this.pal.accent }); this.y += 10; }
+    h2(t) { this.need(34); this.y += 8; this.doc.text(this.m.l, this.y + 11, t, { font: 'B', size: 11.5, color: this.pal.accent }); this.y += 15; this.doc.line(this.m.l, this.y, this.m.l + this.W, this.y, { w: 0.5, color: this.pal.rule }); this.y += 7; }
+    h3(t) { this.need(26); this.y += 4; this.doc.text(this.m.l, this.y + 9, t, { font: 'B', size: 9.5, color: this.pal.ink }); this.y += 14; }
+    para(t, o = {}) {
+      const size = o.size || 9, f = o.font || 'R', lh = size * 1.35, x = this.m.l + (o.indent || 0), w = (o.width || this.W) - (o.indent || 0);
+      wrapWords(t, f, size, w).forEach(ln => { this.need(lh); this.doc.text(x, this.y + size, ln, { font: f, size, color: o.color || this.pal.ink }); this.y += lh; });
+      this.y += o.after != null ? o.after : 3;
+    }
+    bullets(items, o = {}) { const size = o.size || 8.6; items.forEach(t => { const lines = wrapWords(t, 'R', size, this.W - 12); lines.forEach((ln, k) => { this.need(size * 1.35); if (!k) this.doc.text(this.m.l + 2, this.y + size, '•', { size, color: this.pal.mute }); this.doc.text(this.m.l + 12, this.y + size, ln, { size, color: o.color || this.pal.ink }); this.y += size * 1.35; }); this.y += 1.5; }); this.y += 2; }
+    // key/value grid: rows [[k, v], ...] in n column pairs
+    kv(rows, o = {}) {
+      const cols = o.cols || 2, size = o.size || 8.6, lh = size * 1.5, cw = this.W / cols, kw = o.kw || cw * 0.48;
+      const n = Math.ceil(rows.length / cols);
+      for (let r = 0; r < n; r++) {
+        // wrap values
+        let hmax = lh; const cells = [];
+        for (let c = 0; c < cols; c++) {
+          const it = rows[c * n + r]; if (!it) { cells.push(null); continue; }
+          const vl = wrapWords(String(it[1]), 'R', size, cw - kw - 8); cells.push({ k: it[0], vl }); hmax = Math.max(hmax, vl.length * size * 1.25 + size * 0.5);
+        }
+        this.need(hmax);
+        cells.forEach((cl, c) => { if (!cl) return; const x = this.m.l + c * cw; this.doc.text(x, this.y + size, cl.k, { size, color: this.pal.mute }); cl.vl.forEach((ln, k) => this.doc.text(x + kw, this.y + size + k * size * 1.25, ln, { size, font: 'R', color: this.pal.ink })); });
+        this.y += hmax;
+      }
+      this.y += 4;
+    }
+    // table: cols [{h, w (fraction), a: 'l'|'r'|'c'}], rows [[cells]]; cell may be {t, f, color}
+    table(cols, rows, o = {}) {
+      const size = o.size || 7.6, pad = 3, lh = size * 1.25, W = this.W, ws = cols.map(c => c.w * W / cols.reduce((a, q) => a + q.w, 0));
+      const head = () => {
+        const hl = cols.map((c, i) => wrapWords(c.h, 'B', size, ws[i] - 2 * pad));
+        const hh = Math.max(...hl.map(l => l.length)) * lh + 2 * pad;
+        this.need(hh + lh + 2 * pad);
+        this.doc.rect(this.m.l, this.y, W, hh, { fill: this.pal.head });
+        let x = this.m.l;
+        hl.forEach((ls, i) => { ls.forEach((ln, k) => { const tw = textWidth(ln, 'B', size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size + k * lh, ln, { font: 'B', size, color: this.pal.ink }); }); x += ws[i]; });
+        this.y += hh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.6, color: this.pal.mute });
+      };
+      head();
+      rows.forEach((row, ri) => {
+        const cells = row.map((c, i) => { const cc = c && typeof c === 'object' ? c : { t: c == null ? '' : String(c) }; cc.lines = wrapWords(cc.t, cc.f || 'R', size, ws[i] - 2 * pad); return cc; });
+        const rh = Math.max(...cells.map(c => c.lines.length)) * lh + 2 * pad - 1;
+        if (this.need(rh)) head();
+        if (o.zebra !== false && ri % 2) this.doc.rect(this.m.l, this.y, W, rh, { fill: this.pal.zebra });
+        if (o.hl && o.hl(ri)) this.doc.rect(this.m.l, this.y, W, rh, { fill: [1, 0.96, 0.85] });
+        let x = this.m.l;
+        cells.forEach((c, i) => { c.lines.forEach((ln, k) => { const f = c.f || (cols[i].mono ? 'R' : 'R'); const tw = textWidth(ln, f, size); const a = cols[i].a || 'l'; const tx = a === 'r' ? x + ws[i] - pad - tw : a === 'c' ? x + (ws[i] - tw) / 2 : x + pad; this.doc.text(tx, this.y + pad + size - 1 + k * lh, ln, { font: f, size, color: c.color || this.pal.ink }); }); x += ws[i]; });
+        this.y += rh;
+        this.doc.line(this.m.l, this.y, this.m.l + W, this.y, { w: 0.25, color: this.pal.rule });
+      });
+      this.y += o.after != null ? o.after : 8;
+    }
+    // MathCAD-style worksheet lines: [{lhs, expr, sub, res, unit, ref, note}]
+    math(lines, o = {}) {
+      const size = o.size || 9, x0 = this.m.l + 8, refW = 92, avail = this.W - 8 - refW;
+      lines.forEach(L => {
+        if (L.note) { this.need(size * 1.6); wrapWords(L.note, 'I', size * 0.92, this.W - 16).forEach(ln => { this.need(size * 1.3); this.doc.text(x0, this.y + size, ln, { font: 'I', size: size * 0.92, color: this.pal.mute }); this.y += size * 1.3; }); this.y += 2; return; }
+        const pieces = [];
+        if (L.lhs) pieces.push(parseMath(L.lhs + (L.expr ? ' := ' : ' = '), 'I'));
+        const tail = [];
+        if (L.expr) tail.push(parseMath(L.expr, 'R'));
+        if (L.sub) tail.push(parseMath((L.expr ? ' = ' : '') + L.sub, 'R'));
+        if (L.res != null) tail.push(parseMath(' = ' + L.res + (L.unit ? ' ' + L.unit : ''), 'B'));
+        // lay out on one line if it fits, else wrap at the '=' pieces with an indent
+        const all = pieces.concat(tail), mets = all.map(p => mathMetrics(p, size));
+        const total = mets.reduce((a, q) => a + q.w, 0);
+        const rowsOut = [];
+        if (total <= avail) rowsOut.push(all.map((p, i) => [p, mets[i]]));
+        else { let cur = [], cw = 0; all.forEach((p, i) => { if (cur.length && cw + mets[i].w > avail) { rowsOut.push(cur); cur = []; cw = 24; } cur.push([p, mets[i]]); cw += mets[i].w; }); if (cur.length) rowsOut.push(cur); }
+        rowsOut.forEach((row, ri) => {
+          const up = Math.max(...row.map(q => q[1].up)), down = Math.max(...row.map(q => q[1].down));
+          this.need(up + down + 4);
+          const base = this.y + up + 1;
+          let cx = x0 + (ri ? 24 : 0);
+          row.forEach(([p, mt]) => { cx += drawMath(this.doc, cx, base, p, size, L.color || this.pal.ink); });
+          if (!ri && L.ref) { const tw = textWidth(L.ref, 'R', size * 0.85); this.doc.text(this.m.l + this.W - tw, base, L.ref, { size: size * 0.85, color: this.pal.mute }); }
+          this.y = base + down + 3;
+        });
+      });
+      this.y += 4;
+    }
+    box(h, draw) { this.need(h); draw(this.doc, this.m.l, this.y, this.W, h); this.y += h; }
+    async finish() {
+      const n = this.doc.pages.length;
+      this.doc.pages.forEach((pg, i) => { this.doc.page = pg; if (this.header) this.header(this.doc, i + 1, n, this.m); if (this.footer) this.footer(this.doc, i + 1, n, this.m); });
+      return this.doc.save();
+    }
+  }
+  const api = { Doc, Flow, textWidth, wrapWords, parseRich, parseMath };
+  if (typeof module !== 'undefined') module.exports = api; else root.PDFW = api;
+})(this);
+
+/* Steel Line Girder Check — PDF calculation reports (summary, comprehensive at tenth points + governing, comprehensive at all points).
+ * Uses PDFW (pdfw.js). Inputs: model, res (lgcheck.run), opts { mode, meta, appVersion, methodNotes[], edName }.
+ */
+(function (root) {
+  'use strict';
+  const W = typeof module !== 'undefined' ? require('./pdfw.js') : root.PDFW;
+  const ES = 29000;
+  const fx = (v, d = 1) => (v == null || !isFinite(v) ? (v === Infinity ? '∞' : '—') : (Math.abs(v) < 5e-13 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fn = (v, d) => (v == null || !isFinite(v) ? '—' : (+v).toFixed(d)); // plain numbers inside equations
+  const dU = u => (u === 'k-ft' ? 0 : u === 'k' ? 1 : u === 'in.' || u === 'b/t' ? 2 : 2);
+  const sigF = v => fn(v, Math.abs(v) >= 1000 ? 0 : Math.abs(v) >= 100 ? 1 : Math.abs(v) >= 10 ? 2 : 3);
+  const fr = v => (v === Infinity ? '∞ (unbounded)' : fn(v, 3)); // performance ratio
+  const frf = (v, na) => ((na && v > 10) || v === Infinity ? 'N/A' : fn(v, Math.abs(v - 1) < 0.005 && v !== 1 ? 3 : 2)); // a third decimal within 0.005 of 1.0 // rating factor; N/A only above 10 under negligible live load
+  const close = (a, b, tol = 0.005) => Math.abs(a - b) <= tol * Math.max(1, Math.abs(b));
+  const hash = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+  const RED = [0.70, 0.14, 0.09], GRN = [0.12, 0.48, 0.27], AMB = [0.62, 0.40, 0.04];
+  const rCol = r => (r > 1 + 1e-9 ? RED : r > 0.95 ? AMB : null);
+  const rfCol = r => (r < 1 - 1e-9 ? RED : null);
+  const gpS = (v, gmax, gmin) => (v >= 0 ? gmax : gmin);
+
+  // ---------------- MathCAD-style derivations ----------------
+  // load factors on DC and DW: maximum or minimum (Table 3.4.1-2), whichever reproduces the engine's demand
+  function pickG(eta, DC, DW, LL, target, gL = 1.75) {
+    let best = [gpS(DC, 1.25, 0.9), gpS(DW, 1.5, 0.65)], bd = Infinity;
+    for (const a of [1.25, 0.9]) for (const b of [1.5, 0.65]) { const v = eta * (a * DC + b * DW + gL * LL), d = Math.abs(Math.abs(v) - Math.abs(target)); if (d < bd - 1e-9) { bd = d; best = [a, b]; } }
+    return best;
+  }
+  function demandLines(c, res, lines) {
+    const k = c.calc || {}, cp = k.comps || {}, u = c.unit, LFD = res.ed === 'LFD';
+    const sym = u === 'k-ft' ? 'M' : u === 'k' ? 'V' : 'f';
+    const D = u === 'k-ft' ? 'M_{u}' : u === 'k' ? 'V_{u}' : 'f_{bu}';
+    let val = null;
+    const gL = c.gLL != null ? c.gLL : 1.75, gLs = fn(gL, 2).replace(/0$/, ''), gV = c.gLL != null ? c.gLL : 1.3, gVs = fn(gV, 2).replace(/0$/, '').replace(/\.0$/, '.0');
+    const tbl = c.permit ? 'Table 3.4.1-1, Strength II' : '3.4.1-1';
+    if (!LFD && (k.t === 'posCompact' || k.t === 'negFlange' || k.t === 'boxFlange' || k.t === 'shear')) {
+      const eta = k.eta != null ? k.eta : res.eta;
+      if (k.t === 'posCompact') {
+        const DC = cp.DC1 + cp.DC2; let [gDC, gDW] = pickG(eta, DC, cp.DW, cp.LL, c.demand - (k.flT || 0), gL);
+        val = eta * (gDC * DC + gDW * cp.DW + gL * cp.LL);
+        lines.push({ lhs: 'M_{u}', expr: 'η[γ_{DC}(M_{DC1} + M_{DC2}) + γ_{DW}M_{DW} + ' + gLs + 'M_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC1) + ' + ' + sigF(cp.DC2) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + ' + gLs + '(' + sigF(cp.LL) + ')]', res: fx(val, 0), unit: 'k-ft', ref: tbl });
+        if (k.flT) { lines.push({ lhs: 'M_{u} + f_{ℓ}S_{xt}/3', sub: fx(val, 0) + ' + ' + fx(k.flT, 0), res: fx(val + k.flT, 0), unit: 'k-ft', ref: '6.10.7.1.1-1' }); val += k.flT; }
+      } else {
+        const [gDC, gDW] = pickG(eta, cp.DC, cp.DW, cp.LL, c.demand - (k.fl3 || 0), gL), L = cp.LL;
+        val = eta * (gDC * cp.DC + gDW * cp.DW + gL * L);
+        const s = k.t === 'shear' ? 'V' : 'f';
+        lines.push({ lhs: k.t === 'shear' ? 'V_{u}' : 'f_{bu}', expr: 'η[γ_{DC}' + s + '_{DC} + γ_{DW}' + s + '_{DW} + ' + gLs + s + '_{LL+IM}]', sub: fn(eta, 2) + '[' + fn(gDC, 2) + '(' + sigF(cp.DC) + ') + ' + fn(gDW, 2) + '(' + sigF(cp.DW) + ') + ' + gLs + '(' + sigF(L) + ')]', res: fx(val, dU(u)), unit: u, ref: tbl });
+        if (k.fl3) { lines.push({ lhs: 'f_{bu} + f_{ℓ}/3', sub: fx(val, 2) + ' + ' + fx(k.fl3, 2), res: fx(val + k.fl3, 2), unit: 'ksi', ref: '6.10.8.1.1-1' }); val += k.fl3; }
+      }
+    } else if (!LFD && k.t === 'svc2') {
+      val = cp.DC + cp.DW + gV * cp.LL;
+      lines.push({ lhs: 'f_{f}', expr: 'f_{DC} + f_{DW} + ' + gVs + 'f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + ' + gVs + '(' + sigF(cp.LL) + ')', res: fx(Math.abs(val), 2), unit: 'ksi', ref: c.permit ? 'MBE Table 6A.4.2.2-1, permit' : 'Table 3.4.1-1' });
+      val = Math.abs(val);
+      if (k.fl2) { lines.push({ lhs: 'f_{f} + f_{ℓ}/2', sub: fx(val, 2) + ' + ' + fx(k.fl2, 2), res: fx(val + k.fl2, 2), unit: 'ksi', ref: '6.10.4.2.2-2' }); val += k.fl2; }
+    } else if (!LFD && k.t === 'webBB' && k.comps) {
+      val = cp.DC + cp.DW + gV * cp.LL;
+      lines.push({ lhs: 'f_{c}', expr: 'f_{DC} + f_{DW} + ' + gVs + 'f_{LL+IM}', sub: sigF(cp.DC) + ' + ' + sigF(cp.DW) + ' + ' + gVs + '(' + sigF(cp.LL) + ')', res: fx(val, 2), unit: 'ksi', ref: c.permit ? 'MBE Table 6A.4.2.2-1, permit' : 'Table 3.4.1-1', note: null });
+    } else if (!LFD && k.t === 'webShearFat') {
+      const a1 = Math.abs(k.VD + 1.75 * k.FV[0]), a2 = Math.abs(k.VD + 1.75 * k.FV[1]), FV = a1 >= a2 ? k.FV[0] : k.FV[1];
+      val = Math.max(a1, a2);
+      lines.push({ lhs: 'V_{u}', expr: '|V_{DC+DW} + 1.75V_{LL+IM}|', sub: '|' + sigF(k.VD) + ' + 1.75(' + sigF(FV) + ')|', res: fx(val, 1), unit: 'k', ref: '6.10.5.3' });
+      lines.push({ note: 'Unfactored permanent load plus the Fatigue I live-load shear (fatigue truck, γ = 1.75)' });
+    } else if (!LFD && k.t === 'fatigue') {
+      const yb = k.S.yb, I = k.S.I, arm = Math.abs(yb - k.y);
+      lines.push({ lhs: '(Δf)', expr: '\\f{|M_{max} − M_{min}|·12·|y_{b} − y|}{I_{n}}', sub: '\\f{|' + sigF(k.Mmax) + ' − (' + sigF(k.Mmin) + ')|·12·' + fn(arm, 2) + '}{' + fx(I, 0) + '}', res: fx(k.df, 2), unit: 'ksi', ref: '6.6.1.2.2' });
+      val = k.gamma * k.df;
+      lines.push({ lhs: 'γ(Δf)', sub: fn(k.gamma, 2) + ' × ' + fn(k.df, 2), res: fx(val, 2), unit: 'ksi', ref: k.combo });
+    } else if (LFD && (k.t === 'lfdMoment')) {
+      const MD = cp.DC1 + cp.DC2 + cp.DW, sgn = c.demand >= 0 && (k.gD * MD + k.gL * cp.LL) < 0 ? -1 : 1;
+      val = sgn * (k.gD * MD + k.gL * cp.LL);
+      lines.push({ lhs: 'M_{u}', expr: '1.3[M_{D} + \\f{5}{3}M_{L+I}]', sub: '1.3[(' + sigF(cp.DC1) + ' + ' + sigF(cp.DC2) + ' + ' + sigF(cp.DW) + ') + \\f{5}{3}(' + sigF(cp.LL) + ')]', res: fx(val, 0), unit: 'k-ft', ref: 'Table 3.22.1A' });
+    } else if (LFD && (k.t === 'lfdStress' || k.t === 'lfdShear')) {
+      const Dd = cp.D, L = cp.LL; val = k.gD * Dd + k.gL * L;
+      const s = k.t === 'lfdShear' ? 'V' : 'f';
+      lines.push({ lhs: k.t === 'lfdShear' ? 'V_{u}' : 'f_{u}', expr: '1.3[' + s + '_{D} + \\f{5}{3}' + s + '_{L+I}]', sub: '1.3[' + sigF(Dd) + ' + \\f{5}{3}(' + sigF(L) + ')]', res: fx(val, dU(u)), unit: u, ref: 'Table 3.22.1A' });
+    } else if (LFD && k.t === 'lfdOverload') {
+      val = Math.abs(cp.D + 5 / 3 * cp.LL);
+      lines.push({ lhs: 'f', expr: 'f_{D} + \\f{5}{3}f_{L+I}', sub: sigF(cp.D) + ' + \\f{5}{3}(' + sigF(cp.LL) + ')', res: fx(val, 2), unit: 'ksi', ref: '10.57' });
+    } else if (LFD && k.t === 'lfdFatigue') {
+      val = k.rng;
+      lines.push({ lhs: 'f_{sr}', note: null, sub: 'stress range, ' + k.load + ' loading', res: fx(val, 2), unit: 'ksi', ref: '10.3' });
+    }
+    if (val == null || !close(val, c.demand, 0.006)) {
+      lines.length = 0;
+      lines.push({ lhs: D, sub: 'factored ' + c.lim + ' demand from the analysis', res: fx(c.demand, dU(u)), unit: u });
+    }
+  }
+
+  function capacityLines(c, res, lines) {
+    const k = c.calc || {}, u = c.unit, LFD = res.ed === 'LFD';
+    let ok = false;
+    const start = lines.length;
+    try {
+      if (k.t === 'posCompact') {
+        const r = k.Dp / k.Dt;
+        lines.push({ lhs: 'D_{p}/D_{t}', sub: '\\f{' + fn(k.Dp, 2) + '}{' + fn(k.Dt, 2) + '}', res: fn(r, 3) });
+        let Mn0;
+        if (k.Dp <= 0.1 * k.Dt) { Mn0 = k.Mp; lines.push({ lhs: 'M_{n}', expr: 'M_{p}', res: fx(Mn0, 0), unit: 'k-ft', ref: '6.10.7.1.2-1' }); }
+        else { Mn0 = k.Mp * (1.07 - 0.7 * r); lines.push({ lhs: 'M_{n}', expr: 'M_{p}(1.07 − 0.7\\f{D_{p}}{D_{t}})', sub: fx(k.Mp, 0) + '(1.07 − 0.7 × ' + fn(r, 3) + ')', res: fx(Mn0, 0), unit: 'k-ft', ref: '6.10.7.1.2-2' }); }
+        let Mn = Mn0;
+        if (k.cap13) { Mn = 1.3 * k.Rh * k.My; lines.push({ lhs: 'M_{n}', expr: '1.3R_{h}M_{y}', sub: '1.3 × ' + fn(k.Rh, 3) + ' × ' + fx(k.My, 0), res: fx(Mn, 0), unit: 'k-ft', ref: '6.10.7.1.2-3' }); }
+        lines.push({ lhs: 'φ_{f}M_{n}', sub: fn(k.phi, 2) + ' × ' + fx(Mn, 0), res: fx(k.phi * Mn, 0), unit: 'k-ft', ref: '6.5.4.2' });
+        ok = close(k.phi * Mn, c.cap);
+      } else if (k.t === 'boxFlange') {
+        // tub box flange in compression, 6.11.8.2.2
+        lines.push({ lhs: 'λ_{f}', expr: '\\f{b_{fi}}{t_{f}}', res: fn(k.lamF, 2) });
+        lines.push({ lhs: 'λ_{p}', expr: '1.09√(E/F_{yc})', sub: '1.09√(' + ES + '/' + fn(k.Fyc, 0) + ')', res: fn(k.lamR, 2), ref: '6.11.8.2.2' });
+        let Fnc;
+        if (k.compact) {
+          Fnc = k.Rb * k.Rh * k.Fyc;
+          lines.push({ lhs: 'F_{nc}', expr: 'R_{b}R_{h}F_{yc}Δ', sub: fn(k.Rb, 3) + ' × ' + fn(k.Rh, 3) + ' × ' + fn(k.Fyc, 0) + ' × 1.0', res: fx(Fnc, 2), unit: 'ksi', ref: '6.11.8.2.2a' });
+        } else {
+          const r = Math.sqrt(k.Fel / k.Fyc);
+          lines.push({ lhs: 'F_{el}', expr: '(1.74\\f{λ_{p}}{λ_{f}})^{2}F_{yc}', sub: '(1.74 × \\f{' + fn(k.lamR, 2) + '}{' + fn(k.lamF, 2) + '})^{2} × ' + fn(k.Fyc, 0), res: fx(k.Fel, 2), unit: 'ksi', ref: '6.9.4.2.2b' });
+          lines.push({ lhs: 'b_{e}', expr: 'b_{fi}[(1 − 0.22√(F_{el}/F_{yc}))√(F_{el}/F_{yc}) − 0.075]', sub: fn(k.bfi, 3) + '[(1 − 0.22 × ' + fn(r, 3) + ') × ' + fn(r, 3) + ' − 0.075]', res: fn(k.beClear, 2), unit: 'in.', ref: '6.9.4.2.2b' });
+          lines.push({ lhs: 'b_{e,total}', expr: 'b_{e} + corners and extensions', sub: fn(k.beClear, 2) + ' + ' + fn(k.be - k.beClear, 3), res: fn(k.be, 2), unit: 'in.' });
+          lines.push({ lhs: 'M_{yc}', sub: 'D6.2.3, steel + deck steel, M_{D1} = ' + fx(k.MD1, 0) + ', M_{D2} = ' + fx(k.MD2, 0) + ' k-ft', res: fx(k.Myc, 0), unit: 'k-ft', ref: 'D6.2.3' });
+          lines.push({ lhs: 'M_{yce}', sub: 'same, with the effective box flange width', res: fx(k.Myce, 0), unit: 'k-ft', ref: '6.11.8.2.2b' });
+          lines.push({ lhs: 'R_{b}', sub: 'D_{ce} = ' + fn(k.Dce, 2) + ' in. along the web, b_{fc} = b_{e,total}/2', res: fn(k.Rb, 3), ref: '6.10.1.10.2' });
+          Fnc = k.Rb * k.Rh * k.Fyc * k.Myce / k.Myc;
+          lines.push({ lhs: 'F_{nc}', expr: 'R_{b}R_{h}F_{yc}Δ\\f{M_{yce}}{M_{yc}}', sub: fn(k.Rb, 3) + ' × ' + fn(k.Rh, 3) + ' × ' + fn(k.Fyc, 0) + ' × 1.0 × \\f{' + fx(k.Myce, 0) + '}{' + fx(k.Myc, 0) + '}', res: fx(Fnc, 2), unit: 'ksi', ref: '6.11.8.2.2b' });
+        }
+        lines.push({ lhs: 'φ_{f}F_{nc}', sub: fn(k.phi, 2) + ' × ' + fx(Fnc, 2), res: fx(k.phi * Fnc, 2), unit: 'ksi', ref: '6.11.8.1.1-1' });
+        ok = close(k.phi * Fnc, c.cap);
+      } else if (k.t === 'negFlange') {
+        const F = k.flb, Rb = F.Rb, Rh = F.Rh, Fyc = F.Fyc;
+        lines.push({ note: 'Flange local buckling (6.10.8.2.2)' });
+        lines.push({ lhs: 'λ_{f}', expr: '\\f{b_{fc}}{2t_{fc}}', res: fn(F.lf, 2) });
+        lines.push({ lhs: 'λ_{pf}', expr: '0.38\\f{}{}√(E/F_{yc})'.replace('\\f{}{}', ''), sub: '0.38√(' + ES + '/' + fn(Fyc, 0) + ')', res: fn(F.lpf, 2) });
+        let Fflb;
+        if (F.lf <= F.lpf) { Fflb = Rb * Rh * Fyc; lines.push({ lhs: 'F_{nc(FLB)}', expr: 'R_{b}R_{h}F_{yc}', sub: fn(Rb, 3) + ' × ' + fn(Rh, 3) + ' × ' + fn(Fyc, 0), res: fx(Fflb, 2), unit: 'ksi', ref: '6.10.8.2.2-1' }); }
+        else {
+          lines.push({ lhs: 'λ_{rf}', expr: '0.56√(E/F_{yr})', sub: '0.56√(' + ES + '/' + fn(F.Fyr, 1) + ')', res: fn(F.lrf, 2) });
+          Fflb = (1 - (1 - F.Fyr / (Rh * Fyc)) * (F.lf - F.lpf) / (F.lrf - F.lpf)) * Rb * Rh * Fyc;
+          lines.push({ lhs: 'F_{nc(FLB)}', expr: '[1 − (1 − \\f{F_{yr}}{R_{h}F_{yc}})\\f{λ_{f} − λ_{pf}}{λ_{rf} − λ_{pf}}]R_{b}R_{h}F_{yc}', sub: '[1 − (1 − \\f{' + fn(F.Fyr, 1) + '}{' + fn(Rh, 3) + '×' + fn(Fyc, 0) + '})\\f{' + fn(F.lf, 2) + ' − ' + fn(F.lpf, 2) + '}{' + fn(F.lrf, 2) + ' − ' + fn(F.lpf, 2) + '}]' + fn(Rb, 3) + '×' + fn(Rh, 3) + '×' + fn(Fyc, 0), res: fx(Fflb, 2), unit: 'ksi', ref: '6.10.8.2.2-2' });
+        }
+        let Fltb = Infinity;
+        const lt = k.lt;
+        if (lt) {
+          lines.push({ note: 'Lateral-torsional buckling (6.10.8.2.3): ' + lt.zone + ', ' + lt.method + ', Cb = ' + fn(lt.Cb, 2) + ', Lb = ' + fn(lt.Lb, 1) + ' ft' });
+          const prism = !lt.scaled && /prismatic/i.test(lt.method || '') && !/non/i.test(lt.method || '');
+          if (prism && lt.rt && lt.Lp && lt.Lr) {
+            lines.push({ lhs: 'L_{p}', expr: (k.ed === 9 ? '1.0' : '1.1') + 'r_{t}√(E/F_{yc})', sub: (k.ed === 9 ? '1.0' : '1.1') + ' × ' + fn(lt.rt, 2) + '√(' + ES + '/' + fn(Fyc, 0) + ')', res: fn(lt.Lp, 1), unit: 'in.', ref: '6.10.8.2.3-4' });
+            lines.push({ lhs: 'L_{r}', expr: 'πr_{t}√(E/F_{yr})', sub: 'π × ' + fn(lt.rt, 2) + '√(' + ES + '/' + fn(lt.Fyr, 1) + ')', res: fn(lt.Lr, 1), unit: 'in.', ref: '6.10.8.2.3-5' });
+            const cap = Rb * Rh * Fyc;
+            if (lt.LbIn <= lt.Lp) Fltb = cap;
+            else if (lt.LbIn <= lt.Lr) { Fltb = Math.min(lt.Cb * (1 - (1 - lt.Fyr / (Rh * Fyc)) * (lt.LbIn - lt.Lp) / (lt.Lr - lt.Lp)) * cap, cap); lines.push({ lhs: 'F_{nc(LTB)}', expr: 'C_{b}[1 − (1 − \\f{F_{yr}}{R_{h}F_{yc}})\\f{L_{b} − L_{p}}{L_{r} − L_{p}}]R_{b}R_{h}F_{yc} ≤ R_{b}R_{h}F_{yc}', sub: fn(lt.Cb, 2) + '[1 − (1 − \\f{' + fn(lt.Fyr, 1) + '}{' + fn(Rh, 3) + '×' + fn(Fyc, 0) + '})\\f{' + fn(lt.LbIn, 1) + ' − ' + fn(lt.Lp, 1) + '}{' + fn(lt.Lr, 1) + ' − ' + fn(lt.Lp, 1) + '}]' + fx(cap, 2), res: fx(Fltb, 2), unit: 'ksi', ref: '6.10.8.2.3-2' }); }
+            else { Fltb = Math.min(lt.Cb * Rb * Math.PI ** 2 * ES / (lt.LbIn / lt.rt) ** 2, cap); lines.push({ lhs: 'F_{nc(LTB)}', expr: 'F_{cr} = \\f{C_{b}R_{b}π^{2}E}{(L_{b}/r_{t})^{2}} ≤ R_{b}R_{h}F_{yc}', res: fx(Fltb, 2), unit: 'ksi', ref: '6.10.8.2.3-3' }); }
+            if (!close(Fltb, lt.F, 0.003)) { lines.splice(lines.length - 1, 1); Fltb = lt.F; lines.push({ lhs: 'F_{nc(LTB)}', sub: 'per ' + lt.method, res: fx(Fltb, 2), unit: 'ksi', ref: '6.10.8.2.3' }); }
+          } else { Fltb = lt.F; lines.push({ lhs: 'F_{nc(LTB)}', sub: lt.method + (lt.Fe ? ', F_{e} = ' + fn(lt.Fe, 1) + ' ksi' : ''), res: fx(Fltb, 2), unit: 'ksi', ref: '6.10.8.2.3' }); }
+        }
+        const Fnc = Math.min(Fflb, Fltb);
+        lines.push({ lhs: 'F_{nc}', expr: 'min(F_{nc(FLB)}, F_{nc(LTB)})', res: fx(Fnc, 2), unit: 'ksi' });
+        lines.push({ lhs: 'φ_{f}F_{nc}', sub: fn(k.phi, 2) + ' × ' + fx(Fnc, 2), res: fx(k.phi * Fnc, 2), unit: 'ksi', ref: '6.10.8.1.1-1' });
+        ok = close(k.phi * Fnc, c.cap);
+      } else if (k.t === 'shear' || k.t === 'lfdShear') {
+        const sc = k.sc, D = k.D, tw = k.tw, Fyw = k.Fyw;
+        if (sc.do > 0 && sc.k > 5) lines.push({ lhs: 'k', expr: '5 + \\f{5}{(d_{o}/D)^{2}}', sub: '5 + \\f{5}{(' + fn(sc.do, 1) + '/' + fn(D, 2) + ')^{2}}', res: fn(sc.k, 2), ref: LFD ? '10-115' : '6.10.9.3.2-7' });
+        else lines.push({ lhs: 'k', sub: '5 (unstiffened or panel longer than the limit)', res: '5.00' });
+        lines.push({ lhs: 'D/t_{w}', sub: '\\f{' + fn(D, 2) + '}{' + fn(tw, 4) + '}', res: fn(D / tw, 1) });
+        const r = Math.sqrt(ES * sc.k / Fyw), DT = D / tw;
+        if (!LFD) {
+          if (DT <= 1.12 * r) lines.push({ lhs: 'C', sub: 'D/t_{w} ≤ 1.12√(Ek/F_{yw}) = ' + fn(1.12 * r, 1), res: '1.000', ref: '6.10.9.3.2-4' });
+          else if (DT <= 1.40 * r) lines.push({ lhs: 'C', expr: '\\f{1.12}{D/t_{w}}√(\\f{Ek}{F_{yw}})', sub: '\\f{1.12}{' + fn(DT, 1) + '}√(\\f{' + ES + '×' + fn(sc.k, 2) + '}{' + fn(Fyw, 0) + '})', res: fn(sc.C, 3), ref: '6.10.9.3.2-5' });
+          else lines.push({ lhs: 'C', expr: '\\f{1.57}{(D/t_{w})^{2}}(\\f{Ek}{F_{yw}})', sub: '\\f{1.57}{' + fn(DT, 1) + '^{2}}(\\f{' + ES + '×' + fn(sc.k, 2) + '}{' + fn(Fyw, 0) + '})', res: fn(sc.C, 3), ref: '6.10.9.3.2-6' });
+        } else lines.push({ lhs: 'C', sub: 'Eq. 10-116 with k = ' + fn(sc.k, 2), res: fn(sc.C, 3), ref: '10.48.8.1' });
+        lines.push({ lhs: 'V_{p}', expr: '0.58F_{yw}Dt_{w}', sub: '0.58 × ' + fn(Fyw, 0) + ' × ' + fn(D, 2) + ' × ' + fn(tw, 4), res: fx(sc.Vp, 1), unit: 'k', ref: LFD ? '10-115' : '6.10.9.2-2' });
+        let Vn;
+        if (/interior/.test(sc.type) && !/end/.test(sc.type) && (LFD ? sc.tfa : true) && sc.do > 0) {
+          const a = sc.do / D;
+          const big = !LFD && 2 * D * tw / k.Afl > 2.5;
+          Vn = big ? sc.Vp * (sc.C + 0.87 * (1 - sc.C) / (Math.sqrt(1 + a * a) + a)) : sc.Vp * (sc.C + 0.87 * (1 - sc.C) / Math.sqrt(1 + a * a));
+          lines.push({ lhs: 'V_{n}', expr: big ? 'V_{p}[C + \\f{0.87(1 − C)}{√(1 + (d_{o}/D)^{2}) + d_{o}/D}]' : 'V_{p}[C + \\f{0.87(1 − C)}{√(1 + (d_{o}/D)^{2})}]', sub: fx(sc.Vp, 1) + '[' + fn(sc.C, 3) + ' + \\f{0.87(1 − ' + fn(sc.C, 3) + ')}{√(1 + ' + fn(a, 3) + '^{2})' + (big ? ' + ' + fn(a, 3) : '') + '}]', res: fx(Vn, 1), unit: 'k', ref: LFD ? '10-114' : (big ? '6.10.9.3.2-8' : '6.10.9.3.2-2') });
+        } else { Vn = sc.C * sc.Vp; lines.push({ lhs: 'V_{n}', expr: 'CV_{p}', sub: fn(sc.C, 3) + ' × ' + fx(sc.Vp, 1), res: fx(Vn, 1), unit: 'k', ref: LFD ? '10-113' : (/end/.test(sc.type) ? '6.10.9.3.3-1' : '6.10.9.2-1') }); }
+        if (!close(Vn, sc.Vn, 0.003)) { lines.length = start; lines.push({ lhs: 'V_{n}', sub: sc.type + ', C = ' + fn(sc.C, 3), res: fx(sc.Vn, 1), unit: 'k' }); Vn = sc.Vn; }
+        if (!LFD) { lines.push({ lhs: 'φ_{v}V_{n}', sub: fn(k.phi, 2) + ' × ' + fx(Vn, 1), res: fx(k.phi * Vn, 1), unit: 'k', ref: '6.5.4.2' }); ok = close(k.phi * Vn, c.cap); }
+        else { if (k.capUsed < Vn - 1e-6) lines.push({ lhs: 'V', note: null, sub: 'moment–shear interaction, ' + c.note.split(', ').slice(-1)[0], res: fx(k.capUsed, 1), unit: 'k', ref: '10-118' }); ok = close(k.capUsed, c.cap); }
+      } else if (k.t === 'webBB') {
+        lines.push({ lhs: 'k', expr: '\\f{9}{(D_{c}/D)^{2}}', sub: '\\f{9}{(' + fn(k.Dc, 2) + '/' + fn(k.D, 2) + ')^{2}}', res: fn(k.k, 2), ref: '6.10.1.9.1-2' });
+        const F0 = 0.9 * ES * k.k / (k.D / k.tw) ** 2, cap = Math.min(F0, k.Rh * k.Fyc, k.Fyw / 0.7);
+        lines.push({ lhs: 'F_{crw}', expr: '\\f{0.9Ek}{(D/t_{w})^{2}} ≤ min(R_{h}F_{yc}, F_{yw}/0.7)', sub: '\\f{0.9 × ' + ES + ' × ' + fn(k.k, 2) + '}{(' + fn(k.D, 2) + '/' + fn(k.tw, 4) + ')^{2}} = ' + fx(F0, 2) + ' ≤ min(' + fx(k.Rh * k.Fyc, 2) + ', ' + fx(k.Fyw / 0.7, 2) + ')', res: fx(cap, 2), unit: 'ksi', ref: '6.10.1.9.1-1' });
+        if (k.phi !== 1) lines.push({ lhs: 'φ_{f}F_{crw}', sub: fn(k.phi, 2) + ' × ' + fx(cap, 2), res: fx(k.phi * cap, 2), unit: 'ksi', ref: c.art });
+        ok = close(k.phi * cap, c.cap);
+      } else if (k.t === 'webShearFat') {
+        const sc = k.sc, D = k.D, tw = k.tw, DT = D / tw, r = Math.sqrt(ES * sc.k / k.Fyw);
+        lines.push({ lhs: 'k', expr: '5 + \\f{5}{(d_{o}/D)^{2}}', sub: '5 + \\f{5}{(' + fn(sc.do, 1) + '/' + fn(D, 2) + ')^{2}}', res: fn(sc.k, 2), ref: '6.10.9.3.2-7' });
+        lines.push({ lhs: 'D/t_{w}', sub: '\\f{' + fn(D, 2) + '}{' + fn(tw, 4) + '}', res: fn(DT, 1) });
+        if (DT <= 1.12 * r) lines.push({ lhs: 'C', sub: 'D/t_{w} ≤ 1.12√(Ek/F_{yw}) = ' + fn(1.12 * r, 1), res: '1.000', ref: '6.10.9.3.2-4' });
+        else if (DT <= 1.40 * r) lines.push({ lhs: 'C', expr: '\\f{1.12}{D/t_{w}}√(\\f{Ek}{F_{yw}})', sub: '\\f{1.12}{' + fn(DT, 1) + '}√(\\f{' + ES + '×' + fn(sc.k, 2) + '}{' + fn(k.Fyw, 0) + '})', res: fn(sc.C, 3), ref: '6.10.9.3.2-5' });
+        else lines.push({ lhs: 'C', expr: '\\f{1.57}{(D/t_{w})^{2}}(\\f{Ek}{F_{yw}})', sub: '\\f{1.57}{' + fn(DT, 1) + '^{2}}(\\f{' + ES + '×' + fn(sc.k, 2) + '}{' + fn(k.Fyw, 0) + '})', res: fn(sc.C, 3), ref: '6.10.9.3.2-6' });
+        lines.push({ lhs: 'V_{p}', expr: '0.58F_{yw}Dt_{w}', sub: '0.58 × ' + fn(k.Fyw, 0) + ' × ' + fn(D, 2) + ' × ' + fn(tw, 4), res: fx(sc.Vp, 1), unit: 'k', ref: '6.10.9.3.2-3' });
+        lines.push({ lhs: 'V_{cr}', expr: 'CV_{p}', sub: fn(sc.C, 3) + ' × ' + fx(sc.Vp, 1), res: fx(sc.C * sc.Vp, 1), unit: 'k', ref: '6.10.5.3-1' });
+        ok = close(sc.C * sc.Vp, c.cap);
+      } else if (k.t === 'svc2') {
+        lines.push({ lhs: 'F_{lim}', expr: '0.95R_{h}F_{yf}', sub: '0.95 × ' + fn(k.Rh, 3) + ' × ' + fn(k.Fyf, 0), res: fx(0.95 * k.Rh * k.Fyf, 2), unit: 'ksi', ref: c.art });
+        ok = close(0.95 * k.Rh * k.Fyf, c.cap);
+      } else if (k.t === 'fatigue') {
+        if (k.combo === 'Fatigue I') { lines.push({ lhs: '(ΔF)_{n}', expr: '(ΔF)_{TH}', sub: 'Category ' + k.cat + ', infinite life', res: fx(k.TH, 2), unit: 'ksi', ref: '6.6.1.2.5-1' }); ok = close(k.TH, c.cap); }
+        else {
+          lines.push({ lhs: 'N', expr: '365 × 75 × n × (ADTT)_{SL}', sub: '365 × 75 × ' + fn(k.n, 1) + ' × ' + fx(k.adtt, 0), res: k.N.toExponential(3) });
+          const v = Math.pow(k.A / k.N, 1 / 3);
+          lines.push({ lhs: '(ΔF)_{n}', expr: '(\\f{A}{N})^{1/3}', sub: '(\\f{' + k.A.toExponential(2) + '}{' + k.N.toExponential(3) + '})^{1/3}', res: fx(v, 2), unit: 'ksi', ref: '6.6.1.2.5-2' });
+          ok = close(v, c.cap);
+        }
+      } else if (k.lfd === 'posCompact') {
+        lines.push({ lhs: 'D_{p}/D′', sub: '\\f{' + fn(k.Dp, 2) + '}{' + fn(k.Dprime, 2) + '}', res: fn(k.DpR, 2) });
+        let Mu;
+        if (k.DpR <= 1) { Mu = k.Mp; lines.push({ lhs: 'M_{u}', expr: 'M_{p}', res: fx(Mu, 0), unit: 'k-ft', ref: '10-129b' }); }
+        else { Mu = (5 * k.Mp - 0.85 * k.My) / 4 + (0.85 * k.My - k.Mp) / 4 * k.DpR; lines.push({ lhs: 'M_{u}', expr: '\\f{5M_{p} − 0.85M_{y}}{4} + \\f{0.85M_{y} − M_{p}}{4}·\\f{D_{p}}{D′}', sub: '\\f{5×' + fx(k.Mp, 0) + ' − 0.85×' + fx(k.My, 0) + '}{4} + \\f{0.85×' + fx(k.My, 0) + ' − ' + fx(k.Mp, 0) + '}{4}×' + fn(k.DpR, 3), res: fx(Mu, 0), unit: 'k-ft', ref: '10-129c' }); }
+        ok = close(Mu, c.cap);
+      } else if (k.t === 'lfdOverload') {
+        lines.push({ lhs: 'F_{lim}', expr: fn(k.lim, 2) + 'F_{y}', sub: fn(k.lim, 2) + ' × ' + fn(k.Fyf, 0), res: fx(k.lim * k.Fyf, 2), unit: 'ksi', ref: c.art });
+        ok = close(k.lim * k.Fyf, c.cap);
+      } else if (k.t === 'lfdFatigue') {
+        lines.push({ lhs: 'F_{sr}', sub: 'Table 10.3.1A, Category ' + k.cat + ', ' + k.cycles + ' cycles (Case ' + k.fCase + ')', res: fx(k.Fsr, 2), unit: 'ksi', ref: '10.3.1' });
+        ok = close(k.Fsr, c.cap);
+      }
+    } catch (e) { ok = false; }
+    if (!ok) { lines.length = start; lines.push({ lhs: u === 'k-ft' ? 'φM_{n}' : u === 'k' ? 'φV_{n}' : u === 'ksi' ? 'F_{n}' : 'Limit', sub: c.note || 'Article ' + c.art, res: fx(c.cap, dU(u)), unit: u, ref: c.art }); }
+  }
+
+  function ratingLines(c, res, model, lines) {
+    if (c.permit && c.ratingP && isFinite(c.RFp) && res.permit) {
+      const r = c.ratingP, P = res.permit.opts, F = model.factors || {}, phiC = +F.phiC || 1, phiS = +F.phiS || 1;
+      const pf = r.service ? 1 : (c.cat === 'shear' ? Math.max(0.85, phiC) : Math.max(0.85, phiC * phiS));
+      const gDC = r.service ? 1 : +F.gDC, gDW = r.service ? 1 : +F.gDW, g = r.service ? 1.0 : P.gR;
+      const num = pf * r.cap - gDC * r.DC - gDW * r.DW, RF = num / (g * r.L);
+      lines.push({ note: 'Permit load rating at this check (MBE 6A.4.5): ' + P.typeName + (P.single ? ', one lane loaded, multiple presence removed' : '') + (P.crawl ? ', crawl speed (no impact)' : '') });
+      if (close(RF, c.RFp, 0.003)) lines.push({ lhs: 'RF_{permit}', expr: '\\f{' + (r.service ? 'f_{R}' : 'φ_{c}φ_{s}φR_{n}') + ' − γ_{DC}DC − γ_{DW}DW}{γ_{L}(LL+IM)}', sub: '\\f{' + (r.service ? '' : fn(pf, 2) + '×') + sigF(r.cap) + ' − ' + fn(gDC, 2) + '(' + sigF(r.DC) + ') − ' + fn(gDW, 2) + '(' + sigF(r.DW) + ')}{' + fn(g, 2) + '(' + sigF(r.L) + ')}', res: fn(RF, 2), ref: r.service ? 'MBE 6A.6.4.2.2' : 'MBE Table 6A.4.5.4.2a-1' });
+      else lines.push({ lhs: 'RF_{permit}', res: frf(c.RFp, c.rfNAp), ref: 'MBE 6A.4.5' });
+      return;
+    }
+    if (!c.rating || !isFinite(c.RFinv)) return;
+    const r = c.rating, LFD = res.ed === 'LFD';
+    lines.push({ note: 'Load rating at this check' });
+    if (!LFD) {
+      const F = model.factors || {}, phiC = +F.phiC || 1, phiS = +F.phiS || 1;
+      const pf = r.service ? 1 : (c.cat === 'shear' ? Math.max(0.85, phiC) : Math.max(0.85, phiC * phiS));
+      const gDC = r.service ? 1 : +F.gDC, gDW = r.service ? 1 : +F.gDW, gi = r.service ? +F.gSinv : +F.gLinv, go = r.service ? +F.gSop : +F.gLop;
+      const num = pf * r.cap - gDC * r.DC - gDW * r.DW;
+      const RFi = num / (gi * r.L), RFo = num / (go * r.L);
+      const capT = r.service ? 'f_{R}' : (c.cat === 'shear' ? 'φ_{c}φR_{n}' : 'φ_{c}φ_{s}φR_{n}');
+      const expr = '\\f{' + capT + ' − γ_{DC}DC − γ_{DW}DW}{γ_{LL}(LL+IM)}';
+      if (close(RFi, c.RFinv, 0.003)) {
+        lines.push({ lhs: 'RF_{inv}', expr, sub: '\\f{' + (r.service ? '' : fn(pf, 2) + '×') + sigF(r.cap) + ' − ' + fn(gDC, 2) + '(' + sigF(r.DC) + ') − ' + fn(gDW, 2) + '(' + sigF(r.DW) + ')}{' + fn(gi, 2) + '(' + sigF(r.L) + ')}', res: fn(RFi, 2), ref: 'MBE 6A.4.2.1-1' });
+        lines.push({ lhs: 'RF_{op}', sub: 'RF_{inv} × \\f{' + fn(gi, 2) + '}{' + fn(go, 2) + '}', res: fn(RFo, 2) });
+      } else lines.push({ lhs: 'RF', sub: 'inventory / operating', res: frf(c.RFinv, c.rfNA) + ' / ' + frf(c.RFop, c.rfNA), ref: 'MBE 6A.4.2.1' });
+    } else {
+      const AF = res.rating.factors, A1 = r.service ? +AF.A1s : +AF.A1, A2i = r.service ? +AF.A2sinv : +AF.A2inv, A2o = r.service ? +AF.A2sop : +AF.A2op;
+      const RFi = (r.cap - A1 * r.D) / (A2i * r.L), RFo = (r.cap - A1 * r.D) / (A2o * r.L);
+      if (close(RFi, c.RFinv, 0.003)) {
+        lines.push({ lhs: 'RF_{inv}', expr: '\\f{C − A_{1}D}{A_{2}L(1 + I)}', sub: '\\f{' + sigF(r.cap) + ' − ' + fn(A1, 2) + '(' + sigF(r.D) + ')}{' + fn(A2i, 2) + '(' + sigF(r.L) + ')}', res: fn(RFi, 2), ref: 'MBE 6B.4.1-1' });
+        lines.push({ lhs: 'RF_{op}', sub: '\\f{' + sigF(r.cap) + ' − ' + fn(A1, 2) + '(' + sigF(r.D) + ')}{' + fn(A2o, 2) + '(' + sigF(r.L) + ')}', res: fn(RFo, 2) });
+        const T = res.rating.tons; if (T) lines.push({ lhs: 'Rating', sub: res.rating.vehicle + ' × RF', res: fx(RFi * T, 1) + ' / ' + fx(RFo * T, 1), unit: 'tons (inv./op.)' });
+      } else lines.push({ lhs: 'RF', sub: 'inventory / operating' + (c.mvCase ? ', moment–shear interaction case ' + c.mvCase : ''), res: frf(c.RFinv, c.rfNA) + ' / ' + frf(c.RFop, c.rfNA), ref: 'MBE 6B.4.1' });
+    }
+  }
+
+  function worksheet(F, title, c, res, model) {
+    F.need(150);
+    F.h3(title + ' — ' + c.lim + ', ' + c.what);
+    F.para('Point ' + c.label + ', x = ' + fx(c.x, 2) + ' ft, section ' + c.sec + '. Article ' + c.art + (c.note ? '. ' + c.note + (/\.$/.test(c.note) ? '' : '.') : '.'), { size: 8.2, color: F.pal.mute });
+    const L = [];
+    L.push({ note: 'Demand' }); demandLines(c, res, L);
+    L.push({ note: 'Resistance' }); capacityLines(c, res, L);
+    const ok = c.ratio <= 1 + 1e-9;
+    L.push({ lhs: 'Ratio', expr: '\\f{demand}{resistance}', sub: '\\f{' + fx(c.demand, dU(c.unit)) + '}{' + fx(c.cap, dU(c.unit)) + '}', res: fr(c.ratio) + (ok ? '  ≤ 1.0  OK' : '  > 1.0  NOT SATISFIED'), color: ok ? null : RED });
+    ratingLines(c, res, model, L);
+    F.math(L);
+  }
+
+  const isComp = (m, r) => (r.ed === 'LFD' ? !(m.lfd && m.lfd.composite === false) : +((m.deck || {}).ts) > 0);
+  // ---------------- figures ----------------
+  function elevation(F, model, res, gov) {
+    const L = res.supX[res.supX.length - 1];
+    F.box(118, (d, x0, y0, w) => {
+      const X = v => x0 + 10 + (w - 20) * v / L, yG = y0 + 46;
+      // section ranges
+      const cols = [[0.83, 0.88, 0.92], [0.92, 0.88, 0.80], [0.85, 0.91, 0.85], [0.90, 0.86, 0.92], [0.93, 0.92, 0.82]];
+      const ids = [...new Set((model.ranges || []).map(r => r.sec))];
+      (model.ranges || []).forEach(r => { const ci = ids.indexOf(r.sec) % cols.length; d.rect(X(+r.from), yG - 9, X(+r.to) - X(+r.from), 9, { fill: cols[ci], stroke: [0.6, 0.62, 0.65], w: 0.3 }); const mid = (X(+r.from) + X(+r.to)) / 2; if (X(+r.to) - X(+r.from) > 12) d.text(mid - W.textWidth(r.sec, 'B', 6.5) / 2, yG - 2.2, r.sec, { font: 'B', size: 6.5, color: [0.2, 0.22, 0.25] }); });
+      d.line(X(0), yG, X(L), yG, { w: 1.6, color: [0.15, 0.17, 0.2] });
+      res.supX.forEach((s, k) => { const xx = X(s); d.poly([[xx, yG], [xx - 5, yG + 9], [xx + 5, yG + 9]], { fill: [0.3, 0.32, 0.35], close: true }); d.text(xx - 3, yG + 19, k === 0 || k === res.supX.length - 1 ? 'A' + (k ? 2 : 1) : 'P' + k, { size: 6.5, color: [0.35, 0.38, 0.4] }); });
+      (res.braces || []).forEach(b => d.line(X(b), yG + 2, X(b), yG + 5, { w: 0.6, color: [0.45, 0.47, 0.5] }));
+      for (let k = 0; k < res.supX.length - 1; k++) { const a = res.supX[k], b = res.supX[k + 1], t = fx(b - a, 2) + ' ft'; d.line(X(a), yG + 26, X(b), yG + 26, { w: 0.4, color: [0.5, 0.52, 0.55] }); d.line(X(a), yG + 23, X(a), yG + 29, { w: 0.4, color: [0.5, 0.52, 0.55] }); d.line(X(b), yG + 23, X(b), yG + 29, { w: 0.4, color: [0.5, 0.52, 0.55] }); d.text((X(a) + X(b)) / 2 - W.textWidth(t, 'R', 7) / 2, yG + 35, t, { size: 7, color: [0.25, 0.27, 0.3] }); }
+      // governing markers
+      gov.forEach((g, k) => { if (!g || g.x == null) return; const xx = X(g.x); d.line(xx, yG - 12, xx, yG - 26 - (k % 2) * 9, { w: 0.5, color: F.pal.accent }); d.circle(xx, yG - 12, 1.6, { fill: F.pal.accent }); d.text(xx + 2, yG - 27 - (k % 2) * 9, g.tag, { font: 'B', size: 6.5, color: F.pal.accent }); });
+      d.text(x0 + 10, y0 + 110, 'Elevation (not to scale vertically). Shaded bands: sections; ticks below the girder: cross-frames; markers: governing locations.', { size: 6.8, color: F.pal.mute });
+    });
+  }
+  // one tub drawn to scale: inclined webs, two top flanges, box flange and the deck over the tub
+  function tubSection(F, model, res, t, title) {
+    const g = t.P.g, dk = model.deck || {}, ts = +dk.ts || 0, hW = t.P.hWeb || 0, beff = +dk.beff || 0;
+    const T = model.tub || {}, wTop = +T.w > 0 ? +T.w : g.bb - 2 * g.ext - g.tw + 2 * g.Dv / g.S; // top flange spacing, c/c
+    const Hin = g.yw1 + hW + ts, Win = Math.max(wTop + g.bt, g.bb, Math.min(beff, 1.6 * (wTop + g.bt)));
+    const sc = Math.min(171 / Hin, 250 / Win), boxH = Math.max(120, Hin * sc + 44);
+    F.box(boxH, (d, x0, y0, w) => {
+      const cx = x0 + 150, base = y0 + boxH - 22, Y = v => base - v * sc, X = v => cx + v * sc;
+      const steel = [0.55, 0.60, 0.66], conc = [0.86, 0.87, 0.86], ink = [0.25, 0.27, 0.3];
+      if (ts) { const bw = Math.min(beff, Win); d.rect(X(-bw / 2), Y(g.yw1 + hW + ts), bw * sc, ts * sc, { fill: conc, stroke: [0.45, 0.47, 0.5], w: 0.4 }); }
+      const R = (cxIn, b, y0_, h) => d.rect(X(cxIn - b / 2), Y(y0_ + h), b * sc, Math.max(h * sc, 0.6), { fill: steel, stroke: ink, w: 0.4 });
+      R(0, g.bb, 0, g.tb);
+      const xb = g.bb / 2 - g.ext - g.tw / 2, xt = wTop / 2, twh = g.tw / g.cosT / 2;
+      [-1, 1].forEach(sg => {
+        d.poly([[X(sg * (xb - twh)), Y(g.tb)], [X(sg * (xb + twh)), Y(g.tb)], [X(sg * (xt + twh)), Y(g.yw1)], [X(sg * (xt - twh)), Y(g.yw1)]], { fill: steel, stroke: ink, w: 0.4, close: true });
+        R(sg * xt, g.bt, g.yw1, g.tt);
+      });
+      const labs = []; const lab = (s, xx, yy) => labs.push([s, xx, yy]);
+      const xr = Math.max(cx + 132, X(Math.min(beff || 0, Win) / 2) + 14, X(xt + g.bt / 2) + 14);
+      lab('Top flanges 2 × ' + fn(g.bt, 3) + ' × ' + fn(g.tt, 3) + ' in.', xr, Y(g.yw1 + g.tt / 2) + 2);
+      lab('Webs 2 × ' + fn(g.D, 3) + ' × ' + fn(g.tw, 4) + ' in., slope 1 : ' + fn(g.S, 2), xr, Y(g.yw0 + g.Dv / 2) + 2);
+      lab('Box flange ' + fn(g.bb, 3) + ' × ' + fn(g.tb, 3) + ' in.', xr, Y(g.tb / 2) + 2);
+      if (ts) lab('Deck ' + fn(ts, 2) + ' in., soffit ' + fn(hW, 2) + ' in. above the webs, b_eff ' + fn(beff, 1) + ' in.' + (beff > Win + 1e-6 ? ' (drawn shortened)' : '') + ', n = ' + (dk.n || '—'), xr, Y(g.yw1 + hW + ts / 2) + 2);
+      lab('Fy: top ' + t.P.F.t + ', web ' + t.P.F.w + ', bottom ' + t.P.F.b + ' ksi', xr, Y(g.d * 0.25));
+      labs.sort((p, q) => p[2] - q[2]); for (let k = 1; k < labs.length; k++) if (labs[k][2] < labs[k - 1][2] + 9) labs[k][2] = labs[k - 1][2] + 9;
+      labs.forEach(([s, xx, yy]) => d.text(xx, yy, s, { size: 7, color: [0.2, 0.22, 0.25] }));
+      d.text(x0, y0 + 10, title + ': section ' + t.id + (t.name ? ' (' + t.name + ')' : '') + ', one tub, drawn to scale', { font: 'B', size: 8, color: F.pal.ink });
+    });
+  }
+  function crossSection(F, model, res, secId, title) {
+    const t = res.secTable.find(q => q.id === secId) || res.secTable[0]; if (!t) return;
+    if (res.kind === 'tub') return tubSection(F, model, res, t, title);
+    const g = t.P.g, dk = model.deck || {}, comp = isComp(model, res);
+    const ts = comp ? +dk.ts || 0 : 0, hn = comp ? (+(model.sections.find(s => s.id === t.id) || {}).haunch || +dk.haunch || 0) : 0;
+    const beff = comp ? +dk.beff || 0 : 0;
+    const Hin = g.d + hn + ts, Win = Math.max(g.bt, g.bb, comp ? Math.min(beff, 3.2 * Math.max(g.bt, g.bb)) : 0);
+    const sc = Math.min(171 / Hin, 250 / Win), boxH = Math.max(120, Hin * sc + 44);
+    F.box(boxH, (d, x0, y0, w) => {
+      const cx = x0 + 150, base = y0 + boxH - 22, Y = v => base - v * sc, X = v => cx + v * sc;
+      const steel = [0.55, 0.60, 0.66], conc = [0.86, 0.87, 0.86];
+      if (comp && ts) { const bw = Math.min(beff, Win); d.rect(X(-bw / 2), Y(g.d + hn + ts), bw * sc, ts * sc, { fill: conc, stroke: [0.45, 0.47, 0.5], w: 0.4 }); if (hn) d.rect(X(-g.bt / 2), Y(g.d + hn), g.bt * sc, hn * sc, { fill: conc, stroke: [0.6, 0.62, 0.65], w: 0.3 }); }
+      const R = (b, y0_, h) => d.rect(X(-b / 2), Y(y0_ + h), b * sc, Math.max(h * sc, 0.6), { fill: steel, stroke: [0.25, 0.27, 0.3], w: 0.4 });
+      if (g.cbT > 0) R(g.cbB, 0, g.cbT);
+      R(g.bb, g.cbT || 0, g.tb); R(g.tw, g.yw0, g.D); R(g.bt, g.yw1, g.tt);
+      if (g.ctT > 0) R(g.ctB, g.yw1 + g.tt, g.ctT);
+      const labs = []; const lab = (s, xx, yy) => labs.push([s, xx, yy]);
+      const xr = Math.max(cx + 132, X(Math.min(beff || 0, Win) / 2) + 14, X(Math.max(g.bt, g.bb) / 2) + 14);
+      lab('Top flange ' + fn(g.bt, 3) + ' × ' + fn(g.tt, 3) + ' in.', xr, Y(g.yw1 + g.tt / 2) + 2);
+      lab('Web ' + fn(g.D, 3) + ' × ' + fn(g.tw, 4) + ' in.', xr, Y(g.yw0 + g.D / 2) + 2);
+      lab('Bottom flange ' + fn(g.bb, 3) + ' × ' + fn(g.tb, 3) + ' in.', xr, Y(g.yw0 - g.tb / 2) + 2);
+      if (g.cbT > 0) lab('Bottom cover plate ' + fn(g.cbB, 3) + ' × ' + fn(g.cbT, 3) + ' in.', xr, Y(0) + 10);
+      if (comp && ts) lab('Deck ' + fn(ts, 2) + ' in., haunch ' + fn(hn, 2) + ' in., b_eff ' + fn(beff, 1) + ' in.' + (beff > Win + 1e-6 ? ' (drawn shortened)' : '') + ', n = ' + (dk.n || '—'), xr, Y(g.d + hn + ts / 2) + 2);
+      lab('Fy: top ' + t.P.F.t + ', web ' + t.P.F.w + ', bottom ' + t.P.F.b + ' ksi', xr, Y(g.d * 0.25));
+      labs.sort((p, q) => p[2] - q[2]); for (let k = 1; k < labs.length; k++) if (labs[k][2] < labs[k - 1][2] + 9) labs[k][2] = labs[k - 1][2] + 9;
+      labs.forEach(([s, xx, yy]) => d.text(xx, yy, s, { size: 7, color: [0.2, 0.22, 0.25] }));
+      d.text(x0, y0 + 10, title + ': section ' + t.id + (t.name ? ' (' + t.name + ')' : '') + ', drawn to scale', { font: 'B', size: 8, color: F.pal.ink });
+    });
+  }
+
+  // ---------------- report ----------------
+  async function build(model, res, opts) {
+    const mode = opts.mode || 'summary', meta = opts.meta || {}, LFD = res.ed === 'LFD';
+    const edName = opts.edName || (LFD ? 'AASHTO Standard Specifications, 17th Edition (2002), LFD / LFR' : res.ed === 9 ? 'AASHTO LRFD 9th Edition (2020) / MBE LRFR' : 'AASHTO LRFD 10th Edition (2024) / MBE LRFR');
+    const inputId = hash(JSON.stringify(Object.assign({}, model, { report: undefined })));
+    const now = new Date(), stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const titleTxt = mode === 'summary' ? 'Calculation summary' : mode === 'all' ? 'Comprehensive calculation — all analysis points' : 'Comprehensive calculation — tenth points and governing locations';
+    const structure = meta.structure || '(structure number)';
+    const F = new W.Flow({
+      info: { title: 'Steel line girder ' + titleTxt.toLowerCase() + ' — ' + structure, subject: edName, creator: 'Bridge SE Steel Line Girder Check ' + (opts.appVersion || '') },
+      header: (d, i, n, m) => { if (i === 1) return; d.text(m.l, 34, 'Steel Line Girder Check · ' + structure, { font: 'B', size: 8, color: F.pal.ink }); const s = titleTxt; d.text(d.W - m.r - W.textWidth(s, 'R', 8), 34, s, { size: 8, color: F.pal.mute }); d.line(m.l, 40, d.W - m.r, 40, { w: 0.4, color: F.pal.rule }); },
+      footer: (d, i, n, m) => { const y = d.H - 30; d.line(m.l, y - 9, d.W - m.r, y - 9, { w: 0.4, color: F.pal.rule }); d.text(m.l, y, 'Bridge SE Steel Line Girder Check ' + (opts.appVersion || '') + ' · ' + edName, { size: 6.6, color: F.pal.mute }); d.text(m.l, y + 8.5, 'Generated ' + stamp + ' · input ID ' + inputId, { size: 6.6, color: F.pal.mute }); const s = 'Designed by ' + (meta.designedBy || '______') + '    Checked by ______'; d.text(d.W - m.r - W.textWidth(s, 'R', 6.8), y, s, { size: 6.8, color: F.pal.mute }); const t = 'Sheet ' + i + ' of ' + n; d.text(d.W - m.r - W.textWidth(t, 'B', 6.8), y + 8.5, t, { font: 'B', size: 6.8, color: F.pal.ink }); }
+    });
+    // ---- title block
+    F.doc.text(F.m.l, 50, 'STEEL LINE GIRDER CHECK', { font: 'B', size: 9, color: F.pal.accent });
+    F.y = 58; F.doc.text(F.m.l, F.y + 18, titleTxt, { font: 'B', size: 17, color: F.pal.ink }); F.y += 30;
+    F.doc.text(F.m.l, F.y + 9, edName, { size: 9, color: F.pal.mute }); F.y += 18;
+    const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || model.name || ''], ['Location', meta.location || ''], ['Girder', meta.girder || ((res.kind === 'tub' ? 'Tub girder' : (model.df && model.df.girder === 'exterior' ? 'Exterior' : 'Interior') + ' girder') + ', ' + model.spans.length + ' span' + (model.spans.length > 1 ? 's' : ''))]];
+    F.box(4 * 20 + 46, (d, x0, y0, w) => {
+      const rowH = 20, lw = 120;
+      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: F.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: F.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: F.pal.mute }); { // long names: smaller type down to 7 pt, then shortened with an ellipsis, so the text stays in its cell
+        const room = w - lw - 14; let t = String(r[1]), sz = 9.5;
+        while (sz > 7 && W.textWidth(t, 'B', sz) > room) sz -= 0.25;
+        if (W.textWidth(t, 'B', sz) > room) { while (t.length > 1 && W.textWidth(t + '…', 'B', sz) > room) t = t.slice(0, -1); t = t.trimEnd() + '…'; }
+        d.text(x0 + lw + 8, y + 13.5, t, { font: 'B', size: sz, color: F.pal.ink }); } });
+      const y = y0 + 4 * rowH + 6, half = w / 2 - 4;
+      [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
+        d.rect(x, y, half, 36, { stroke: F.pal.mute, w: 0.6 });
+        d.text(x + 6, y + 12, k, { size: 7.5, color: F.pal.mute }); d.text(x + half - 92, y + 12, 'Date', { size: 7.5, color: F.pal.mute });
+        d.text(x + 6, y + 29, v, { font: 'B', size: 11, color: F.pal.ink }); d.text(x + half - 92, y + 29, dt, { size: 9.5, color: F.pal.ink });
+        if (!v) { d.line(x + 6, y + 31, x + half - 100, y + 31, { w: 0.4, color: F.pal.rule }); d.line(x + half - 92, y + 31, x + half - 8, y + 31, { w: 0.4, color: F.pal.rule }); }
+      });
+    });
+    F.space(10);
+    // ---- headline results
+    const S = res.summary, CATS = LFD ? [['flexure', 'Flexure, Group I'], ['shear', 'Shear, Group I'], ['service', 'Overload (10.57)'], ['fatigue', 'Fatigue (10.3)'], ['construct', 'Constructibility (10.61)'], ['ductility', 'Ductility'], ['deflection', 'Live-load deflection'], ['proportions', 'Proportion limits']]
+      : [['flexure', 'Flexure'], ['shear', 'Shear'], ['service', 'Service II'], ['fatigue', 'Fatigue'], ['construct', 'Constructibility'], ['ductility', 'Ductility'], ['deflection', res.deflection && res.deflection[0] && res.deflection[0].kind === 'PL' ? 'Pedestrian deflection' : 'Live-load deflection'], ['proportions', 'Proportion limits']].concat(res.vibration ? [['vibration', 'Vibration']] : []);
+    const rows = [];
+    CATS.forEach(([k, lbl]) => {
+      if (k === 'vibration') { const v = res.vibration; const arr = [lbl, 'Vertical frequency (dead load only), ' + fn(v.Ng, 0) + ' girders, W = ' + fx(v.W, 0) + ' k', '—', '—', fn(v.f, 2) + ' Hz', v.f > 3 ? '> 3.0 Hz' : 'W ≥ ' + fx(v.Wreq, 0) + ' k', { t: fr(v.ratio), f: 'B', color: rCol(v.ratio) }, 'Guide Spec 6']; arr.ratio = v.ratio; rows.push(arr); return; }
+      const s = S[k]; if (!s) return; const push = arr => { arr.ratio = s.ratio; rows.push(arr); };
+      if (k === 'deflection') { push([lbl, 'Span ' + s.span + (s.kind === 'PL' ? ', pedestrian load, L/360' : ''), '—', '—', fx(s.delta, 3) + ' in.', fx(s.limit, 3) + ' in.', { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, LFD ? '10.6.2' : s.kind === 'PL' ? 'Guide Spec 5' : '2.5.2.6.2']); return; }
+      if (k === 'proportions') { const it = s.items.reduce((a, q) => (q.ratio > a.ratio ? q : a)); push([lbl, it.what, '—', s.sec, typeof it.val === 'number' ? fx(it.val, 2) : it.val, typeof it.lim === 'number' ? fx(it.lim, 2) : it.lim, { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, it.art]); return; }
+      push([lbl, s.lim + (s.permit ? ' (permit)' : '') + ': ' + s.what, 'Pt ' + s.label + ', ' + fx(s.x, 2), s.sec, fx(s.demand, dU(s.unit)) + ' ' + s.unit, fx(s.cap, dU(s.unit)) + ' ' + s.unit, { t: fr(s.ratio), f: 'B', color: rCol(s.ratio) }, s.art]);
+    });
+    const nOver = rows.filter(r => r.ratio > 1 + 1e-9).length;
+    const worstR = rows.reduce((a, r) => Math.max(a, r.ratio), 0);
+    if (rows.some(r => Number.isNaN(r.ratio))) throw new Error('A governing ratio is not a number; the report was not produced.');
+    F.h2('Results');
+    const hiTxt = worstR === Infinity ? 'unbounded (∞)' : fn(worstR, 2);
+    const scOut = res.kind === 'tub' && res.tub.scope && !res.tub.scope.ok;
+    if (scOut) F.para('Outside the scope of the tub girder method (' + res.tub.scope.why.join('; ') + '). The ratios and rating factors in this report are for diagnosis only; a refined analysis is needed.', { font: 'B', size: 10, color: RED });
+    F.para(nOver ? nOver + ' of ' + rows.length + ' criteria exceed 1.0; highest ratio ' + hiTxt + '.' : (scOut ? 'No criterion exceeds 1.0; highest ratio ' : res.pedOpen ? 'Gravity checks shown are satisfied; highest ratio ' : 'All design criteria satisfied; highest ratio ') + hiTxt + '.', { font: 'B', size: 10, color: nOver || scOut ? RED : GRN });
+    if (res.pedOpen) F.para('Not checked here; a separate analysis is needed: ' + res.pedOpen.join('; ') + '.', { size: 9, color: RED });
+    F.table([{ h: 'Criterion', w: 2.1 }, { h: 'Governing check', w: 3.4 }, { h: 'Location, ft', w: 1.2 }, { h: 'Sec', w: 0.6 }, { h: 'Demand', w: 1.3, a: 'r' }, { h: 'Capacity', w: 1.3, a: 'r' }, { h: 'Ratio', w: 0.8, a: 'r' }, { h: 'Article', w: 1.2 }], rows);
+    // rating
+    const R = res.rating || {};
+    if (R.strength || res.permit) {
+      const rr = [], RL = res.ratingLoad, PM = res.permit;
+      const row = (lbl, c, key, tons) => { if (!c) return; rr.push([lbl, c.what, 'Pt ' + c.label + ', ' + fx(c.x, 2), c.sec, { t: frf(c[key]), f: 'B', color: rfCol(c[key]) }, tons ? fx(c[key] * tons, 1) : '—']); };
+      if (LFD) { row('Inventory, Group I', R.strength, 'RFinv', R.tons); row('Operating, Group I', R.strengthOp, 'RFop', R.tons); row('Inventory, overload', R.service, 'RFinv', R.tons); row('Operating, overload', R.serviceOp, 'RFop', R.tons); }
+      else {
+        const T = RL && RL.tons;
+        row('Inventory, Strength I', R.strength, 'RFinv', T); row('Operating, Strength I', R.strengthOp, 'RFop', T); row('Inventory, Service II', R.service, 'RFinv', T); row('Operating, Service II', R.serviceOp, 'RFop', T);
+        if (PM) { row('Permit, Strength II', PM.strength, 'RFp'); row('Permit, Service II', PM.service, 'RFp'); }
+      }
+      const hasT = LFD || (RL && RL.tons);
+      if (!LFD && !hasT) rr.forEach(r => r.length = 5);
+      F.h3(LFD ? 'Load factor rating (MBE 6B), ' + R.vehicle + ', ' + fx(R.tons, 0) + ' tons'
+        : (res.live && res.live.permit === 'only' ? 'Permit load rating (MBE 6A.4.5)' : (res.pedOpen ? 'Informational capacity estimates (MBE LRFR factors applied to a pedestrian bridge, an adaptation), ' : '') + (RL ? 'Load rating (MBE LRFR factors), ' + RL.name : 'Design load rating (MBE LRFR), HL-93') + (PM ? '; permit rating (MBE 6A.4.5)' : '')));
+      F.table([{ h: 'Rating level', w: 2 }, { h: 'Governing check', w: 3.6 }, { h: 'Location, ft', w: 1.3 }, { h: 'Sec', w: 0.6 }, { h: 'RF', w: 0.8, a: 'r' }].concat(hasT ? [{ h: 'Tons', w: 1, a: 'r' }] : []), rr);
+      if (PM && res.controlling) F.para('Controlling rating factor ' + fn(res.controlling.v, 2) + ': ' + res.controlling.what + ', ' + res.controlling.c.what + ' at x = ' + fx(res.controlling.c.x, 2) + ' ft. Permit: ' + PM.opts.typeName + ', γL ' + fn(PM.opts.gR, 2) + (PM.opts.single ? ', one lane loaded with the multiple presence factor removed' : ', multi-lane distribution') + ', IM ' + (PM.opts.crawl ? '0 (crawl speed)' : Math.round(PM.opts.IMrate * 100) + '%') + '.', { size: 8.6 });
+    }
+    // warnings
+    if (res.warnings && res.warnings.length) { F.h3('Warnings'); F.bullets(res.warnings.map(w => w.kind + ': ' + w.text), { color: AMB }); }
+
+    // ---- description
+    F.h2('Girder description');
+    const dk = model.deck || {}, df = model.df || {}, ld = model.loads || {};
+    const desc = [
+      ['Spans', model.spans.map(s => fx(+s, 2)).join(' – ') + ' ft (' + model.spans.length + ' span' + (model.spans.length > 1 ? 's, continuous' : '') + ')'],
+      res.kind === 'tub' ? ['Girder', 'straight tub, one of ' + (df.Ng || '—') + ' tubs, web slope 1 : ' + fn(res.tub.cfg.slope, 2) + ', top flanges ' + (res.tub.cfg.w || '—') + ' in. apart, ' + (res.tub.cfg.a || '—') + ' in. to the next tub, ' + res.tub.cfg.lateral + '-length top lateral bracing; DF ' + fn(res.tub.DF.M, 3) + ' lanes (Table 4.6.2.2.2b-1)']
+        : ['Girder', (df.girder === 'exterior' ? 'exterior' : 'interior') + ', ' + (df.Ng || '—') + ' girders at ' + (df.S || '—') + ' ft'],
+      ['Roadway, skew', (df.roadway || '—') + ' ft, ' + (df.skew || 0) + '°'],
+      ['Steel', 'Fy = ' + (model.Fy || 50) + ' ksi unless noted per section'],
+      ['Deck', isComp(model, res) ? (dk.ts + ' in. structural, haunch ' + (dk.haunch || 0) + ' in., b_eff ' + (dk.beff || '—') + ' in., f′c ' + (dk.fc || '—') + ' ksi, n = ' + (dk.n || '—')) : 'noncomposite'],
+      ['Dead loads', (() => { const parts = [];
+        if (ld.deckAuto) parts.push('deck ' + fn(dk.ts, 2) + ' in. × ' + fn(+dk.btrib > 0 ? +dk.btrib : +dk.beff, 1) + ' in. × ' + fn(+ld.wc > 0 ? +ld.wc : 150, 0) + ' pcf = ' + fn(LGCheck.deckWeight(model), 3) + ' k/ft');
+        if (ld.haunchAuto) { const ws = LGCheck.haunchWeights(model).map(h => h.w), lo = Math.min(...ws), hi = Math.max(...ws);
+          parts.push('haunch × top flange width = ' + (hi - lo < 1e-9 ? fn(lo, 3) : fn(lo, 3) + ' to ' + fn(hi, 3)) + ' k/ft'); }
+        return parts.length ? 'DC1 ' + parts.join(' + ') + ' + ' + fn(+ld.dc1 || 0, 3) + ' k/ft additional' : 'DC1 ' + fn(+ld.dc1 || 0, 3) + ' k/ft'; })() + (ld.selfWeight !== false ? ' + steel self weight' : '') + ', DC2 ' + fn(+ld.dc2 || 0, 3) + ', DW ' + fn(+ld.dw || 0, 3) + ' k/ft'],
+      ['Live load', LFD ? (R.vehicle || 'HS20') + ' truck or lane, impact per 3.8.2' : (() => { const L = res.live || {}, out = [];
+        if (L.permit !== 'only') out.push(L.ped ? 'Pedestrian bridge (AASHTO Guide Spec 2009, 2015 interims): 90 psf × ' + fn(L.ped.width, 2) + ' ft = ' + fn(L.ped.w, 3) + ' k/ft' + (L.ped.veh ? '; ' + L.ped.veh + ' maintenance vehicle alone, distribution ' + fn(L.ped.dfVeh, 3) : '; no maintenance vehicle') + '; no impact' : 'HL-93, IM 33%; fatigue truck IM 15%');
+        if (L.perm) out.push('Permit (Strength II, γLL ' + fn(L.perm.gDesign, 2) + ', IM 33%): ' + L.perm.vehicles.map(v => v.name + ' ' + v.w.join('-') + ' k at ' + v.s.join('-') + ' ft').join('; ') + (L.perm.lane ? '; 0.2 k/ft lane for negative moment and spans over 200 ft' : ''));
+        return out.join('. '); })()],
+      ['Fatigue traffic', res.live && res.live.ped ? 'not checked: pedestrian bridge (Guide Spec 3.5)' : res.live && res.live.permit === 'only' ? 'not checked: permit only' : (model.fatigue && model.fatigue.adtt ? 'ADTT ' + model.fatigue.adtt + (LFD ? ', case ' + res.fatigueCase : ', (ADTT)SL ' + fx(res.adttSL, 0)) : 'not checked')],
+      [res.kind === 'tub' ? 'Top lateral panel points' : 'Cross-frames', (res.braces || []).length + ' locations'],
+      ['Sections', res.secTable.map(t => t.id).join(', ')],
+      ['Rating factors', LFD ? 'A1 = ' + R.factors.A1 + ', A2 = ' + R.factors.A2inv + ' / ' + R.factors.A2op : 'φc = ' + ((model.factors || {}).phiC || 1) + ', φs = ' + ((model.factors || {}).phiS || 1) + ', γDC = ' + ((model.factors || {}).gDC) + ', γDW = ' + ((model.factors || {}).gDW)],
+      ['η (load modifier)', LFD ? '—' : fn(res.eta, 3)],
+    ];
+    F.kv(desc, { cols: 2, kw: 92 });
+    const gov = [['F', S.flexure], ['V', S.shear], [LFD ? 'O' : 'S', S.service], ['f', S.fatigue]].map(([tag, c]) => (c ? { tag, x: c.x } : null));
+    elevation(F, model, res, gov);
+    F.para('Markers: F flexure, V shear, ' + (LFD ? 'O overload' : 'S Service II') + ', f fatigue.', { size: 7.5, color: F.pal.mute });
+    if (S.flexure) crossSection(F, model, res, S.flexure.sec, 'Cross section at governing flexure');
+
+    // ---- controlling checks
+    F.h2('Controlling checks');
+    F.para('Each worksheet shows the governing check of its criterion: the code equation, the values substituted and the result. Values are from this run; where an intermediate step is not reproduced exactly, the engine value is shown with its basis.', { size: 8.2, color: F.pal.mute });
+    const shown = new Set();
+    [['Flexure', S.flexure], ['Shear', S.shear], [LFD ? 'Overload' : 'Service II', S.service], ['Fatigue', S.fatigue], ['Constructibility', S.construct]].forEach(([t, c]) => { if (!c) return; shown.add(c); worksheet(F, t, c, res, model); });
+    const govRF = [R.strength, R.service].filter(c => c && !shown.has(c));
+    govRF.forEach(c => worksheet(F, 'Governing rating', c, res, model));
+
+    if (mode === 'summary') {
+      F.h2('Basis and limitations');
+      F.bullets((opts.methodNotes || []).slice(0, 40), { size: 7.6, color: F.pal.ink });
+      return F.finish();
+    }
+
+    // ================= comprehensive =================
+    F.newPage();
+    F.h1('Input');
+    F.h3('Sections');
+    if (res.kind === 'tub') F.table([{ h: 'ID', w: 0.6 }, { h: 'Name', w: 2.2 }, { h: 'Top flanges, each', w: 1.5 }, { h: 'Webs, each, D along slope', w: 1.8 }, { h: 'Box flange', w: 1.5 }, { h: 'Fy t / w / b', w: 1.2 }, { h: 'do, in.', w: 0.7, a: 'r' }],
+      (model.sections || []).map(s => { const t = res.secTable.find(q => q.id === s.id); const g = t ? t.P.g : s; const Fy = t ? t.P.F : {}; return [s.id, s.name || '', fn(g.bt, 3) + ' × ' + fn(g.tt, 3), fn(g.D, 3) + ' × ' + fn(g.tw, 4), fn(g.bb, 3) + ' × ' + fn(g.tb, 3), (Fy.t || '') + ' / ' + (Fy.w || '') + ' / ' + (Fy.b || ''), s.do ? fn(+s.do, 0) : '—']; }));
+    else F.table([{ h: 'ID', w: 0.6 }, { h: 'Name', w: 2 }, { h: 'Type', w: 0.9 }, { h: 'Top flange', w: 1.4 }, { h: 'Web', w: 1.4 }, { h: 'Bottom flange', w: 1.4 }, { h: 'Cover plates', w: 1.6 }, { h: 'Fy t / w / b', w: 1.2 }, { h: 'do, in.', w: 0.7, a: 'r' }, { h: 'Haunch', w: 0.7, a: 'r' }],
+      (model.sections || []).map(s => { const t = res.secTable.find(q => q.id === s.id); const g = t ? t.P.g : s; const Fy = t ? t.P.F : {}; return [s.id, s.name || '', s.type || 'plate', fn(g.bt, 3) + ' × ' + fn(g.tt, 3), fn(g.D, 3) + ' × ' + fn(g.tw, 4), fn(g.bb, 3) + ' × ' + fn(g.tb, 3), (g.cbT > 0 ? 'bot ' + fn(g.cbB, 2) + '×' + fn(g.cbT, 3) : '') + (g.ctT > 0 ? ' top ' + fn(g.ctB, 2) + '×' + fn(g.ctT, 3) : '') || '—', (Fy.t || '') + ' / ' + (Fy.w || '') + ' / ' + (Fy.b || ''), s.do ? fn(+s.do, 0) : '—', s.haunch != null ? fn(+s.haunch, 2) : '—']; }));
+    F.h3('Section ranges');
+    F.table([{ h: 'From, ft', w: 1, a: 'r' }, { h: 'To, ft', w: 1, a: 'r' }, { h: 'Section', w: 1 }], (model.ranges || []).map(r => [fn(+r.from, 2), fn(+r.to, 2), r.sec]), { size: 7.4 });
+    if ((model.stiffeners || []).length) { F.h3('Transverse stiffener spacing'); F.table([{ h: 'From, ft', w: 1, a: 'r' }, { h: 'To, ft', w: 1, a: 'r' }, { h: 'do, in.', w: 1, a: 'r' }], model.stiffeners.map(r => [fn(+r.from, 2), fn(+r.to, 2), fn(+r.do, 1)]), { size: 7.4 }); }
+    F.h3(res.kind === 'tub' ? 'Top lateral panel points and internal cross-frames, ft' : 'Cross-frame locations, ft');
+    F.para((res.braces || []).map(b => fn(b, 2)).join(', '), { size: 8 });
+    F.h3('Other input');
+    const flat = [];
+    const walk = (o, pre) => Object.keys(o || {}).forEach(k => { const v = o[k]; if (v && typeof v === 'object' && !Array.isArray(v)) walk(v, pre + k + '.'); else if (!Array.isArray(v)) flat.push([pre + k, String(v)]); });
+    (res.kind === 'tub' ? ['tub', 'deck', 'loads', 'df', 'code', 'fatigue', 'construction', 'deflection', 'flb', 'factors', 'options'] : ['deck', 'loads', 'df', 'code', 'fatigue', 'construction', 'deflection', 'flb', 'factors', 'options', 'lfd']).forEach(k => { if (model[k]) walk(model[k], k + '.'); });
+    flat.push(['Fy', String(model.Fy)]);
+    F.kv(flat, { cols: 3, size: 7.4, kw: 88 });
+
+    F.h1('Section properties');
+    if (res.kind === 'tub') {
+      F.para('One tub. d is the vertical steel depth; D and Dc are along the web. be is the effective box flange width in compression (6.9.4.2.2b with Fcr = Fyc), including the corners and extensions; s+r, be is the steel and deck steel section with that width.', { size: 8, color: F.pal.mute });
+      F.table([{ h: 'Sec', w: 0.5 }, { h: 'd, in.', w: 0.8, a: 'r' }, { h: 'A, in.²', w: 0.8, a: 'r' }, { h: 'I steel', w: 1, a: 'r' }, { h: 'I 3n', w: 1, a: 'r' }, { h: 'I n', w: 1, a: 'r' }, { h: 'I s+r', w: 1, a: 'r' }, { h: 'yb steel', w: 0.8, a: 'r' }, { h: 'yb n', w: 0.8, a: 'r' }, { h: 'Mp+ k-ft', w: 1, a: 'r' }, { h: 'Dp, in.', w: 0.8, a: 'r' }, { h: 'bfi/tf', w: 0.8, a: 'r' }, { h: 'be, in.', w: 0.8, a: 'r' }, { h: 'Compact +', w: 0.9 }],
+        res.secTable.map(t => { const P = t.P; return [t.id, fn(P.g.d, 2), fn(P.s.A, 2), fx(P.s.I, 0), fx(P.s3n.I, 0), fx(P.sn.I, 0), fx(P.sr.I, 0), fn(P.s.yb, 2), fn(P.sn.yb, 2), fx(P.pl.Mp, 0), fn(P.pl.Dp, 2), fn(P.eff.lamF, 1), P.eff.compact ? 'full' : fn(P.eff.be, 2), P.compactBase ? 'yes' : 'no']; }), { size: 7 });
+      F.table([{ h: 'Sec', w: 0.5 }, { h: 'S bot steel', w: 1, a: 'r' }, { h: 'S top steel', w: 1, a: 'r' }, { h: 'S bot 3n', w: 1, a: 'r' }, { h: 'S top 3n', w: 1, a: 'r' }, { h: 'S bot n', w: 1, a: 'r' }, { h: 'S top n', w: 1, a: 'r' }, { h: 'S bot s+r', w: 1, a: 'r' }, { h: 'S bot s+r, be', w: 1, a: 'r' }, { h: 'Rh +/−', w: 1, a: 'r' }, { h: 'rt top', w: 0.7, a: 'r' }],
+        res.secTable.map(t => { const P = t.P; return [t.id, fx(P.s.Sbot, 0), fx(P.s.Stop, 0), fx(P.s3n.Sbot, 0), fx(P.s3n.Stop, 0), fx(P.sn.Sbot, 0), fx(P.sn.Stop, 0), fx(P.sr.Sbot, 0), fx(P.srE.Sbot, 0), fn(P.RhPos, 3) + ' / ' + fn(P.RhNeg, 3), fn(P.rtTopNC, 2)]; }), { size: 7 });
+      F.h3('Distribution factor and 6.11.2.3 conditions');
+      F.kv([['DF, moment and shear', fn(res.tub.DF.M, 3) + ' lanes per tub, NL = ' + res.tub.DF.NL + ', Nb = ' + res.tub.DF.Nb], ['DF, fatigue', fn(res.tub.DF.MF, 3) + ' (one lane, not divided by 1.2)']].concat(res.tub.restrictions.items.map(q => [q.ok ? 'Met' : 'Not met', q.txt])), { cols: 1, size: 7.6, kw: 120 });
+    } else {
+    F.table([{ h: 'Sec', w: 0.5 }, { h: 'd, in.', w: 0.8, a: 'r' }, { h: 'A, in.²', w: 0.8, a: 'r' }, { h: 'I steel', w: 1, a: 'r' }, { h: 'I 3n', w: 1, a: 'r' }, { h: 'I n', w: 1, a: 'r' }, { h: 'I s+r', w: 1, a: 'r' }, { h: 'yb steel', w: 0.8, a: 'r' }, { h: 'yb n', w: 0.8, a: 'r' }, { h: 'Mp+ k-ft', w: 1, a: 'r' }, { h: 'Dp, in.', w: 0.8, a: 'r' }, { h: 'Mp− k-ft', w: 1, a: 'r' }, { h: 'Dc neg', w: 0.8, a: 'r' }, { h: 'Compact +', w: 0.9 }],
+      res.secTable.map(t => { const P = t.P; return [t.id, fn(P.g.d, 2), fn(P.s.A, 2), fx(P.s.I, 0), fx(P.s3n.I, 0), fx(P.sn.I, 0), fx(P.sr.I, 0), fn(P.s.yb, 2), fn(P.sn.yb, 2), fx(P.pl.Mp, 0), fn(P.pl.Dp, 2), fx(P.pn.Mp, 0), fn(P.DcNeg, 2), LFD ? (t.LFD && t.LFD.compactPos ? 'yes' : 'no') : (P.compact ? 'yes' : 'no')]; }), { size: 7 });
+    F.table([{ h: 'Sec', w: 0.5 }, { h: 'S bot steel', w: 1, a: 'r' }, { h: 'S top steel', w: 1, a: 'r' }, { h: 'S bot 3n', w: 1, a: 'r' }, { h: 'S top 3n', w: 1, a: 'r' }, { h: 'S bot n', w: 1, a: 'r' }, { h: 'S top n', w: 1, a: 'r' }, { h: 'S bot s+r', w: 1, a: 'r' }, { h: 'S top s+r', w: 1, a: 'r' }, { h: 'Rh +/−', w: 1, a: 'r' }, { h: 'Rb', w: 0.7, a: 'r' }],
+      res.secTable.map(t => { const P = t.P; return [t.id, fx(P.s.Sbot, 0), fx(P.s.Stop, 0), fx(P.s3n.Sbot, 0), fx(P.s3n.Stop, 0), fx(P.sn.Sbot, 0), fx(P.sn.Stop, 0), fx(P.sr.Sbot, 0), fx(P.sr.Stop, 0), fn(P.RhPos, 3) + ' / ' + fn(P.RhNeg, 3), fn(P.Rb, 3)]; }), { size: 7 });
+    }
+    if (res.proportions && res.proportions.length) {
+      F.h3('Proportion limits');
+      const items = res.proportions[0].items;
+      F.table([{ h: 'Limit', w: 3 }, { h: 'Article', w: 1.2 }].concat(res.proportions.map(q => ({ h: q.sec, w: 1, a: 'r' }))), items.map((it, j) => [it.what, it.art].concat(res.proportions.map(q => { const t = q.items[j]; return { t: (typeof t.val === 'number' ? fn(t.val, 2) : t.val) + ' (' + fn(t.ratio, 2) + ')', color: rCol(t.ratio) }; }))), { size: 7.2 });
+    }
+    if (res.segs && res.segs.length) {
+      F.h3('Unbraced lengths');
+      F.table([{ h: 'From, ft', w: 0.8, a: 'r' }, { h: 'To, ft', w: 0.8, a: 'r' }, { h: 'Lb, ft', w: 0.8, a: 'r' }, { h: 'Cb', w: 0.6, a: 'r' }, { h: 'Method', w: 5 }], res.segs.map(sg => [fn(sg.a, 2), fn(sg.b, 2), fn(sg.Lb / 12, 2), sg.strength && !sg.strength.none ? fn(sg.strength.Cb, 2) : '—', sg.strength && !sg.strength.none ? sg.strength.method || '' : 'bottom flange not in compression']), { size: 7.2 });
+    }
+
+    // selected points
+    const govIdx = new Set();
+    Object.values(S).forEach(c => { if (c && c.i != null) govIdx.add(c.i); });
+    ['strength', 'strengthOp', 'service', 'serviceOp', 'flexure', 'shear'].forEach(k => { const c = R[k]; if (c && c.i != null) govIdx.add(c.i); });
+    const tenth = p => Math.abs(p.frac * 10 - Math.round(p.frac * 10)) < 1e-6;
+    const pts = res.pois.filter((p, i) => mode === 'all' || tenth(p) || govIdx.has(i));
+    F.h1('Load effects per girder' + (mode === 'all' ? '' : ' — tenth points and governing locations'));
+    F.para('Moments in k-ft, shears in kips, unfactored, per girder. Live load includes impact and distribution.', { size: 8, color: F.pal.mute });
+    F.table([{ h: 'Pt', w: 0.6 }, { h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Sec', w: 0.7 }, { h: 'M DC1', w: 0.9, a: 'r' }, { h: 'M DC2', w: 0.9, a: 'r' }, { h: 'M DW', w: 0.9, a: 'r' }, { h: 'M LL+', w: 0.9, a: 'r' }, { h: 'M LL−', w: 0.9, a: 'r' }, { h: 'V DL L/R', w: 1.4, a: 'r' }, { h: 'V LL max/min', w: 1.4, a: 'r' }, { h: 'DF M', w: 0.7, a: 'r' }, { h: 'DF V', w: 0.7, a: 'r' }],
+      pts.map(p => [String(p.label), fn(p.x, 2), p.secs.join('/'), fx(p.MDC1, 0), fx(p.MDC2, 0), fx(p.MDW, 0), fx(p.LLpos, 0), fx(p.LLneg, 0), fx(p.VDC1[0] + p.VDC2[0] + p.VDW[0], 1) + ' / ' + fx(p.VDC1[1] + p.VDC2[1] + p.VDW[1], 1), fx(Math.max(p.VLL[0][0], p.VLL[1][0]), 1) + ' / ' + fx(Math.min(p.VLL[0][1], p.VLL[1][1]), 1), fn(p.DFm, 3), fn(p.DFv, 3)]), { size: 6.9, hl: k => govIdx.has(pts[k].i) });
+    F.h1('Results by point');
+    const catMax = (p, k) => { const cs = p.checks.filter(c => c.cat === k && !Number.isNaN(c.ratio) && c.ratio != null); return cs.length ? Math.max(...cs.map(c => c.ratio)) : null; };
+    const rfMin = (p, key) => { const all = p.checks.filter(c => c.rating), cs = all.filter(c => isFinite(c[key]) && !c.rfNA); return cs.length ? Math.min(...cs.map(c => c[key])) : all.length ? Infinity : null; };
+    F.table([{ h: 'Pt', w: 0.6 }, { h: 'x, ft', w: 0.8, a: 'r' }, { h: 'Sec', w: 0.7 }, { h: 'Flexure', w: 0.9, a: 'r' }, { h: 'Shear', w: 0.9, a: 'r' }, { h: LFD ? 'Overload' : 'Service II', w: 0.9, a: 'r' }, { h: 'Fatigue', w: 0.9, a: 'r' }, { h: 'Constr.', w: 0.9, a: 'r' }, { h: 'RF inv.', w: 0.9, a: 'r' }, { h: 'RF op.', w: 0.9, a: 'r' }],
+      pts.map(p => { const cm = ['flexure', 'shear', 'service', 'fatigue', 'construct'].map(k => { const v = catMax(p, k); return { t: v == null ? '—' : fr(v), color: v != null ? rCol(v) : null }; }); const ri = rfMin(p, 'RFinv'), ro = rfMin(p, 'RFop'); return [String(p.label), fn(p.x, 2), p.secs.join('/')].concat(cm, [{ t: ri == null ? '—' : frf(ri), color: ri != null ? rfCol(ri) : null }, ro == null ? '—' : frf(ro)]); }), { size: 7, hl: k => govIdx.has(pts[k].i) });
+
+    F.h1('Checks at each point');
+    F.para('All limit-state checks at each listed point, highest ratio first (duplicate checks of the same type at a point reduced to the governing one). Demand and capacity are factored moments (k-ft), flange stresses (ksi), shears (k) or lengths (in.).', { size: 8, color: F.pal.mute });
+    const base = c => c.what.replace(/\s*\((\+|−)LL\)$/, '');
+    pts.forEach(p => {
+      const seen = new Set();
+      const cs = p.checks.filter(c => c.ratio != null && !Number.isNaN(c.ratio)).sort((a, b) => b.ratio - a.ratio).filter(c => { const k = c.lim + '|' + base(c) + '|' + c.sec; if (seen.has(k)) return false; seen.add(k); return true; });
+      if (!cs.length) return;
+      F.h3('Point ' + p.label + ', x = ' + fn(p.x, 2) + ' ft' + (govIdx.has(p.i) ? '  (governing location)' : ''));
+      F.table([{ h: 'Limit state', w: 1.2 }, { h: 'Check', w: 3.2 }, { h: 'Article', w: 1 }, { h: 'Sec', w: 0.5 }, { h: 'Demand', w: 0.9, a: 'r' }, { h: 'Capacity', w: 0.9, a: 'r' }, { h: 'Unit', w: 0.5 }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'RF inv./op.', w: 1, a: 'r' }, { h: 'Basis', w: 3.4 }],
+        cs.map(c => [c.lim, c.what, c.art, c.sec, fx(c.demand, dU(c.unit)), fx(c.cap, dU(c.unit)), c.unit, { t: fr(c.ratio), f: 'B', color: rCol(c.ratio) }, c.rating ? frf(c.RFinv, c.rfNA) + ' / ' + frf(c.RFop, c.rfNA) : '—', c.note || '']), { size: 6.6, after: 6 });
+    });
+    if (res.deflection) {
+      F.h1('Live-load deflection');
+      F.table([{ h: 'Span', w: 0.8 }, { h: 'L, ft', w: 1, a: 'r' }, { h: 'Max δ, in.', w: 1, a: 'r' }, { h: 'At x, ft', w: 1, a: 'r' }, { h: 'Limit, in.', w: 1, a: 'r' }, { h: 'Ratio', w: 1, a: 'r' }, { h: 'DF', w: 1, a: 'r' }], res.deflection.map(d => [String(d.span), fn(d.L, 2), fn(d.delta, 3), fn(d.x, 1), fn(d.limit, 3), { t: fn(d.ratio, 3), color: rCol(d.ratio) }, fn(d.dfD, 3)]));
+    }
+    F.h1('Basis and limitations');
+    F.bullets(opts.methodNotes || [], { size: 7.6 });
+    F.h3('Input record');
+    F.para('Input ID ' + inputId + '. The complete input below reproduces this calculation when loaded into the Steel Line Girder Check (Load JSON).', { size: 7.8, color: F.pal.mute });
+    const js = JSON.stringify(model);
+    const lines = []; for (let i = 0; i < js.length; i += 118) lines.push(js.slice(i, i + 118));
+    lines.forEach(ln => { F.need(9); F.doc.text(F.m.l, F.y + 7, ln, { font: 'M', size: 6.3, color: F.pal.ink }); F.y += 8.4; });
+    return F.finish();
+  }
+  const api = { build, _t: { demandLines, capacityLines, ratingLines } };
+  if (typeof module !== 'undefined') module.exports = api; else root.SteelReport = api;
+})(this);
+
+</script>
 <script id="g2d-engine">
 // ===================== Steel 2D Grillage: framing engine (phase 1) =====================
 // Plan geometry only: girder lines, support lines, diaphragms and cross-frames, from one of three inputs
@@ -5123,7 +6009,7 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (Cu > 0 && Lr > limC) notes.push('KL/r ' + Lr.toFixed(0) + ' > ' + limC + ' (6.9.3)');
     const rt = Tu > 0 ? Tu / Pt.Pr : 0, rc = Cu > 0 ? Cu / Prc : 0;
     return { kind: s.kind, label: s.label, L, Lr, limT, limC, prim, Tu, Cu, Prt: Pt.Pr, tMode: Pt.yield <= Pt.fracture ? 'yielding' : 'fracture', U: Pt.U, An: Pt.An,
-      Prc, cMode: Pc.mode, KLr: Pc.KLr, Fcr: Pc.Fcr, rt, rc, ratio: Math.max(rt, rc), slOk: !(Tu > 0 && Lr > limT) && !(Cu > 0 && Lr > limC), notes };
+      Prc, cMode: Pc.mode, KLr: Pc.KLr, Fcr: Pc.Fcr, Ae: Pc.Ae, rt, rc, ratio: Math.max(rt, rc), slOk: !(Tu > 0 && Lr > limT) && !(Cu > 0 && Lr > limC), notes };
   }
   // ---------- top chords on frames skewed to the girders: the deck's longitudinal strain ----------
   // A top chord tied to the composite deck stretches with it. Along a chord at angle a to the girders the deck's
@@ -5265,6 +6151,297 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     return { Pr: Math.min(Py, Pu), yield: Py, fracture: Pu, An, U };
   }
   G.memCompression = compression; G.memTension = tension;
+})();
+
+/* Steel 2D Grillage — PDF calculation book. Uses PDFW (the Bridge SE PDF writer) and, for the girder worksheets, the Steel
+   Line Girder report's worksheet. ctx: { F, A, R, LL, CK, XD, doc, meta, mode: 'summary' | 'full', notes[], appVersion, root }.
+   R is the analysis of the current input; LL, CK and XD are included only when they belong to it (the caller checks). */
+(function () {
+  const G = globalThis.G2D;
+  const fx = (v, d = 1) => (v == null || !isFinite(v) ? '—' : (Math.abs(v) < 5e-13 ? 0 : v).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d }));
+  const fn = (v, d) => (v == null || !isFinite(v) ? '—' : (+v).toFixed(d));
+  const RED = [0.70, 0.14, 0.09], AMB = [0.62, 0.40, 0.04];
+  const rCol = r => (r > 1 + 1e-9 ? RED : r > 0.95 ? AMB : null);
+  const ratioCell = r => (r == null || !isFinite(r) ? '—' : { t: fn(r, 3), f: 'B', color: rCol(r) });
+  const hash = s => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16).padStart(8, '0'); };
+  const shp = s => String(s || '').replace(/X/g, '×');
+  const ED = 'AASHTO LRFD Bridge Design Specifications, 10th Edition (2024)';
+  const STG = { steel: 'DC1 steel', deck: 'DC1 deck', dc2: 'DC2', dw: 'DW' };
+  const CRIT = [['flexure', 'Flexure, Strength I'], ['shear', 'Shear, Strength I'], ['service', 'Service II'], ['fatigue', 'Fatigue'], ['construct', 'Constructibility']];
+
+  // member groups of the cross-frame design table: intermediate / on supports × top chord, bottom chord, diagonals
+  const grpOf = (F, r) => { const c = F.crossframes.find(x => x.id === r.id), sup = c && c.tag === 'support';
+    const m = /^top chord/.test(r.member) ? 'top chords' : /^bottom chord/.test(r.member) ? 'bottom chords' : /^diagonal/.test(r.member) ? 'diagonals' : r.member;
+    return (sup ? 'Support frames, ' : 'Intermediate frames, ') + m; };
+
+  function framingLine(F) {
+    const gs = F.order.map(id => F.girders.find(g => g.id === id)), sp = gs[0] ? gs[0].spans : [];
+    const skews = F.supports.map(s => Math.abs(+s.skew || 0)), curved = gs.some(g => g.spans.some(s => isFinite(s.R) && s.R)), R = curved ? Math.min(...gs.flatMap(g => g.spans.map(s => (isFinite(s.R) && s.R ? Math.abs(s.R) : Infinity)))) : null;
+    return `${gs.length} girders, ${sp.length} span${sp.length > 1 ? 's' : ''} (${sp.map(s => fx(s.L, 1)).join(' + ')} ft on ${gs[0] ? gs[0].id : ''})` + (Math.max(...skews) > 0.5 ? `, skew to ${fx(Math.max(...skews), 1)}°` : ', square') + (curved ? `, curved, R ≥ ${fx(R, 0)} ft` : '');
+  }
+
+  // ---------- figures ----------
+  function planFigure(Fl, F, XD) {
+    const gs = F.girders, pts = [];
+    gs.forEach(g => { for (let i = 0; i <= 40; i++) pts.push(g.P.at(g.L * i / 40)); });
+    let x0 = Math.min(...pts.map(p => p[0])), x1 = Math.max(...pts.map(p => p[0])), y0 = Math.min(...pts.map(p => p[1])), y1 = Math.max(...pts.map(p => p[1]));
+    const pad = 0.04 * Math.max(x1 - x0, y1 - y0); x0 -= pad; x1 += pad; y0 -= pad; y1 += pad;
+    const W = Fl.W, sc = Math.min((W - 20) / (x1 - x0), 250 / (y1 - y0)), H = (y1 - y0) * sc + 34;
+    const over = new Set(XD ? XD.rows.filter(r => r.check && r.check.ratio > 1 + 1e-9).map(r => r.id) : []);
+    Fl.box(H + 14, (d, bx, by, bw) => {
+      const ox = bx + (bw - (x1 - x0) * sc) / 2, X = p => ox + (p[0] - x0) * sc, Y = p => by + 6 + (y1 - p[1]) * sc;
+      F.crossframes.forEach(c => d.line(X(c.pA), Y(c.pA), X(c.pB), Y(c.pB), { w: over.has(c.id) ? 1.1 : 0.45, color: over.has(c.id) ? RED : c.tag === 'support' ? [0.45, 0.30, 0.55] : [0.55, 0.58, 0.62] }));
+      (F.members || []).forEach(m => { if (m.pA && m.pB) d.line(X(m.pA), Y(m.pA), X(m.pB), Y(m.pB), { w: 0.6, color: [0.62, 0.40, 0.04], dash: [2, 1.5] }); });
+      gs.forEach(g => { const q = []; for (let i = 0; i <= 60; i++) q.push(g.P.at(g.L * i / 60)); d.poly(q.map(p => [X(p), Y(p)]), { w: 1.3, color: [0.12, 0.37, 0.55] });
+        const e = g.P.at(0); d.text(X(e) - 14, Y(e) + 2.5, g.id, { font: 'B', size: 6.5, color: [0.12, 0.37, 0.55] });
+        (g.brg || []).forEach(b => { const p = g.P.at(b.u); d.poly([[X(p), Y(p) - 2.6], [X(p) - 2.6, Y(p) + 2], [X(p) + 2.6, Y(p) + 2]], { fill: [0.25, 0.27, 0.3], close: true }); }); });
+      F.supports.forEach(s => { const bs = gs.flatMap(g => (g.brg || []).filter(b => b.support === s.id).map(b => g.P.at(b.u))); if (bs.length < 2) return;
+        const a = bs.reduce((p, q) => (q[1] > p[1] ? q : p)), b = bs.reduce((p, q) => (q[1] < p[1] ? q : p)); d.line(X(a), Y(a) - 6, X(b), Y(b) + 6, { w: 0.5, color: [0.3, 0.32, 0.35], dash: [5, 2, 1, 2] });
+        d.text(X(a) - 10, Y(a) - 9, s.id, { size: 6.2, color: [0.36, 0.40, 0.44] }); });
+      d.text(bx, by + H + 10, 'Framing plan to scale. Blue: girders (labels at their start); grey: intermediate cross-frames; purple: frames on support lines' + (over.size ? '; red: a member over 1.0' : '') + '; triangles: bearings.', { size: 6.8, color: [0.36, 0.40, 0.44] });
+    });
+  }
+
+  // ---------- girder worksheet: the Steel Line Girder report's demand and resistance derivations (design: no rating lines) ----------
+  function girderWorksheet(Fl, SR, title, c, res) {
+    const dU = u => (u === 'k-ft' ? 0 : u === 'k' ? 1 : 2);
+    Fl.need(150);
+    Fl.h3(title + ' — ' + c.what);
+    Fl.para('Point ' + c.label + ', x = ' + fx(c.x, 2) + ' ft along the girder, section ' + c.sec + '. Article ' + c.art + (c.note ? '. ' + c.note + (/\.$/.test(c.note) ? '' : '.') : '.'), { size: 8.2, color: Fl.pal.mute });
+    const L = [];
+    L.push({ note: 'Demand' }); SR._t.demandLines(c, res, L);
+    L.push({ note: 'Resistance' }); SR._t.capacityLines(c, res, L);
+    const ok = c.ratio <= 1 + 1e-9;
+    L.push({ lhs: 'Ratio', expr: '\\f{demand}{resistance}', sub: '\\f{' + fx(c.demand, dU(c.unit)) + '}{' + fx(c.cap, dU(c.unit)) + '}', res: fn(c.ratio, 3) + (ok ? '  ≤ 1.0  OK' : '  > 1.0  NOT SATISFIED'), color: ok ? null : RED });
+    Fl.math(L);
+  }
+
+  // ---------- cross-frame member worksheet (6.8.2, 6.9.4) ----------
+  function memberWorksheet(Fl, title, r, ck) {
+    const k = r.check;
+    Fl.need(160);
+    Fl.h3(title + ' — ' + r.id + ' (' + r.gA + '–' + r.gB + '), ' + r.member + ', ' + shp(k.label));
+    Fl.para(`Length ${fx(k.L, 1)} in. work point to work point, K = 1. Limits for ${k.prim ? 'main members' : 'bracing members'}: L/r ${k.limT} in tension, ${k.limC} in compression.`, { size: 8.2, color: Fl.pal.mute });
+    const L = [];
+    L.push({ note: 'Demand: Strength I and construction (1.4 DC1 + EL), largest tension and compression' });
+    L.push({ lhs: 'T_u', res: fx(k.Tu, 1), unit: 'kip' }); L.push({ lhs: 'C_u', res: fx(k.Cu, 1), unit: 'kip' });
+    L.push({ note: 'Slenderness' });
+    L.push({ lhs: 'L/r', expr: '\\f{L}{r_{min}}', res: fn(k.Lr, 1), ref: '6.8.4, 6.9.3', color: k.slOk ? null : RED });
+    if (k.Tu > 0) {
+      L.push({ note: 'Tension (6.8.2.1): yielding on the gross section, fracture on the net section' });
+      L.push({ lhs: 'U', res: fn(k.U, 3), ref: 'Table 6.8.2.2-1' });
+      L.push({ lhs: 'A_n', res: fn(k.An, 3), unit: 'in²', ref: '6.8.3' });
+      L.push({ lhs: 'φP_n', res: fx(k.Prt, 1) + ' kip (' + k.tMode + ')', ref: '6.8.2.1-1, -2' });
+      L.push({ lhs: 'Ratio', expr: '\\f{T_u}{φP_n}', sub: '\\f{' + fx(k.Tu, 1) + '}{' + fx(k.Prt, 1) + '}', res: fn(k.rt, 3), color: k.rt > 1 + 1e-9 ? RED : null });
+    }
+    if (k.Cu > 0) {
+      L.push({ note: 'Compression (6.9.4.1): ' + k.cMode + ', Fy = ' + fn(ck.Fy, 0) + ' ksi, E = 29,000 ksi' });
+      if (/single angle/.test(k.cMode)) L.push({ lhs: '(KL/r)_{eff}', res: fn(k.KLr, 1), ref: '6.9.4.4' }); else L.push({ lhs: 'KL/r', res: fn(k.KLr, 1), ref: '6.9.4.1.2' });
+      L.push({ lhs: 'F_{cr}', res: fn(k.Fcr, 2), unit: 'ksi', ref: '6.9.4.1.1' });
+      L.push({ lhs: 'A_{eff}', res: fn(k.Ae, 3), unit: 'in²', ref: '6.9.4.2.2' });
+      L.push({ lhs: 'φP_n', expr: 'φ_c F_{cr} A_{eff}', sub: '0.95 × ' + fn(k.Fcr, 2) + ' × ' + fn(k.Ae, 3), res: fx(k.Prc, 1), unit: 'kip', ref: '6.9.2.1' });
+      L.push({ lhs: 'Ratio', expr: '\\f{C_u}{φP_n}', sub: '\\f{' + fx(k.Cu, 1) + '}{' + fx(k.Prc, 1) + '}', res: fn(k.rc, 3), color: k.rc > 1 + 1e-9 ? RED : null });
+    }
+    if (k.notes && k.notes.length) L.push({ note: 'Notes: ' + k.notes.join('; ') });
+    Fl.math(L);
+  }
+
+  async function calcBook(ctx) {
+    const { F, R, LL, CK, XD, doc } = ctx, A = doc.analysis, meta = ctx.meta || {}, mode = ctx.mode || 'summary';
+    const W = ctx.root.PDFW, SR = ctx.root.SteelReport;
+    if (!W) throw new Error('The PDF writer is not loaded.');
+    const full = mode === 'full', titleTxt = full ? 'Calculation book' : 'Calculation summary';
+    const inputId = hash(JSON.stringify(Object.assign({}, doc, { report: undefined })));
+    const now = new Date(), stamp = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0') + ' ' + String(now.getHours()).padStart(2, '0') + ':' + String(now.getMinutes()).padStart(2, '0');
+    const structure = meta.structure || '(structure number)', app = 'Bridge SE Steel 2D Grillage ' + (ctx.appVersion || '');
+    const Fl = new W.Flow({
+      info: { title: 'Steel 2D grillage ' + titleTxt.toLowerCase() + ' — ' + structure, subject: ED, creator: app },
+      header: (d, i, n, m) => { if (i === 1) return; d.text(m.l, 34, 'Steel 2D Grillage · ' + structure, { font: 'B', size: 8, color: Fl.pal.ink }); d.text(d.W - m.r - W.textWidth(titleTxt, 'R', 8), 34, titleTxt, { size: 8, color: Fl.pal.mute }); d.line(m.l, 40, d.W - m.r, 40, { w: 0.4, color: Fl.pal.rule }); },
+      footer: (d, i, n, m) => { const y = d.H - 30; d.line(m.l, y - 9, d.W - m.r, y - 9, { w: 0.4, color: Fl.pal.rule }); d.text(m.l, y, app + ' · ' + ED, { size: 6.6, color: Fl.pal.mute }); d.text(m.l, y + 8.5, 'Generated ' + stamp + ' · input ID ' + inputId, { size: 6.6, color: Fl.pal.mute });
+        const s = 'Designed by ' + (meta.designedBy || '______') + '    Checked by ______'; d.text(d.W - m.r - W.textWidth(s, 'R', 6.8), y, s, { size: 6.8, color: Fl.pal.mute }); const t = 'Sheet ' + i + ' of ' + n; d.text(d.W - m.r - W.textWidth(t, 'B', 6.8), y + 8.5, t, { font: 'B', size: 6.8, color: Fl.pal.ink }); }
+    });
+    // ---- title block
+    Fl.doc.text(Fl.m.l, 50, 'STEEL 2D GRILLAGE', { font: 'B', size: 9, color: Fl.pal.accent });
+    Fl.y = 58; Fl.doc.text(Fl.m.l, Fl.y + 18, titleTxt, { font: 'B', size: 17, color: Fl.pal.ink }); Fl.y += 30;
+    Fl.doc.text(Fl.m.l, Fl.y + 9, ED + ' · 2D grid analysis, staged dead load, HL-93 influence surfaces', { size: 9, color: Fl.pal.mute }); Fl.y += 18;
+    const tb = [['Structure number', meta.structure || ''], ['Bridge / feature', meta.bridge || ''], ['Location', meta.location || ''], ['Framing', meta.framing || framingLine(F)]];
+    Fl.box(4 * 20 + 46, (d, x0, y0, w) => {
+      const rowH = 20, lw = 120;
+      tb.forEach((r, k) => { const y = y0 + k * rowH; d.rect(x0, y, w, rowH, { stroke: Fl.pal.rule, w: 0.5 }); d.rect(x0, y, lw, rowH, { fill: Fl.pal.head }); d.text(x0 + 6, y + 13, r[0], { size: 8, color: Fl.pal.mute });
+        const room = w - lw - 14; let t = String(r[1]), sz = 9.5; while (sz > 7 && W.textWidth(t, 'B', sz) > room) sz -= 0.25;
+        if (W.textWidth(t, 'B', sz) > room) { while (t.length > 1 && W.textWidth(t + '…', 'B', sz) > room) t = t.slice(0, -1); t = t.trimEnd() + '…'; }
+        d.text(x0 + lw + 8, y + 13.5, t, { font: 'B', size: sz, color: Fl.pal.ink }); });
+      const y = y0 + 4 * rowH + 6, half = w / 2 - 4;
+      [[x0, 'Designed by', meta.designedBy || '', meta.date || stamp.slice(0, 10)], [x0 + half + 8, 'Checked by', '', '']].forEach(([x, k, v, dt]) => {
+        d.rect(x, y, half, 36, { stroke: Fl.pal.mute, w: 0.6 });
+        d.text(x + 6, y + 12, k, { size: 7.5, color: Fl.pal.mute }); d.text(x + half - 92, y + 12, 'Date', { size: 7.5, color: Fl.pal.mute });
+        d.text(x + 6, y + 29, v, { font: 'B', size: 11, color: Fl.pal.ink }); d.text(x + half - 92, y + 29, dt, { size: 9.5, color: Fl.pal.ink });
+        if (!v) { d.line(x + 6, y + 31, x + half - 100, y + 31, { w: 0.4, color: Fl.pal.rule }); d.line(x + half - 92, y + 31, x + half - 8, y + 31, { w: 0.4, color: Fl.pal.rule }); }
+      });
+    });
+    Fl.space(10);
+
+    // ---- results
+    Fl.h2('Results');
+    const done = [LL ? null : 'the live load has not been run', CK ? null : 'the girder checks have not been run', XD ? null : 'cross-frame design forces need the live load and truss cross-frames'].filter(Boolean);
+    if (done.length) Fl.para('Incomplete: ' + done.join('; ') + '. Only what was run is reported.', { font: 'B', size: 9.5, color: AMB });
+    // girders
+    let gWorst = null;
+    if (CK) {
+      const rows = CK.girders.map(g => {
+        if (!g.r) return [g.gid, { t: 'not checked' + (g.err ? ': ' + g.err : ''), color: RED }, '', '', '', '', '', ''];
+        const S = g.r.summary || {}, d = CK.deflection.filter(x => x.g === g.gid).reduce((a, x) => (!a || x.ratio > a.ratio ? x : a), null);
+        const items = CRIT.map(([k]) => S[k]).concat([S.proportions ? { ratio: S.proportions.ratio, lim: 'Proportions', what: '' } : null, d ? { ratio: d.ratio, lim: 'LL deflection', what: 'span ' + d.span } : null]);
+        const top = items.filter(Boolean).reduce((a, c) => (!a || c.ratio > a.ratio ? c : a), null);
+        if (top && (!gWorst || top.ratio > gWorst.ratio)) gWorst = Object.assign({ gid: g.gid }, top);
+        return [{ t: g.gid, f: 'B' }].concat(items.map(c => (c ? ratioCell(c.ratio) : '—'))).concat([top ? top.lim + (top.what ? ': ' + top.what : '') + (top.x != null ? ' at ' + fx(top.x, 1) + ' ft' : '') : '']);
+      });
+      Fl.h3('Girders: largest demand / capacity in each limit state');
+      Fl.table([{ h: 'Girder', w: 0.8 }, { h: 'Flexure', w: 0.85, a: 'r' }, { h: 'Shear', w: 0.85, a: 'r' }, { h: 'Service II', w: 0.85, a: 'r' }, { h: 'Fatigue', w: 0.85, a: 'r' }, { h: 'Construct.', w: 1.0, a: 'r' }, { h: 'Proportions', w: 1.05, a: 'r' }, { h: 'LL deflection', w: 1, a: 'r' }, { h: 'Governs', w: 3.1 }], rows);
+    }
+    // cross-frame members by group
+    const groups = new Map();
+    if (XD) XD.rows.forEach(r => { const k = grpOf(F, r); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
+    const gov = [];
+    if (XD) {
+      const rows = [...groups.entries()].map(([k, rs]) => {
+        const mx = f => rs.reduce((a, r) => Math.max(a, f(r)), -Infinity), mn = f => rs.reduce((a, r) => Math.min(a, f(r)), Infinity);
+        const ckd = rs.filter(r => r.check && r.check.kind !== 'A'), g = ckd.reduce((a, r) => (!a || r.check.ratio > a.check.ratio ? r : a), null);
+        if (g) gov.push([k, g]);
+        const secs = [...new Set(rs.map(r => (r.check ? (r.check.kind === 'A' ? r.check.label + ' (area only)' : r.check.label) : '')))].filter(Boolean).map(shp).join(', ');
+        return [k, secs || '—', fx(mx(r => r.strMax), 1) + ' / ' + fx(mn(r => r.strMin), 1), fx(mx(r => r.conMax), 1) + ' / ' + fx(mn(r => r.conMin), 1), fx(mx(r => r.fatigue), 1), g ? fn(Math.max(...ckd.map(r => r.check.Lr)), 0) : '—', g ? ratioCell(g.check.ratio) : '—', g ? g.id + ' ' + g.member : ''];
+      });
+      Fl.h3('Cross-frame members: design forces (kip, tension +) and member checks');
+      Fl.table([{ h: 'Members', w: 2.6 }, { h: 'Section', w: 1.4 }, { h: 'Strength I max / min', w: 1.4, a: 'r' }, { h: 'Construction max / min', w: 1.4, a: 'r' }, { h: 'Fatigue I range', w: 0.9, a: 'r' }, { h: 'L/r max', w: 0.7, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }, { h: 'Governs', w: 1.3 }], rows);
+      const nOver = XD.rows.filter(r => r.check && r.check.kind !== 'A' && (r.check.ratio > 1 + 1e-9 || !r.check.slOk)).length, nCk = XD.rows.filter(r => r.check && r.check.kind !== 'A').length;
+      if (!nCk) Fl.para('Cross-frame members are given by area only, so they are not checked; choose rolled shapes to check them.', { font: 'B', size: 9, color: AMB });
+      else Fl.para(nOver ? nOver + ' cross-frame member' + (nOver > 1 ? 's' : '') + ' over 1.0 or over a slenderness limit.' : 'Every checked cross-frame member is within its resistance and slenderness limits.', { font: 'B', size: 9, color: nOver ? RED : null });
+    }
+    if (gWorst) Fl.para('Girders: highest ratio ' + fn(gWorst.ratio, 3) + ' (' + gWorst.gid + ', ' + gWorst.lim + (gWorst.what ? ', ' + gWorst.what : '') + ').', { font: 'B', size: 9, color: rCol(gWorst.ratio) });
+    const warns = [].concat((F.warnings || []).map(w => (typeof w === 'string' ? w : w.text || String(w))), R.warns || [], LL && LL.warns ? LL.warns : []);
+    if (warns.length) { Fl.h3('Warnings'); Fl.bullets(warns, { color: AMB }); }
+
+    // ---- framing plan and description
+    Fl.need(180); Fl.h2('Framing');
+    planFigure(Fl, F, XD);
+    const cf = R.cf || {}, dk = A.deck || {}, ld = A.loads || {}, op = A.options || {};
+    const memTxt = q => { if (!q) return '—'; const s = G.memSection ? G.memSection(q) : null; return s && s.kind !== 'A' ? shp(s.label) + ', A ' + fn(s.A, 2) + ' in²' : (+q.A || 0) + ' in² (area only)'; };
+    const endP = G.frameProps ? G.frameProps(cf, true) : cf;
+    const kvs = [['Framing', framingLine(F)], ['Girders, left to right', F.order.join(', ')], ['Cross-frames', F.crossframes.length + ' (' + F.crossframes.filter(c => c.tag === 'support').length + ' on support lines)'],
+      ['Cross-frame model', cf.model === 'truss' ? 'truss, ' + (cf.type || 'X') + ' type; on supports ' + (endP.type || cf.endType || cf.type || 'X') : 'equivalent beam'],
+      ['Work points', cf.zt !== '' && cf.zt != null ? fn(+cf.zb || 0, 2) + ' in. above the bottom, ' + fn(+cf.zt, 2) + ' in. below the top of the girder' : 'depth ' + (cf.h || '—') + ' in., bottom ' + (cf.zb || 0) + ' in.'],
+      ['Members, intermediate', 'top ' + (cf.topChord === false ? 'none' : memTxt(cf.top)) + '; bottom ' + memTxt(cf.bot) + '; diagonals ' + memTxt(cf.diag)],
+      ['Members, on supports', 'top ' + memTxt(endP.top) + '; bottom ' + memTxt(endP.bot) + '; diagonals ' + memTxt(endP.diag)],
+      ['Stiffness factor R', (cf.Rnc !== '' && cf.Rnc != null ? 'noncomposite ' + cf.Rnc : 'noncomposite by member type') + ', ' + (cf.Rc !== '' && cf.Rc != null ? 'composite ' + cf.Rc : 'composite by member type') + ' (4.6.3.3.4c)'],
+      ['Deck', fn(+dk.ts, 2) + ' in. slab, ' + fn(+dk.haunch, 2) + ' in. haunch, f′c ' + fn(+dk.fc, 1) + ' ksi, overhangs ' + fn(+dk.ohL, 2) + ' / ' + fn(+dk.ohR, 2) + ' ft, n = ' + fn(R.n, 2) + ' (3n = ' + fn(R.n3, 2) + ')'],
+      ['DC2', (ld.dc2 || []).map(q => q.name + ' ' + fn(+q.w, 3) + ' k/ft').join('; ') || 'none'], ['DW', fn(+ld.dw, 1) + ' psf'],
+      ['Lack of fit (EL)', R.fit ? R.fit + ', ±4% band on the forcing' : 'not included'],
+      ['Live load', LL ? 'HL-93, ' + LL.NL + ' design lanes on a ' + fx(LL.W, 1) + ' ft roadway' + (LL.varies ? ' (narrowest ' + fx(LL.wMin, 1) + ' ft)' : '') + ', influence surfaces' : 'not run']];
+    Fl.kv(kvs, { cols: 1, kw: 130 });
+
+    // ---- controlling worksheets
+    Fl.h2('Controlling checks');
+    Fl.para('The governing check of each criterion over all girders, and the governing member of each cross-frame member group: the code equation, the values substituted and the result. Girder worksheets are from the Steel Line Girder engine, run with the grid\'s forces for that girder.', { size: 8.4, color: Fl.pal.mute });
+    if (CK && SR && SR._t && SR._t.demandLines) {
+      CRIT.forEach(([k, t]) => { let best = null; CK.girders.forEach(g => { const c = g.r && g.r.summary && g.r.summary[k]; if (c && (!best || c.ratio > best.c.ratio)) best = { g, c }; });
+        if (best) girderWorksheet(Fl, SR, best.g.gid + ' ' + t, best.c, best.g.r); });
+    }
+    if (XD) gov.forEach(([k, r]) => memberWorksheet(Fl, k, r, XD.ck || {}));
+
+    if (full) {
+      // ================= the rest of the book =================
+      Fl.newPage(); Fl.h1('Input');
+      Fl.h3('Girder sections (in.)');
+      Fl.table([{ h: 'Girders', w: 1 }, { h: 'From, ft', w: 0.8, a: 'r' }, { h: 'Web D × tw', w: 1.4 }, { h: 'Top flange', w: 1.4 }, { h: 'Bottom flange', w: 1.4 }],
+        (A.sections || []).flatMap(s => (s.rows || []).map(r => [s.girders || 'all', fn(+r.L || 0, 2), fn(+r.D, 3) + ' × ' + fn(+r.tw, 4), fn(+r.bt, 3) + ' × ' + fn(+r.tt, 3), fn(+r.bb, 3) + ' × ' + fn(+r.tb, 3)])));
+      Fl.h3('Analysis options');
+      const OPT = { warping: 'Warping torsion', twistAtBearings: 'Bearings restrain girder twist', h: 'Grid element length, ft', deckHoldsTop: 'Deck braces the top flange', webFlex: 'Web flexibility between connection plates', shear: 'Web shear deformation', fit: 'Detailed to fit' };
+      const yn = v => (v === true ? 'yes' : v === false ? 'no' : String(v));
+      Fl.kv(Object.entries(op).map(([k, v]) => [OPT[k] || k, yn(v)]), { cols: 2, kw: 150, size: 8 });
+      Fl.h3('Girder check inputs');
+      const CKL = { Fyf: 'Fy flanges, ksi', Fyw: 'Fy web, ksi', do: 'Stiffener spacing do, in.', Ar: 'Deck steel, in²/ft', yr: 'To its centroid, in.', fyr: 'Rebar fy, ksi', adtt: 'ADTT', lanes: 'Lanes available to trucks', life: 'Design life, years', stiffCat: 'Stiffener and connection plate welds', studCat: 'Shear studs', spliceCat: 'Flange butt splices', plateW: 'Connection plate width, in.', ratio: 'LL deflection limit, span /' };
+      Fl.kv(Object.entries(A.checks || {}).filter(([, v]) => v !== '' && v != null).map(([k, v]) => [CKL[k] || k, String(v)]), { cols: 2, kw: 150, size: 8 });
+      if (ctx.XD && ctx.XD.ck) { const q = ctx.XD.ck; Fl.h3('Cross-frame member check inputs'); Fl.kv([['Fy / Fu, ksi', q.Fy + ' / ' + q.Fu], ['Bolts', q.nb + ' in a line, ' + q.db + ' in. diameter'], ['Slenderness limits', q.primary === 'yes' ? 'main members' : q.primary === 'no' ? 'bracing members' : 'main members if curved'], ['X diagonals', q.xMid ? 'connected where they cross (L/2)' : 'full length']], { cols: 2, kw: 150, size: 8 }); }
+
+      Fl.h1('Framing');
+      Fl.h3('Girders');
+      Fl.table([{ h: 'Girder', w: 0.7 }, { h: 'Length, ft', w: 0.9, a: 'r' }, { h: 'Spans, ft', w: 2.2 }, { h: 'Radius, ft', w: 1.6 }, { h: 'Largest Lb, ft', w: 0.9, a: 'r' }],
+        F.order.map(id => F.girders.find(g => g.id === id)).map(g => [g.id, fx(g.L, 2), g.spans.map(s => fx(s.L, 2)).join(' · '), g.spans.map(s => (isFinite(s.R) && s.R ? fx(s.R, 1) : 'straight')).join(' · '), fx(g.LbMax, 2)]));
+      Fl.h3('Bearings');
+      Fl.table([{ h: 'Girder', w: 0.8 }, { h: 'Support', w: 1.2 }, { h: 'Kind', w: 1 }, { h: 'At, ft along girder', w: 1.2, a: 'r' }, { h: 'Skew, °', w: 0.8, a: 'r' }],
+        F.order.flatMap(id => (F.girders.find(g => g.id === id).brg || []).map(b => [id, b.support, b.kind || '', fx(b.u, 2), fx(b.skew, 2)])), { size: 7.4 });
+      Fl.h3('Cross-frames');
+      Fl.table([{ h: 'ID', w: 0.8 }, { h: 'Girders', w: 0.9 }, { h: 'At, ft (A / B)', w: 1.5, a: 'r' }, { h: 'Length, ft', w: 0.9, a: 'r' }, { h: 'Angle, °', w: 0.8, a: 'r' }, { h: 'Where', w: 1.4 }],
+        F.crossframes.map(c => [c.id, c.gA + '–' + c.gB, fx(c.uA, 2) + ' / ' + fx(c.uB, 2), fx(c.L, 2), fx(Math.max(Math.abs(c.angA), Math.abs(c.angB)), 1), c.tag === 'support' ? 'on ' + c.support : 'intermediate']), { size: 7.2 });
+
+      Fl.h1('Dead-load analysis');
+      Fl.para('Staged: DC1 steel and DC1 deck on the steel grid, DC2 and DW on the long-term composite grid (3n). Reactions in kip, downward load positive.', { size: 8.4, color: Fl.pal.mute });
+      const sup = F.supports.map(s => s.id), has = (g, s) => R.res.steel.reac.some(r => r.g === g && r.support === s);
+      ['steel', 'deck', 'dc2', 'dw'].filter(s => R.res[s]).forEach(s => {
+        const rx = (g, sid) => R.res[s].reac.filter(r => r.g === g && r.support === sid).reduce((a, r) => a + r.R, 0);
+        Fl.h3('Reactions, ' + STG[s]);
+        Fl.table([{ h: 'Girder', w: 0.9 }].concat(sup.map(id => ({ h: id, w: 1, a: 'r' }))),
+          F.order.map(g => [g].concat(sup.map(sid => (has(g, sid) ? fx(rx(g, sid), 1) : '—')))).concat([[{ t: 'Total', f: 'B' }].concat(sup.map(sid => ({ t: fx(F.order.reduce((a, g) => a + (has(g, sid) ? rx(g, sid) : 0), 0), 1), f: 'B' })))]), { size: 7.4 });
+      });
+      if (LL) {
+        Fl.h3('Reactions, LL+I (max / min)');
+        const rx = LL.out.filter(r => r.kind === 'R');
+        Fl.table([{ h: 'Girder', w: 0.9 }].concat(sup.map(id => ({ h: id, w: 1.2, a: 'r' }))), F.order.map(g => [g].concat(sup.map(sid => { const r = rx.find(x => x.g === g && x.support === sid); return r ? fx(r.max, 1) + ' / ' + fx(r.min, 1) : '—'; }))), { size: 7.4 });
+      }
+      Fl.h1('Girder load effects');
+      Fl.para('Moments (k-ft) and shears (kip) at tenth points from the grid, by stage; LL+I from the influence surfaces. Locations along each girder from its start.', { size: 8.4, color: Fl.pal.mute });
+      F.order.forEach(gid => {
+        const T = ['steel', 'deck', 'dc2', 'dw'].map(s => G.girderTable(R, gid, s)), lm = LL ? LL.out.filter(r => r.kind === 'M' && r.g === gid) : [], lv = LL ? LL.out.filter(r => r.kind === 'V' && r.g === gid) : [];
+        Fl.h3(gid + ': moment, k-ft');
+        Fl.table([{ h: 'Pt', w: 0.6 }, { h: 'At, ft', w: 0.8, a: 'r' }, { h: 'DC1 steel', w: 1, a: 'r' }, { h: 'DC1 deck', w: 1, a: 'r' }, { h: 'DC2', w: 1, a: 'r' }, { h: 'DW', w: 1, a: 'r' }, { h: 'LL+I max', w: 1, a: 'r' }, { h: 'LL+I min', w: 1, a: 'r' }],
+          T[0].map((r, i) => { const l = lm.find(x => x.span === r.span && x.pt === r.pt); return [r.span + '.' + r.pt, fx(r.u, 1)].concat(T.map(t => fx(t[i].M, 0))).concat([l ? fx(l.max, 0) : '—', l ? fx(l.min, 0) : '—']); }), { size: 7 });
+        Fl.h3(gid + ': shear, kip');
+        Fl.table([{ h: 'Pt', w: 0.6 }, { h: 'At, ft', w: 0.8, a: 'r' }, { h: 'DC1 steel', w: 1, a: 'r' }, { h: 'DC1 deck', w: 1, a: 'r' }, { h: 'DC2', w: 1, a: 'r' }, { h: 'DW', w: 1, a: 'r' }, { h: 'LL+I max', w: 1, a: 'r' }, { h: 'LL+I min', w: 1, a: 'r' }],
+          T[0].map((r, i) => { const l = lv.find(x => x.span === r.span && x.pt === r.pt); return [r.span + '.' + r.pt, fx(r.u, 1)].concat(T.map(t => fx(t[i].V, 1))).concat([l ? fx(l.max, 1) : '—', l ? fx(l.min, 1) : '—']); }), { size: 7 });
+      });
+      if (XD) {
+        Fl.h1('Cross-frame member design forces');
+        Fl.para('Kip, tension positive. Strength I: 1.25 / 0.90 DC, 1.50 / 0.65 DW, 1.0 EL with its band, 1.75 LL+I; construction 1.4 DC1 + EL; Fatigue I 1.75 × range. Top chords on composite frames take the deck tie either way' + (XD.rows.some(r => r.deckStrain) ? ', and on frames skewed to the girders the deck\'s longitudinal strain' : '') + '.', { size: 8.4, color: Fl.pal.mute });
+        Fl.table([{ h: 'Frame', w: 0.7 }, { h: 'Member', w: 1.3 }, { h: 'DC1', w: 0.65, a: 'r' }, { h: 'EL', w: 0.6, a: 'r' }, { h: 'DC2', w: 0.6, a: 'r' }, { h: 'DW', w: 0.6, a: 'r' }, { h: 'LL+I max / min', w: 1.15, a: 'r' }, { h: 'Strength I max / min', w: 1.25, a: 'r' }, { h: 'Constr. max / min', w: 1.15, a: 'r' }, { h: 'Fatigue', w: 0.7, a: 'r' }],
+          XD.rows.map(r => [r.id, r.member + (r.tie ? ' ±tie' : '') + (r.deckStrain ? ' +strain' : ''), fx(r.dc1, 1), fx(r.el, 1), fx(r.dc2, 1), fx(r.dw, 1), fx(r.llMax, 1) + ' / ' + fx(r.llMin, 1), fx(r.strMax, 1) + ' / ' + fx(r.strMin, 1), fx(r.conMax, 1) + ' / ' + fx(r.conMin, 1), fx(r.fatigue, 1)]), { size: 6.8 });
+        Fl.h1('Cross-frame member checks');
+        Fl.table([{ h: 'Frame', w: 0.7 }, { h: 'Member', w: 1.1 }, { h: 'Section', w: 1.5 }, { h: 'L, in.', w: 0.6, a: 'r' }, { h: 'L/r', w: 0.55, a: 'r' }, { h: 'Tu / Cu', w: 1, a: 'r' }, { h: 'φPn tension', w: 0.8, a: 'r' }, { h: 'φPn compr.', w: 0.8, a: 'r' }, { h: 'Ratio', w: 0.6, a: 'r' }, { h: 'Notes', w: 1.8 }],
+          XD.rows.filter(r => r.check).map(r => { const k = r.check; if (k.kind === 'A') return [r.id, r.member, k.label + ' (area only)', '', '', '', '', '', '—', 'not checked'];
+            return [r.id, r.member, shp(k.label), fx(k.L, 0), { t: fn(k.Lr, 0), color: k.slOk ? null : RED }, fx(k.Tu, 1) + ' / ' + fx(k.Cu, 1), fx(k.Prt, 0), fx(k.Prc, 0), ratioCell(k.ratio), k.notes.join('; ')]; }), { size: 6.8 });
+      }
+      if (CK) {
+        Fl.h1('Girder checks');
+        CK.girders.forEach(g => {
+          if (!g.r) { Fl.h3(g.gid + ': not checked'); if (g.err) Fl.para(g.err, { size: 8.4, color: RED }); return; }
+          const by = new Map(); g.r.checks.filter(c => isFinite(c.ratio)).forEach(c => { const k = c.lim + '|' + c.what, o = by.get(k); if (!o || c.ratio > o.ratio) by.set(k, c); });
+          Fl.h3(g.gid + ': governing checks');
+          Fl.table([{ h: 'Limit state', w: 1.2 }, { h: 'Check', w: 2.6 }, { h: 'At, ft', w: 0.7, a: 'r' }, { h: 'Article', w: 0.9 }, { h: 'Demand', w: 1, a: 'r' }, { h: 'Capacity', w: 1, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }],
+            [...by.values()].sort((a, b) => b.ratio - a.ratio).slice(0, 16).map(c => [c.lim, c.what, fx(c.x, 1), c.art || '', fx(c.demand, 1), fx(c.cap, 1), ratioCell(c.ratio)]), { size: 7.2 });
+          if (SR && SR._t && SR._t.demandLines) CRIT.forEach(([k, t]) => { const c = g.r.summary && g.r.summary[k]; if (c) girderWorksheet(Fl, SR, g.gid + ' ' + t, c, g.r); });
+        });
+        if (CK.deflection && CK.deflection.length) {
+          Fl.h3('Live-load deflection (2.5.2.6.2)');
+          Fl.table([{ h: 'Girder', w: 0.8 }, { h: 'Span', w: 0.6 }, { h: 'Span length, ft', w: 1, a: 'r' }, { h: 'Deflection, in.', w: 1, a: 'r' }, { h: 'At, ft', w: 0.8, a: 'r' }, { h: 'Limit, in.', w: 0.9, a: 'r' }, { h: 'Ratio', w: 0.7, a: 'r' }],
+            CK.deflection.map(d => [d.g, d.span, fx(d.L, 1), fn(d.defl, 3), fx(d.at, 1), fn(d.lim, 3), ratioCell(d.ratio)]), { size: 7.4 });
+        }
+      }
+    }
+    Fl.h2('Basis and limitations');
+    Fl.bullets((ctx.notes || []).slice(0, 60), { size: 7.6 });
+    if (full) { Fl.h3('Input record'); Fl.para('Input ID ' + inputId + ' (a hash of the input JSON saved from the page). Reload that file to reproduce this book.', { size: 8, color: Fl.pal.mute }); }
+    return Fl.finish();
+  }
+  G.calcBook = calcBook;
+  // the method notes the book closes with
+  G.CALC_NOTES = [
+    'Analysis: a 2D grid of the girders and cross-frames with warping torsion and web shear deformation; cross-frames as trusses condensed to the girder lines (or equivalent beams); deck strips and the deck tie in the composite stages.',
+    'Dead load is staged: DC1 steel and deck on the steel grid, DC2 and DW on the long-term composite grid (3n). Live load is HL-93 by influence surfaces with multiple presence and 33% dynamic load allowance; fatigue uses the fatigue truck with 15%.',
+    'Cross-frame stiffness: AASHTO 4.6.3.3.4c factors R by member type (single angles and flange-connected tees 0.65 noncomposite, 0.75 composite; others 1.0) unless entered.',
+    'Cross-frame design forces lean conservative: the lack-of-fit forcing carries a ±4% band, composite top chords take the deck tie either way, and top chords skewed to the girders take the deck\'s longitudinal strain (R E A e cos²a), which a 2D grid does not show.',
+    'Member resistance per 6.8.2 (tension) and 6.9.4 (compression, single angles by 6.9.4.4), with slenderness limits 6.8.4 and 6.9.3; member lengths work point to work point, K = 1. Connections, gussets and fatigue details are not checked here.',
+    'Girders are checked one by one by the Steel Line Girder engine (AASHTO LRFD 10th edition) with the grid\'s forces, including flange lateral bending from curvature and skew where the grid gives it.',
+    'Not covered: locked-in fit forces at high-skew acute corners and other effects a 2D grid cannot settle alone; confirm with a 3D model (the CSiBridge export builds one) where they matter.'
+  ];
 })();
 
 /* Steel 2D Grillage — CSiBridge verification models.
@@ -6506,6 +7683,26 @@ h3 select{font:inherit;text-transform:none;letter-spacing:0;padding:2px 4px;widt
     if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(done, () => { download('crossframe-forces.csv', t, 'text/csv'); done(); }); else { download('crossframe-forces.csv', t, 'text/csv'); done(); }
   };
   // stable results file for the next modules (splices, cross-frame connections): unfactored effects by stage
+  // ---------- calculation book (PDF) ----------
+  function fillRep() { document.querySelectorAll('#repCard [data-rep]').forEach(el => { const v = (doc.report || {})[el.dataset.rep]; el.value = v || (el.dataset.rep === 'designedBy' ? (() => { try { return localStorage.getItem('lgc-initials') || ''; } catch (e) { return ''; } })() : ''); }); }
+  $('#repCard').addEventListener('input', e => { const k = e.target.dataset.rep; if (!k) return; doc.report = Object.assign({}, doc.report, { [k]: e.target.value }); if (k === 'designedBy') try { localStorage.setItem('lgc-initials', e.target.value); } catch (_) { /* ignore */ } save(); });
+  $('#repCard').addEventListener('click', async e => {
+    const b = e.target.closest('button[data-mode]'); if (!b) return; const st = $('#repStatus');
+    if (!(AR && AR.res) || anKey !== anInputKey()) { st.textContent = 'Run the analysis for these inputs first.'; return; }
+    const key = anInputKey(), LLc = LL && llKey === key ? LL : null, CKc = CK && ckKey === key ? CK : null;
+    if (LLc && !XD) xfDes();
+    b.setAttribute('aria-busy', 'true'); st.textContent = 'Building the PDF…'; await new Promise(r => setTimeout(r, 30));
+    try {
+      const meta = Object.assign({}, doc.report); document.querySelectorAll('#repCard [data-rep]').forEach(el => { meta[el.dataset.rep] = el.value.trim(); });
+      const notes = G.CALC_NOTES.concat(AR.warns || []);
+      const bytes = await G.calcBook({ F, R: AR, LL: LLc, CK: CKc, XD: LLc ? XD : null, doc: clone(doc), meta, mode: b.dataset.mode, notes, appVersion: '', root: window });
+      const base = (meta.structure || 'grillage').replace(/[^\w.-]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 60) || 'grillage';
+      download(base + (b.dataset.mode === 'full' ? '_calc-book' : '_calc-summary') + '.pdf', bytes, 'application/pdf');
+      st.textContent = 'PDF ready · ' + (bytes.length / 1024).toFixed(0) + ' KB' + (LLc ? '' : ' · live load not run') + (CKc ? '' : ' · girder checks not run');
+    } catch (err) { st.textContent = 'Could not build the PDF: ' + err.message; console.error(err); }
+    b.removeAttribute('aria-busy');
+  });
+  fillRep();
   // CSiBridge verification models of this bridge (the grid's own inputs, loads and lack of fit), as a zip of three workbooks
   $('#btnCsi').onclick = async () => {
     const st = $('#csiStatus'), b = $('#btnCsi');
